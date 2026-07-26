@@ -1,0 +1,51 @@
+/**
+ * All tunable thresholds for the CP operations calculator, in one place so the
+ * (future) UI can expose them as user-adjustable settings instead of buried
+ * magic numbers.
+ */
+
+export interface PaceBounds {
+  minMinPerKm: number;
+  maxMinPerKm: number;
+}
+
+/** Plausible pace range used to sanity-check CSV split-to-checkpoint matching. */
+export const DEFAULT_PACE_BOUNDS: PaceBounds = {
+  minMinPerKm: 2.5,
+  maxMinPerKm: 20,
+};
+
+/** Perpendicular offset (km) from a course line beyond which a snap looks suspicious. */
+export const DEFAULT_SNAP_OFFSET_WARNING_KM = 0.08;
+
+/** Perpendicular offset (km) beyond which a placemark is considered not on that course at all. */
+export const DEFAULT_MAX_MATCH_OFFSET_KM = 2;
+
+/** Divergence (km) between a placemark's computed position and its parsed name label that triggers a mismatch flag. */
+export const DEFAULT_LABEL_MISMATCH_THRESHOLD_KM = 0.3;
+
+/** Distance (km) within which two separately-drawn placemarks are treated as the same physical station. */
+export const DEFAULT_COINCIDENT_STATION_TOLERANCE_KM = 0.03;
+
+/** Minutes before the modeled P1 arrival that a station should open. */
+export const DEFAULT_SETUP_BUFFER_MINUTES = 30;
+
+/** Minutes after the modeled P99 arrival that a station should stay open, absent an official cutoff. */
+export const DEFAULT_TEARDOWN_BUFFER_MINUTES = 30;
+
+/** Bin width (minutes) for crossing-time histograms. */
+export const DEFAULT_HISTOGRAM_BIN_MINUTES = 15;
+
+export interface ActivityThresholds {
+  mediumRunnersPerHour: number;
+  highRunnersPerHour: number;
+}
+
+/** Peak runners-per-hour thresholds for the Low / Medium / High activity tag. */
+export const DEFAULT_ACTIVITY_THRESHOLDS: ActivityThresholds = {
+  mediumRunnersPerHour: 60,
+  highRunnersPerHour: 150,
+};
+
+/** Standard percentile set requested for arrival-time distributions. */
+export const DEFAULT_PERCENTILES = [1, 5, 10, 25, 50, 75, 90, 95, 99];

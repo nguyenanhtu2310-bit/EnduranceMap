@@ -1,0 +1,141 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildArrivalHistogram,
+  buildCutoffTable,
+  buildStationSchedule,
+  classifyActivityLevel,
+  peakRunnersPerHour,
+  type DistanceCrossing,
+} from '../schedule';
+
+describe('buildArrivalHistogram', () => {
+  it('returns an empty array for no arrivals', () => {
+    expect(buildArrivalHistogram([])).toEqual([]);
+  });
+
+  it('bins arrivals into fixed-width windows', () => {
+    const sixAM = 6 * 3600;
+    const arrivals = [sixAM, sixAM + 60, sixAM + 60 * 20, sixAM + 60 * 16]; // two in first 15-min bin, two in the second
+    const bins = buildArrivalHistogram(arrivals, 15);
+    expect(bins).toHaveLength(2);
+    expect(bins[0].count).toBe(2);
+    expect(bins[1].count).toBe(2);
+  });
+
+  it('produces a single bin for a single-instant arrival set', () => {
+    const bins = buildArrivalHistogram([1000, 1000, 1000], 15);
+    expect(bins).toHaveLength(1);
+    expect(bins[0].count).toBe(3);
+  });
+});
+
+describe('peakRunnersPerHour', () => {
+  it('scales the busiest bin count up to a per-hour rate', () => {
+    const bins = [
+      { binStartSeconds: 0, binEndSeconds: 900, count: 10 },
+      { binStartSeconds: 900, binEndSeconds: 1800, count: 25 },
+    ];
+    expect(peakRunnersPerHour(bins, 15)).toBe(100); // 25 runners per 15 min -> 100/hr
+  });
+
+  it('returns 0 for no bins', () => {
+    expect(peakRunnersPerHour([])).toBe(0);
+  });
+});
+
+describe('classifyActivityLevel', () => {
+  it('uses the default thresholds', () => {
+    expect(classifyActivityLevel(30)).toBe('Low');
+    expect(classifyActivityLevel(60)).toBe('Medium');
+    expect(classifyActivityLevel(200)).toBe('High');
+  });
+
+  it('respects custom thresholds', () => {
+    expect(classifyActivityLevel(50, { mediumRunnersPerHour: 100, highRunnersPerHour: 300 })).toBe('Low');
+  });
+});
+
+function crossing(courseName: string, kmFromStart: number, p1Clock: string, p99Clock: string, officialCutoffClock?: string): DistanceCrossing {
+  const toSeconds = (clock: string) => {
+    const [h, m] = clock.split(':').map(Number);
+    return h * 3600 + m * 60;
+  };
+  return {
+    courseName,
+    kmFromStart,
+    arrivalPercentiles: [
+      { percentile: 1, seconds: toSeconds(p1Clock), clockTime: p1Clock },
+      { percentile: 99, seconds: toSeconds(p99Clock), clockTime: p99Clock },
+    ],
+    officialCutoffClock,
+  };
+}
+
+describe('buildStationSchedule', () => {
+  it('opens before the earliest P1 minus the setup buffer and closes after the latest P99 plus teardown', () => {
+    const schedule = buildStationSchedule('Solo Station', [crossing('10km', 5, '07:00', '09:00')], {
+      setupBufferMinutes: 30,
+      teardownBufferMinutes: 20,
+    });
+    expect(schedule.openClockTime).toBe('06:30:00');
+    expect(schedule.closeClockTime).toBe('09:20:00');
+  });
+
+  it('combines a shared checkpoint using the earliest open and the LATEST close across distances', () => {
+    const schedule = buildStationSchedule(
+      'Shared Station',
+      [crossing('10km', 5, '07:00', '09:00'), crossing('Half Marathon', 11, '07:30', '11:00')],
+      { setupBufferMinutes: 30, teardownBufferMinutes: 20 }
+    );
+    // earliest open: 07:00 - 30min = 06:30
+    expect(schedule.openClockTime).toBe('06:30:00');
+    // latest close: max(09:00+20min, 11:00+20min) = 11:20
+    expect(schedule.closeClockTime).toBe('11:20:00');
+  });
+
+  it('uses the official cutoff instead of P99+teardown when provided, and flags if modeled arrivals exceed it', () => {
+    const schedule = buildStationSchedule('Cutoff Station', [crossing('Marathon', 21, '07:00', '13:30', '13:00')]);
+    expect(schedule.closeClockTime).toBe('13:00:00');
+    expect(schedule.cutoffExceeded).toBe(true);
+    expect(schedule.cutoffDetails[0]).toMatchObject({ courseName: 'Marathon', cutoffClock: '13:00' });
+  });
+
+  it('does not flag a cutoff that modeled arrivals stay within', () => {
+    const schedule = buildStationSchedule('Cutoff Station 2', [crossing('Marathon', 21, '07:00', '12:30', '13:00')]);
+    expect(schedule.cutoffExceeded).toBe(false);
+  });
+
+  it('derives activity level and peak runners/hour from raw arrival timestamps', () => {
+    const sixAM = 6 * 3600;
+    const busyCrossing: DistanceCrossing = {
+      ...crossing('10km', 5, '06:00', '08:00'),
+      runnerArrivalsSeconds: Array.from({ length: 60 }, (_, i) => sixAM + (i % 15) * 60), // 60 arrivals packed into a 15-min pattern
+    };
+    const schedule = buildStationSchedule('Busy Station', [busyCrossing], { binMinutes: 15 });
+    expect(schedule.peakRunnersPerHour).toBeGreaterThan(0);
+    expect(['Low', 'Medium', 'High']).toContain(schedule.activityLevel);
+  });
+
+  it('throws when given no crossings', () => {
+    expect(() => buildStationSchedule('Empty', [])).toThrow();
+  });
+});
+
+describe('buildCutoffTable', () => {
+  it('flattens cutoff rows across stations, flagging exceeded ones', () => {
+    const stations = [
+      buildStationSchedule('Turnaround', [crossing('Marathon', 21, '07:00', '13:30', '13:00')]),
+      buildStationSchedule('Finish', [crossing('Marathon', 42.2, '07:00', '14:00', '15:00')]),
+    ];
+
+    const rows = buildCutoffTable(stations);
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.stationName === 'Turnaround')?.exceeded).toBe(true);
+    expect(rows.find((r) => r.stationName === 'Finish')?.exceeded).toBe(false);
+  });
+
+  it('skips crossings with no official cutoff', () => {
+    const stations = [buildStationSchedule('No Cutoff', [crossing('10km', 5, '07:00', '09:00')])];
+    expect(buildCutoffTable(stations)).toEqual([]);
+  });
+});

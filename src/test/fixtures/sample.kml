@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Sample Race</name>
+    <Folder>
+      <name>RACE ROUTE</name>
+      <Placemark>
+        <name>10km</name>
+        <LineString>
+          <coordinates>
+            106.000000,10.000000,0 106.000000,10.090000,0
+          </coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>Half Marathon</name>
+        <LineString>
+          <coordinates>
+            106.000000,9.950000,0 106.000000,10.140000,0
+          </coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>CUT-OFF TIME</name>
+      <Placemark>
+        <name>KM5/10 Water Station (05:30 - 08:15)</name>
+        <Point>
+          <coordinates>106.000000,10.045000,0</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>KM8/10 Turnaround</name>
+        <Point>
+          <coordinates>106.000000,10.020000,0</coordinates>
+        </Point>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>MEDICAL STATION &amp; AMBULANCE</name>
+      <Placemark>
+        <name>Medical Post 1</name>
+        <Point>
+          <coordinates>106.000000,10.030000,0</coordinates>
+        </Point>
+      </Placemark>
+    </Folder>
+  </Document>
+</kml>
