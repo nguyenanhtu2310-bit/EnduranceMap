@@ -17,13 +17,19 @@ import {
 } from './paceModel';
 import {
   buildCutoffTable,
+  buildStackedHistogram,
   buildStationSchedule,
   type CutoffTableRow,
   type DistanceCrossing,
   type ScheduleOptions,
+  type StackedBin,
   type StationSchedule,
 } from './schedule';
-import { DEFAULT_COURSE_DISTANCE_MATCH_TOLERANCE_KM } from './config';
+import { DEFAULT_HISTOGRAM_BIN_MINUTES } from './config';
+import {
+  DEFAULT_COURSE_DISTANCE_MATCH_TOLERANCE_KM,
+  DEFAULT_CUTOFF_PASS_MATCH_TOLERANCE_KM,
+} from './config';
 
 /** Manual pace-band and field-size input for one race distance. */
 export interface DistanceInput extends PaceBand, StartField {
@@ -48,6 +54,8 @@ export interface PipelineOptions extends KmlParseOptions, SnapOptions, ScheduleO
   /** Placemark names to exclude from the operational output entirely. */
   excludePlacemarkNames?: string[];
   courseDistanceToleranceKm?: number;
+  /** How near a cut-off's labelled km must be to a pass for it to govern that pass. */
+  cutoffPassToleranceKm?: number;
   /** Distance within which separately-drawn placemarks are merged into one station. */
   coincidentToleranceKm?: number;
   /** Samples per distance used to synthesize arrival timestamps from a pace band. */
@@ -72,6 +80,10 @@ export interface StationCrossingDetail {
 export interface PipelineStation {
   schedule: StationSchedule;
   folder: string;
+  /** Arrivals binned on the shared time grid, split by distance. */
+  distribution: StackedBin[];
+  /** Index into `distribution` of the busiest bin, or -1 when nobody crosses. */
+  peakBinIndex: number;
   /** Names of the placemarks in a selected folder that make this a station. */
   sourceNames: string[];
   /**
@@ -87,6 +99,14 @@ export interface PipelineResult {
   courses: Course[];
   stations: PipelineStation[];
   cutoffTable: CutoffTableRow[];
+  /**
+   * Course names in the order their colours are assigned, so every station's
+   * distribution stacks the same distance in the same slot.
+   */
+  courseOrder: string[];
+  /** Shared arrival-time window across every station, for a common chart axis. */
+  timeRangeSeconds: { start: number; end: number };
+  binMinutes: number;
   /** Stations that could not be scheduled, with the reason why. */
   skipped: { name: string; folder: string; reason: string }[];
   warnings: string[];
@@ -122,7 +142,8 @@ function findCutoffForCrossing(
   station: GroupedStation,
   snap: CourseSnap,
   courses: Course[],
-  toleranceKm: number
+  toleranceKm: number,
+  passToleranceKm: number
 ): string | undefined {
   let best: { clock: string; delta: number } | undefined;
 
@@ -133,9 +154,17 @@ function findCutoffForCrossing(
         if (!target || target.name !== snap.courseName) continue;
       }
 
-      // An unlabeled km means the cut-off applies to the pass it is nearest to.
-      const delta = Number.isFinite(cutoff.km) ? Math.abs(cutoff.km - snap.kmFromStart) : 0;
-      if (!best || delta < best.delta) best = { clock: cutoff.cutoffClock, delta };
+      // A cut-off with a km mark governs only the pass at that km. Without the check,
+      // a return-leg cut-off would also bind the outbound pass through the same spot,
+      // inventing a deadline hours before the one that was actually written.
+      if (Number.isFinite(cutoff.km)) {
+        const delta = Math.abs(cutoff.km - snap.kmFromStart);
+        if (delta > passToleranceKm) continue;
+        if (!best || delta < best.delta) best = { clock: cutoff.cutoffClock, delta };
+      } else if (!best) {
+        // An unlabelled km applies to the station as a whole.
+        best = { clock: cutoff.cutoffClock, delta: Infinity };
+      }
     }
   }
 
@@ -158,6 +187,7 @@ export function runPipeline(
   const stationFolders = (options.stationFolders ?? DEFAULT_STATION_FOLDERS).map(normalize);
   const excluded = (options.excludePlacemarkNames ?? []).map(normalize);
   const toleranceKm = options.courseDistanceToleranceKm ?? DEFAULT_COURSE_DISTANCE_MATCH_TOLERANCE_KM;
+  const cutoffPassToleranceKm = options.cutoffPassToleranceKm ?? DEFAULT_CUTOFF_PASS_MATCH_TOLERANCE_KM;
   const sampleSize = options.paceModelSampleSize ?? 200;
 
   const parsed = parseKml(kmlText, options);
@@ -232,7 +262,7 @@ export function runPipeline(
       const input = inputByCourse.get(snap.courseName);
       if (!input) continue;
 
-      const officialCutoffClock = findCutoffForCrossing(group, snap, courses, toleranceKm);
+      const officialCutoffClock = findCutoffForCrossing(group, snap, courses, toleranceKm, cutoffPassToleranceKm);
 
       crossings.push({
         courseName: snap.courseName,
@@ -260,6 +290,9 @@ export function runPipeline(
     stations.push({
       schedule: buildStationSchedule(stationName, crossings, options),
       folder,
+      // Filled in below, once the shared time grid is known.
+      distribution: [],
+      peakBinIndex: -1,
       sourceNames: names,
       coLocatedNames,
       crossings: details,
@@ -279,10 +312,51 @@ export function runPipeline(
     });
   }
 
+  // A single time grid shared by every station, so the charts sit on one axis and the
+  // field can be seen moving down the course rather than each station being rescaled
+  // to its own window.
+  const binMinutes = options.binMinutes ?? DEFAULT_HISTOGRAM_BIN_MINUTES;
+  const courseOrder = courses.map((c) => c.name).filter((name) => inputByCourse.has(name));
+
+  let rangeStart = Infinity;
+  let rangeEnd = -Infinity;
+  for (const station of stations) {
+    for (const crossing of station.schedule.crossings) {
+      for (const arrival of crossing.runnerArrivalsSeconds ?? []) {
+        if (arrival < rangeStart) rangeStart = arrival;
+        if (arrival > rangeEnd) rangeEnd = arrival;
+      }
+    }
+  }
+  const hasArrivals = Number.isFinite(rangeStart) && Number.isFinite(rangeEnd);
+  const timeRangeSeconds = hasArrivals ? { start: rangeStart, end: rangeEnd } : { start: 0, end: 0 };
+
+  if (hasArrivals) {
+    for (const station of stations) {
+      const arrivalsByCourse = courseOrder.map((courseName) =>
+        station.schedule.crossings
+          .filter((c) => c.courseName === courseName)
+          .flatMap((c) => c.runnerArrivalsSeconds ?? [])
+      );
+
+      station.distribution = buildStackedHistogram(arrivalsByCourse, binMinutes, rangeStart, rangeEnd);
+      station.peakBinIndex = station.distribution.reduce(
+        (best, bin, i, all) => (bin.total > (all[best]?.total ?? -1) ? i : best),
+        -1
+      );
+      if (station.peakBinIndex >= 0 && station.distribution[station.peakBinIndex].total === 0) {
+        station.peakBinIndex = -1;
+      }
+    }
+  }
+
   return {
     courses,
     stations,
     cutoffTable: buildCutoffTable(stations.map((s) => s.schedule)),
+    courseOrder,
+    timeRangeSeconds,
+    binMinutes,
     skipped,
     warnings,
   };

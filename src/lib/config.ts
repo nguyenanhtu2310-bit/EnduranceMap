@@ -30,6 +30,13 @@ export const DEFAULT_CROSSING_MIN_SEPARATION_KM = 1;
 /** Tolerance (km) for matching a course's measured length to a race distance named in a label. */
 export const DEFAULT_COURSE_DISTANCE_MATCH_TOLERANCE_KM = 2;
 
+/**
+ * How near a cut-off's labelled km must be to a course pass for that cut-off to govern
+ * it. On an out-and-back a station is crossed twice, and a cut-off written for the
+ * return leg must not also bind the outbound one hours earlier.
+ */
+export const DEFAULT_CUTOFF_PASS_MATCH_TOLERANCE_KM = 2;
+
 /** Divergence (km) between a placemark's computed position and its parsed name label that triggers a mismatch flag. */
 export const DEFAULT_LABEL_MISMATCH_THRESHOLD_KM = 0.3;
 

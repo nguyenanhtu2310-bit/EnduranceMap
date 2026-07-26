@@ -81,6 +81,30 @@ describe('runPipeline', () => {
     expect(cot1.schedule.closeClockTime > '05:15:00').toBe(true);
   });
 
+  it('binds a cut-off to the pass it was written for, not every pass at that spot', () => {
+    // COT 3 carries two cut-offs on one out-and-back station: 4:30 AM at km 2.5 and
+    // 8:30 AM at km 18.6. Neither may govern the other's leg.
+    const cot3 = result.stations.find((s) => s.schedule.name.includes('COT 3'))!;
+    const outbound = cot3.crossings.find((c) => c.courseName === 'Half Marathon' && c.kmFromStart < 10)!;
+    const inbound = cot3.crossings.find((c) => c.courseName === 'Half Marathon' && c.kmFromStart > 10)!;
+
+    expect(outbound.officialCutoffClock).toBe('4:30 AM');
+    expect(inbound.officialCutoffClock).toBe('8:30 AM');
+  });
+
+  it('leaves a pass uncontrolled when the only cut-off belongs to a distant leg', () => {
+    // A single return-leg cut-off at km 18.6 must not bind the outbound km 2.5 pass.
+    const oneSided = kml.replace(' (KM2.5/21 - 4:30 AM)', '');
+    const single = runPipeline(oneSided, inputs);
+    const station = single.stations.find((s) => s.schedule.name.includes('COT 3'))!;
+
+    const outbound = station.crossings.find((c) => c.courseName === 'Half Marathon' && c.kmFromStart < 10)!;
+    const inbound = station.crossings.find((c) => c.courseName === 'Half Marathon' && c.kmFromStart > 10)!;
+
+    expect(outbound.officialCutoffClock).toBeUndefined();
+    expect(inbound.officialCutoffClock).toBe('8:30 AM');
+  });
+
   it('attaches a cut-off only to the distance its label names', () => {
     // COT 4's label reads "9/10", so the 10km pass is bound by 7:15 AM while the Half
     // Marathon passes at the same spot with no cut-off of its own.
@@ -100,6 +124,50 @@ describe('runPipeline', () => {
       expect(row.modeledLastArrivalClockTime > row.cutoffClockTime.padStart(8, '0')).toBeTruthy();
     }
     expect(result.cutoffTable.length).toBeGreaterThan(0);
+  });
+
+  describe('crossing distribution', () => {
+    it('gives every station the same bin grid so the rows share one axis', () => {
+      const grids = result.stations.map((s) => s.distribution.map((b) => b.binStartSeconds));
+      for (const grid of grids) expect(grid).toEqual(grids[0]);
+      expect(grids[0].length).toBeGreaterThan(0);
+    });
+
+    it('stacks each distance into the slot named by courseOrder', () => {
+      expect(result.courseOrder).toEqual(['10km', 'Half Marathon']);
+      for (const station of result.stations) {
+        for (const bin of station.distribution) {
+          expect(bin.byCourse).toHaveLength(result.courseOrder.length);
+        }
+      }
+    });
+
+    it('marks the busiest bin as the peak', () => {
+      for (const station of result.stations) {
+        if (station.peakBinIndex < 0) continue;
+        const peak = station.distribution[station.peakBinIndex].total;
+        expect(Math.max(...station.distribution.map((b) => b.total))).toBe(peak);
+        expect(peak).toBeGreaterThan(0);
+      }
+    });
+
+    it('reports a time range that covers every modeled arrival', () => {
+      const all = result.stations.flatMap((s) =>
+        s.schedule.crossings.flatMap((c) => c.runnerArrivalsSeconds ?? [])
+      );
+      expect(result.timeRangeSeconds.start).toBeLessThanOrEqual(Math.min(...all));
+      expect(result.timeRangeSeconds.end).toBeGreaterThanOrEqual(Math.max(...all));
+    });
+
+    it('keeps every arrival somewhere in the grid', () => {
+      const station = result.stations[0];
+      const plotted = station.distribution.reduce((sum, b) => sum + b.total, 0);
+      const actual = station.schedule.crossings.reduce(
+        (sum, c) => sum + (c.runnerArrivalsSeconds?.length ?? 0),
+        0
+      );
+      expect(plotted).toBe(actual);
+    });
   });
 
   it('warns when a course has no pace band entered', () => {

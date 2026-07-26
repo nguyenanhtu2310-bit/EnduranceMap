@@ -377,6 +377,160 @@ details summary {
   white-space: nowrap;
 }
 
+/* ---- chart ----------------------------------------------------------------
+   Categorical slots in fixed order, from the validated reference palette.
+   Light and dark are separately stepped sets, not an automatic flip.        */
+.viz-root {
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+  --chart-grid: #e1e0d9;
+  --chart-baseline: #c3c2b7;
+  --chart-peak: #0b0b0b;
+  position: relative;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme='light'])) .viz-root {
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+    --chart-grid: #2c2c2a;
+    --chart-baseline: #383835;
+    --chart-peak: #ffffff;
+  }
+}
+
+:root[data-theme='dark'] .viz-root {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --chart-grid: #2c2c2a;
+  --chart-baseline: #383835;
+  --chart-peak: #ffffff;
+}
+
+.chart-scroll {
+  position: relative;
+}
+
+.grid-line {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+
+.baseline {
+  stroke: var(--chart-baseline);
+  stroke-width: 1;
+}
+
+.peak-cap {
+  fill: var(--chart-peak);
+}
+
+.axis-text,
+.row-label {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.row-label {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.85rem;
+  font-size: 0.82rem;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+}
+
+.legend-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  display: inline-block;
+  flex: none;
+}
+
+.peak-swatch {
+  background: var(--chart-peak);
+  height: 3px;
+  border-radius: 1px;
+}
+
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.8rem;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.13);
+  z-index: 5;
+  min-width: 150px;
+}
+
+.chart-tooltip strong {
+  display: block;
+}
+
+.tooltip-table {
+  margin-top: 0.3rem;
+  font-size: 0.78rem;
+}
+
+.tooltip-table td {
+  padding: 0.1rem 0 0.1rem 0;
+  border: none;
+}
+
+.tooltip-table td:last-child {
+  padding-left: 0.9rem;
+}
+
+.tooltip-total td {
+  border-top: 1px solid var(--border);
+  padding-top: 0.25rem;
+  font-weight: 600;
+}
+
+.peak-note {
+  display: inline-block;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .renumber-row {
   display: flex;
   align-items: flex-end;

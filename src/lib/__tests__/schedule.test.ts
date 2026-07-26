@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildArrivalHistogram,
   buildCutoffTable,
+  buildStackedHistogram,
   buildStationSchedule,
   classifyActivityLevel,
   peakRunnersPerHour,
@@ -26,6 +27,48 @@ describe('buildArrivalHistogram', () => {
     const bins = buildArrivalHistogram([1000, 1000, 1000], 15);
     expect(bins).toHaveLength(1);
     expect(bins[0].count).toBe(3);
+  });
+});
+
+describe('buildStackedHistogram', () => {
+  const sixAM = 6 * 3600;
+
+  it('bins each course into its own slot on a shared grid', () => {
+    const bins = buildStackedHistogram(
+      [
+        [sixAM, sixAM + 60],
+        [sixAM + 16 * 60],
+      ],
+      15,
+      sixAM,
+      sixAM + 30 * 60
+    );
+
+    expect(bins).toHaveLength(2);
+    expect(bins[0].byCourse).toEqual([2, 0]);
+    expect(bins[0].total).toBe(2);
+    expect(bins[1].byCourse).toEqual([0, 1]);
+  });
+
+  it('spans the whole requested range even where a station has no arrivals', () => {
+    const bins = buildStackedHistogram([[sixAM]], 15, sixAM, sixAM + 60 * 60);
+    expect(bins).toHaveLength(4);
+    expect(bins.slice(1).every((b) => b.total === 0)).toBe(true);
+  });
+
+  it('produces the same grid for different stations so rows line up', () => {
+    const a = buildStackedHistogram([[sixAM + 100]], 15, sixAM, sixAM + 3600);
+    const b = buildStackedHistogram([[sixAM + 2000]], 15, sixAM, sixAM + 3600);
+    expect(a.map((x) => x.binStartSeconds)).toEqual(b.map((x) => x.binStartSeconds));
+  });
+
+  it('drops arrivals outside the range rather than distorting the edge bins', () => {
+    const bins = buildStackedHistogram([[sixAM - 10000, sixAM + 60, sixAM + 99999]], 15, sixAM, sixAM + 900);
+    expect(bins.reduce((sum, b) => sum + b.total, 0)).toBe(1);
+  });
+
+  it('returns nothing for a degenerate range', () => {
+    expect(buildStackedHistogram([[sixAM]], 15, sixAM, sixAM)).toEqual([]);
   });
 });
 

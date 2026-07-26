@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { CrossingDistribution } from './components/CrossingDistribution';
+import { CutoffTable } from './components/CutoffTable';
 import { FolderPicker } from './components/FolderPicker';
 import { KmlDropzone } from './components/KmlDropzone';
 import { PaceBandForm, type DistanceFormRow } from './components/PaceBandForm';
@@ -241,6 +243,21 @@ export default function App() {
               of them.
             </p>
             <StationScheduleTable stations={result.stations} showSourceNames={renumber} />
+          </section>
+
+          <section className="card">
+            <h2>Crossing time distribution</h2>
+            <p className="hint">
+              Runner arrivals per {result.binMinutes} minutes, stacked by distance, on one shared clock. Rows
+              run in course order, so the field can be seen moving down the route. The cap marks each station’s
+              busiest window.
+            </p>
+            <CrossingDistribution result={result} />
+          </section>
+
+          <section className="card">
+            <h2>Cut-off times</h2>
+            <CutoffTable result={result} />
           </section>
 
           {result.skipped.length > 0 && (

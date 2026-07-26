@@ -38,6 +38,51 @@ export function buildArrivalHistogram(arrivalSeconds: number[], binMinutes = DEF
   return bins;
 }
 
+export interface StackedBin {
+  binStartSeconds: number;
+  binEndSeconds: number;
+  total: number;
+  /** Per-course counts, in the order the courses were supplied. */
+  byCourse: number[];
+}
+
+/**
+ * Bins arrivals per course onto a shared grid, so several stations can be drawn
+ * against one common time axis and compared directly.
+ */
+export function buildStackedHistogram(
+  arrivalsByCourse: number[][],
+  binMinutes: number,
+  rangeStartSeconds: number,
+  rangeEndSeconds: number
+): StackedBin[] {
+  const binSeconds = binMinutes * 60;
+  if (binSeconds <= 0 || rangeEndSeconds <= rangeStartSeconds) return [];
+
+  const start = Math.floor(rangeStartSeconds / binSeconds) * binSeconds;
+  const end = Math.ceil(rangeEndSeconds / binSeconds) * binSeconds;
+  const binCount = Math.max(1, Math.round((end - start) / binSeconds));
+
+  const bins: StackedBin[] = Array.from({ length: binCount }, (_, i) => ({
+    binStartSeconds: start + i * binSeconds,
+    binEndSeconds: start + (i + 1) * binSeconds,
+    total: 0,
+    byCourse: arrivalsByCourse.map(() => 0),
+  }));
+
+  arrivalsByCourse.forEach((arrivals, courseIndex) => {
+    for (const arrival of arrivals) {
+      if (!Number.isFinite(arrival)) continue;
+      const index = Math.floor((arrival - start) / binSeconds);
+      if (index < 0 || index >= bins.length) continue;
+      bins[index].byCourse[courseIndex] += 1;
+      bins[index].total += 1;
+    }
+  });
+
+  return bins;
+}
+
 export function peakRunnersPerHour(bins: HistogramBin[], binMinutes = DEFAULT_HISTOGRAM_BIN_MINUTES): number {
   if (bins.length === 0) return 0;
   const peakCount = Math.max(...bins.map((b) => b.count));
