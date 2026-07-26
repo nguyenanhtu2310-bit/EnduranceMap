@@ -36,6 +36,11 @@ export function StationScheduleTable({ stations }: Props) {
                     </span>
                   </>
                 )}
+                {station.coLocatedNames.length > 0 && (
+                  <span className="colocated" title="Placemarks from other folders at this same position">
+                    at {station.coLocatedNames.join(', ')}
+                  </span>
+                )}
               </td>
               <td className="muted small">{station.folder}</td>
               <td>

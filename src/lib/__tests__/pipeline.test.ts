@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { runPipeline, type DistanceInput } from '../pipeline';
+import { parseKml } from '../kml';
+import { listPlacemarkFolders, runPipeline, type DistanceInput } from '../pipeline';
 
 function loadFixture(name: string): string {
   return readFileSync(resolve(process.cwd(), 'src/test/fixtures', name), 'utf-8');
@@ -115,6 +116,59 @@ describe('runPipeline', () => {
   it('excludes a placemark listed in excludePlacemarkNames', () => {
     const without = runPipeline(kml, inputs, { excludePlacemarkNames: ['COT 1 (KM5/10 - 5:15 AM)'] });
     expect(without.stations.some((s) => s.schedule.name.includes('COT 1'))).toBe(false);
+  });
+
+  describe('folder selection', () => {
+    // A signage post drawn at the same spot as COT 1, which is where its cut-off lives.
+    const withSignage = kml.replace(
+      '<Folder>\n      <name>MEDICAL STATION &amp; AMBULANCE</name>',
+      `<Folder>
+      <name>SIGNAGE: STATION</name>
+      <Placemark>
+        <name>S1</name>
+        <Point><coordinates>106.000000,10.045020,0</coordinates></Point>
+      </Placemark>
+      <Placemark>
+        <name>S2 &amp; S3</name>
+        <Point><coordinates>106.000000,10.060000,0</coordinates></Point>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>MEDICAL STATION &amp; AMBULANCE</name>`
+    );
+
+    it('lists the folders holding point placemarks', () => {
+      const names = listPlacemarkFolders(parseKml(withSignage).placemarks).map((f) => f.folder);
+      expect(names).toContain('SIGNAGE: STATION');
+      expect(names).toContain('CUT-OFF TIME');
+    });
+
+    it('schedules only the selected folder', () => {
+      const signageOnly = runPipeline(withSignage, inputs, { stationFolders: ['SIGNAGE: STATION'] });
+      expect(signageOnly.stations).toHaveLength(2);
+      expect(signageOnly.stations.every((s) => s.folder === 'SIGNAGE: STATION')).toBe(true);
+      expect(signageOnly.stations.some((s) => s.schedule.name.includes('COT'))).toBe(false);
+    });
+
+    it('keeps the cut-off from a co-located placemark in an unselected folder', () => {
+      const signageOnly = runPipeline(withSignage, inputs, { stationFolders: ['SIGNAGE: STATION'] });
+      const s1 = signageOnly.stations.find((s) => s.schedule.name === 'S1')!;
+
+      // S1 sits on COT 1, so the 10km pass is still bound by that 5:15 AM cut-off.
+      const tenK = s1.crossings.find((c) => c.courseName === '10km')!;
+      expect(tenK.officialCutoffClock).toBe('5:15 AM');
+      expect(s1.coLocatedNames).toContain('COT 1');
+    });
+
+    it('reports no co-located names for a station standing on its own', () => {
+      const signageOnly = runPipeline(withSignage, inputs, { stationFolders: ['SIGNAGE: STATION'] });
+      const s2 = signageOnly.stations.find((s) => s.schedule.name === 'S2 & S3')!;
+      expect(s2.coLocatedNames).toEqual([]);
+    });
+
+    it('returns no stations when nothing is selected', () => {
+      expect(runPipeline(withSignage, inputs, { stationFolders: [] }).stations).toHaveLength(0);
+    });
   });
 
   it('keeps a staffed position that happens to sit beside an unlabeled course marker', () => {

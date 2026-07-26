@@ -188,8 +188,10 @@ export function parsePlacemarkLabel(rawName: string): ParsedLabel {
 
   let cleanName = stripKmTokens(outside)
     .replace(/\s{2,}/g, ' ')
-    // Separators orphaned by token removal, e.g. "U-turn / : X" from "U-turn 21km/10km: X".
-    .replace(/\s+[/&]\s+/g, ' ')
+    // Separators left dangling by token removal — at the start, or run up against
+    // punctuation. A separator between two words is deliberate ("S3 & S4") and stays.
+    .replace(/^\s*[/&]\s*/, '')
+    .replace(/\s*[/&]\s*(?=[:,])/g, '')
     .replace(/\s+([:,])/g, '$1')
     .replace(/^[\s\-:,&/]+|[\s\-:,&/]+$/g, '')
     .trim();

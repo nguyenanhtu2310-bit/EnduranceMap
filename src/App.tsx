@@ -1,11 +1,18 @@
 import { useMemo, useState } from 'react';
+import { FolderPicker } from './components/FolderPicker';
 import { KmlDropzone } from './components/KmlDropzone';
 import { PaceBandForm, type DistanceFormRow } from './components/PaceBandForm';
 import { SettingsPanel, type Settings } from './components/SettingsPanel';
 import { StationScheduleTable } from './components/StationScheduleTable';
 import { parseKml } from './lib/kml';
 import { buildCourses } from './lib/snap';
-import { runPipeline, type DistanceInput, type PipelineResult } from './lib/pipeline';
+import {
+  listPlacemarkFolders,
+  runPipeline,
+  type DistanceInput,
+  type FolderSummary,
+  type PipelineResult,
+} from './lib/pipeline';
 import {
   DEFAULT_ACTIVITY_THRESHOLDS,
   DEFAULT_HISTOGRAM_BIN_MINUTES,
@@ -42,9 +49,23 @@ function seedRow(courseName: string, measuredKm: number): DistanceFormRow {
   };
 }
 
+/**
+ * Folder to schedule when a map contains one. Most operational questions are asked
+ * about a single class of position at a time, so defaulting to every folder buries the
+ * answer in a hundred rows.
+ */
+const PREFERRED_DEFAULT_FOLDER = 'SIGNAGE: STATION';
+
+function defaultSelection(folders: FolderSummary[]): string[] {
+  const preferred = folders.find((f) => f.folder.trim().toLowerCase() === PREFERRED_DEFAULT_FOLDER.toLowerCase());
+  return preferred ? [preferred.folder] : folders.map((f) => f.folder);
+}
+
 export default function App() {
   const [kml, setKml] = useState<LoadedKml | null>(null);
   const [rows, setRows] = useState<DistanceFormRow[]>([]);
+  const [folders, setFolders] = useState<FolderSummary[]>([]);
+  const [selectedFolders, setSelectedFolders] = useState<string[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [result, setResult] = useState<PipelineResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,17 +79,22 @@ export default function App() {
       if (courses.length === 0) {
         setKml(null);
         setRows([]);
+        setFolders([]);
         setError(
           parsed.warnings[0] ??
             'No race routes found. Expected a folder named "RACE ROUTE" holding one line per distance.'
         );
         return;
       }
+      const detected = listPlacemarkFolders(parsed.placemarks);
       setKml({ text, fileName });
       setRows(courses.map((c) => seedRow(c.name, c.totalKm)));
+      setFolders(detected);
+      setSelectedFolders(defaultSelection(detected));
     } catch (e) {
       setKml(null);
       setRows([]);
+      setFolders([]);
       setError(e instanceof Error ? e.message : 'Could not parse that KML.');
     }
   }
@@ -101,6 +127,7 @@ export default function App() {
 
       setResult(
         runPipeline(kml.text, inputs, {
+          stationFolders: selectedFolders,
           setupBufferMinutes: settings.setupBufferMinutes,
           teardownBufferMinutes: settings.teardownBufferMinutes,
           binMinutes: settings.binMinutes,
@@ -139,7 +166,15 @@ export default function App() {
         <>
           <section className="card">
             <h2>
-              <span className="step">2</span>Pace bands and field size
+              <span className="step">2</span>Which positions to schedule
+            </h2>
+            <p className="hint">Map folders holding point placemarks. Tick the ones you need staffing for.</p>
+            <FolderPicker folders={folders} selected={selectedFolders} onChange={setSelectedFolders} />
+          </section>
+
+          <section className="card">
+            <h2>
+              <span className="step">3</span>Pace bands and field size
             </h2>
             <p className="hint">
               One row per distance found in the map. These stand in for a results CSV until you have one.
@@ -149,15 +184,20 @@ export default function App() {
 
           <section className="card">
             <h2>
-              <span className="step">3</span>Operating assumptions
+              <span className="step">4</span>Operating assumptions
             </h2>
             <SettingsPanel settings={settings} onChange={setSettings} />
           </section>
 
           <div className="actions" style={{ marginBottom: '1.75rem' }}>
-            <button onClick={calculate} disabled={invalidRows.length > 0}>
+            <button onClick={calculate} disabled={invalidRows.length > 0 || selectedFolders.length === 0}>
               Calculate schedule
             </button>
+            {selectedFolders.length === 0 && (
+              <span className="hint" style={{ margin: 0 }}>
+                Tick at least one folder to schedule.
+              </span>
+            )}
             {invalidRows.length > 0 && (
               <span className="hint" style={{ margin: 0 }}>
                 Check {invalidRows.map((r) => r.courseName).join(', ')}: needs a start time, a runner count above

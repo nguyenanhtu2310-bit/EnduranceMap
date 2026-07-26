@@ -320,3 +320,54 @@ details summary {
   gap: 1rem;
   flex-wrap: wrap;
 }
+
+.folder-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.5rem;
+}
+
+.folder-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 0.86rem;
+}
+
+.folder-item:hover {
+  border-color: var(--accent);
+}
+
+.folder-item.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.folder-item input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.folder-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+}
+
+.colocated {
+  color: var(--muted);
+  font-size: 0.78rem;
+  display: block;
+  margin-top: 0.15rem;
+}

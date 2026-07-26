@@ -66,7 +66,14 @@ export interface StationCrossingDetail {
 export interface PipelineStation {
   schedule: StationSchedule;
   folder: string;
+  /** Names of the placemarks in a selected folder that make this a station. */
   sourceNames: string[];
+  /**
+   * Names of placemarks from other folders sitting at the same spot. They do not make
+   * the station, but they are why it may carry an official cut-off — a signage post at
+   * a cut-off mat is governed by that mat's closing time.
+   */
+  coLocatedNames: string[];
   crossings: StationCrossingDetail[];
 }
 
@@ -81,6 +88,22 @@ export interface PipelineResult {
 
 function normalize(value: string): string {
   return value.trim().toLowerCase();
+}
+
+export interface FolderSummary {
+  folder: string;
+  placemarkCount: number;
+}
+
+/** Lists the folders holding point placemarks, so the caller can choose what to schedule. */
+export function listPlacemarkFolders(placemarks: { folder: string }[]): FolderSummary[] {
+  const counts = new Map<string, number>();
+  for (const p of placemarks) {
+    counts.set(p.folder, (counts.get(p.folder) ?? 0) + 1);
+  }
+  return Array.from(counts, ([folder, placemarkCount]) => ({ folder, placemarkCount })).sort((a, b) =>
+    a.folder.localeCompare(b.folder)
+  );
 }
 
 /**
@@ -142,44 +165,57 @@ export function runPipeline(
     }
   }
 
-  const stationPlacemarks = parsed.placemarks.filter(
-    (p) => stationFolders.includes(normalize(p.folder)) && !excluded.includes(normalize(p.name))
-  );
+  const isSelectedFolder = (folder: string) => stationFolders.includes(normalize(folder));
 
-  const snapped = snapPlacemarks(stationPlacemarks, courses, options);
-  for (const placemark of snapped) {
-    for (const warning of placemark.label.warnings) warnings.push(`${placemark.name}: ${warning}`);
-    for (const mismatch of placemark.labelMismatches) {
-      warnings.push(
-        `${placemark.name}: label says KM${mismatch.labeledKm} on ${mismatch.courseName} but it maps to ` +
-          `KM${mismatch.computedKm.toFixed(2)} (${mismatch.deltaKm.toFixed(2)} km apart).`
-      );
-    }
-  }
-
+  // Every placemark is snapped and grouped, not just those in the selected folders. A
+  // station's official cut-off often lives on a placemark from a different folder that
+  // sits at the same spot, and dropping those early would silently lose the cut-off.
+  const considered = parsed.placemarks.filter((p) => !excluded.includes(normalize(p.name)));
+  const snapped = snapPlacemarks(considered, courses, options);
   const groups = groupCoincidentPlacemarks(snapped, options.coincidentToleranceKm);
 
   const stations: PipelineStation[] = [];
   const skipped: PipelineResult['skipped'] = [];
 
   for (const group of groups) {
-    const folder = group.members[0]?.folder ?? '';
-    const names = group.members.map((m) => m.name);
+    const selectedMembers = group.members.filter((m) => isSelectedFolder(m.folder));
+    if (selectedMembers.length === 0) continue;
+
+    const folder = selectedMembers[0].folder;
+    const names = selectedMembers.map((m) => m.name);
+    const others = group.members.filter((m) => !isSelectedFolder(m.folder));
+    const coLocatedNames = Array.from(new Set(others.map((m) => m.label.cleanName || m.name)));
+
+    // The station is named for the placemarks the user actually asked to schedule;
+    // anything co-located from another folder is reported separately.
+    const stationName = Array.from(new Set(selectedMembers.map((m) => m.label.cleanName || m.name))).join(' / ');
+
+    // Data-quality warnings are only raised for placemarks that actually bear on a
+    // station in the schedule, so narrowing the folder selection narrows the noise.
+    for (const member of group.members) {
+      for (const warning of member.label.warnings) warnings.push(`${member.name}: ${warning}`);
+      for (const mismatch of member.labelMismatches) {
+        warnings.push(
+          `${member.name}: label says KM${mismatch.labeledKm} on ${mismatch.courseName} but it maps to ` +
+            `KM${mismatch.computedKm.toFixed(2)} (${mismatch.deltaKm.toFixed(2)} km apart).`
+        );
+      }
+    }
 
     if (group.snaps.length === 0) {
-      skipped.push({ name: group.name, folder, reason: 'Does not sit on any race course.' });
+      skipped.push({ name: names.join(' / '), folder, reason: 'Does not sit on any race course.' });
       continue;
     }
 
     // In the cut-off folder a placemark carrying neither a km mark nor a cut-off time
     // is a course marker (e.g. "PRE-FINISH"), not a position that has to be staffed.
-    // The rule only applies when every member of the station is such a marker: a marker
-    // that happens to sit within metres of a staffed position must not drag it out of
-    // the schedule.
+    // The rule only applies when every selected member of the station is such a marker:
+    // a marker that happens to sit within metres of a staffed position must not drag it
+    // out of the schedule.
     const hasAnyLabelData = group.members.some((m) => m.label.kmMarks.length > 0 || m.label.cutoffs.length > 0);
-    const allFromCutoffFolder = group.members.every((m) => normalize(m.folder) === normalize(CUTOFF_FOLDER));
+    const allFromCutoffFolder = selectedMembers.every((m) => normalize(m.folder) === normalize(CUTOFF_FOLDER));
     if (allFromCutoffFolder && !hasAnyLabelData) {
-      skipped.push({ name: group.name, folder, reason: 'No km mark or cut-off time — treated as a course marker.' });
+      skipped.push({ name: stationName, folder, reason: 'No km mark or cut-off time — treated as a course marker.' });
       continue;
     }
 
@@ -211,14 +247,15 @@ export function runPipeline(
     }
 
     if (crossings.length === 0) {
-      skipped.push({ name: group.name, folder, reason: 'No pace band entered for any distance passing it.' });
+      skipped.push({ name: stationName, folder, reason: 'No pace band entered for any distance passing it.' });
       continue;
     }
 
     stations.push({
-      schedule: buildStationSchedule(group.name, crossings, options),
+      schedule: buildStationSchedule(stationName, crossings, options),
       folder,
       sourceNames: names,
+      coLocatedNames,
       crossings: details,
     });
   }
