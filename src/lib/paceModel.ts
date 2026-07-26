@@ -12,6 +12,23 @@ export interface StartField {
   /** Wave/gun start time, "HH:MM" or "HH:MM:SS". */
   startTimeClock: string;
   runnerCount: number;
+  /**
+   * Minutes over which the field actually crosses the start line. A mass-participation
+   * race releases in corrals, so the last runner may cross several minutes after the
+   * gun. Modelling a zero spread piles the whole field into one instant and makes every
+   * station near the start read as impossibly busy.
+   */
+  startSpreadMinutes?: number;
+}
+
+export const DEFAULT_START_SPREAD_MINUTES = 10;
+
+/**
+ * Seconds after the gun at which a runner at a given pace percentile crosses the start
+ * line. Corrals are seeded by expected finish time, so faster runners start earlier.
+ */
+function startOffsetSeconds(percentile: number, spreadMinutes: number): number {
+  return (Math.min(100, Math.max(0, percentile)) / 100) * spreadMinutes * 60;
 }
 
 /**
@@ -57,9 +74,11 @@ export function arrivalPercentilesFromPaceBand(
 ): PercentileResult[] {
   const startSeconds = parseClockTimeToSeconds(start.startTimeClock);
   if (startSeconds === null) throw new Error(`Invalid start time: "${start.startTimeClock}"`);
+  const spreadMinutes = start.startSpreadMinutes ?? DEFAULT_START_SPREAD_MINUTES;
 
   return modelPacePercentiles(band, percentiles).map(({ percentile, paceMinPerKm }) => {
-    const seconds = startSeconds + paceMinPerKm * kmFromStart * 60;
+    const seconds =
+      startSeconds + startOffsetSeconds(percentile, spreadMinutes) + paceMinPerKm * kmFromStart * 60;
     return { percentile, seconds, clockTime: secondsToClockTime(seconds) };
   });
 }

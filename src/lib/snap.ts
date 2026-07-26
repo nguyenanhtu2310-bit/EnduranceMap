@@ -5,6 +5,7 @@ import {
   DEFAULT_COURSE_DISTANCE_MATCH_TOLERANCE_KM,
   DEFAULT_CROSSING_MAX_OFFSET_KM,
   DEFAULT_CROSSING_MIN_SEPARATION_KM,
+  DEFAULT_DUPLICATE_PASS_TOLERANCE_KM,
   DEFAULT_LABEL_MISMATCH_THRESHOLD_KM,
 } from './config';
 
@@ -178,7 +179,8 @@ export interface GroupedStation {
  */
 export function groupCoincidentPlacemarks(
   placemarks: SnappedPlacemark[],
-  toleranceKm: number = DEFAULT_COINCIDENT_STATION_TOLERANCE_KM
+  toleranceKm: number = DEFAULT_COINCIDENT_STATION_TOLERANCE_KM,
+  duplicatePassToleranceKm: number = DEFAULT_DUPLICATE_PASS_TOLERANCE_KM
 ): GroupedStation[] {
   const groups: GroupedStation[] = [];
 
@@ -192,17 +194,47 @@ export function groupCoincidentPlacemarks(
   }
 
   for (const group of groups) {
-    // Key on course plus rounded km so two members describing the same pass collapse,
-    // while genuinely distinct passes of one course are both kept.
-    const byPass = new Map<string, CourseSnap>();
+    // Members of one station describe the same physical spot, so their snaps overlap.
+    // Collapse snaps of the same course that land within `duplicatePassToleranceKm` of
+    // each other — those are one pass seen twice — while keeping genuinely distinct
+    // passes (an outbound and a return leg many km apart) separate.
+    const byCourse = new Map<string, CourseSnap[]>();
     for (const member of group.members) {
       for (const snap of member.snaps) {
-        const key = `${snap.courseName}@${snap.kmFromStart.toFixed(1)}`;
-        const existing = byPass.get(key);
-        if (!existing || snap.offsetKm < existing.offsetKm) byPass.set(key, snap);
+        if (!byCourse.has(snap.courseName)) byCourse.set(snap.courseName, []);
+        byCourse.get(snap.courseName)!.push(snap);
       }
     }
-    group.snaps = Array.from(byPass.values()).sort((a, b) => a.kmFromStart - b.kmFromStart);
+
+    const deduped: CourseSnap[] = [];
+    for (const courseSnaps of byCourse.values()) {
+      courseSnaps.sort((a, b) => a.kmFromStart - b.kmFromStart);
+      let cluster: CourseSnap[] = [];
+
+      const flush = () => {
+        if (cluster.length === 0) return;
+        let best = cluster[0];
+        for (const c of cluster) if (c.offsetKm < best.offsetKm) best = c;
+        deduped.push(best);
+      };
+
+      for (const snap of courseSnaps) {
+        const previous = cluster[cluster.length - 1];
+        if (previous && snap.kmFromStart - previous.kmFromStart > duplicatePassToleranceKm) {
+          flush();
+          cluster = [];
+        }
+        cluster.push(snap);
+      }
+      flush();
+    }
+
+    group.snaps = deduped.sort((a, b) => a.kmFromStart - b.kmFromStart);
+
+    // A merged station carries every distinct source name, so an operator can see that
+    // e.g. a signage post and a cut-off mat share one physical position.
+    const names = Array.from(new Set(group.members.map((m) => m.label.cleanName || m.name)));
+    group.name = names.join(' / ');
   }
 
   return groups;

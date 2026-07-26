@@ -127,9 +127,13 @@ function extractKmMarks(text: string, warnings: string[]): KmMark[] {
   return marks;
 }
 
-/** Strips every km/distance token from a display name. */
+/**
+ * Strips km-position tokens from a display name. Race-distance tokens ("42km",
+ * "21km/10km") are deliberately kept: they are what distinguishes two U-turns on the
+ * same street, so removing them would collapse distinct stations to one name.
+ */
 function stripKmTokens(text: string): string {
-  return text.replace(kmPairRe(), ' ').replace(kmOnlyRe(), ' ').replace(distanceKmRe(), ' ');
+  return text.replace(kmPairRe(), ' ').replace(kmOnlyRe(), ' ');
 }
 
 export function parsePlacemarkLabel(rawName: string): ParsedLabel {

@@ -36,6 +36,12 @@ export const DEFAULT_LABEL_MISMATCH_THRESHOLD_KM = 0.3;
 /** Distance (km) within which two separately-drawn placemarks are treated as the same physical station. */
 export const DEFAULT_COINCIDENT_STATION_TOLERANCE_KM = 0.03;
 
+/**
+ * Gap (km) along a course below which two snaps from different members of one station
+ * are treated as the same pass rather than two separate crossings.
+ */
+export const DEFAULT_DUPLICATE_PASS_TOLERANCE_KM = 0.3;
+
 /** Minutes before the modeled P1 arrival that a station should open. */
 export const DEFAULT_SETUP_BUFFER_MINUTES = 30;
 

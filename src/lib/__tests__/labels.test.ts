@@ -86,13 +86,15 @@ describe('parsePlacemarkLabel', () => {
       const result = parsePlacemarkLabel('U-turn 21km/10km: Võ Văn Kiệt');
       expect(result.distancesServed).toEqual([21, 10]);
       expect(result.kmMarks).toEqual([]);
-      expect(result.cleanName).toBe('U-turn: Võ Văn Kiệt');
+      // The distances stay in the display name: they are what tells this U-turn apart
+      // from the 42km U-turn on the same street.
+      expect(result.cleanName).toBe('U-turn 21km/10km: Võ Văn Kiệt');
     });
 
     it('handles a single-distance U-turn', () => {
       const result = parsePlacemarkLabel('U-turn 42km: Lê Hiến Mai');
       expect(result.distancesServed).toEqual([42]);
-      expect(result.cleanName).toBe('U-turn: Lê Hiến Mai');
+      expect(result.cleanName).toBe('U-turn 42km: Lê Hiến Mai');
     });
   });
 

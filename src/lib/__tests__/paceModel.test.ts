@@ -31,14 +31,57 @@ describe('modelPacePercentiles', () => {
 });
 
 describe('arrivalPercentilesFromPaceBand', () => {
-  it('computes an arrival clock time from start + pace * distance', () => {
-    const results = arrivalPercentilesFromPaceBand(band, { startTimeClock: '06:00:00', runnerCount: 500 }, 10, [50]);
-    // typical pace 6 min/km over 10km = 60 minutes after the 06:00:00 start.
+  it('computes an arrival clock time from start + corral offset + pace * distance', () => {
+    const results = arrivalPercentilesFromPaceBand(
+      band,
+      { startTimeClock: '06:00:00', runnerCount: 500, startSpreadMinutes: 10 },
+      10,
+      [50]
+    );
+    // Typical pace 6 min/km over 10km = 60 min, plus the P50 runner crossing the start
+    // line 5 min after the gun (halfway through a 10-minute corral release).
+    expect(results[0].clockTime).toBe('07:05:00');
+  });
+
+  it('puts the fastest runners across the start line at the gun', () => {
+    const results = arrivalPercentilesFromPaceBand(
+      band,
+      { startTimeClock: '06:00:00', runnerCount: 500, startSpreadMinutes: 10 },
+      10,
+      [0]
+    );
+    // P0: 3 min/km over 10km = 30 min, with no corral delay.
+    expect(results[0].clockTime).toBe('06:30:00');
+  });
+
+  it('collapses to a pure pace calculation when the field starts together', () => {
+    const results = arrivalPercentilesFromPaceBand(
+      band,
+      { startTimeClock: '06:00:00', runnerCount: 500, startSpreadMinutes: 0 },
+      10,
+      [50]
+    );
     expect(results[0].clockTime).toBe('07:00:00');
   });
 
   it('throws on an invalid start time', () => {
     expect(() => arrivalPercentilesFromPaceBand(band, { startTimeClock: 'nope', runnerCount: 10 }, 10)).toThrow();
+  });
+});
+
+describe('start spread and peak load', () => {
+  it('spreads arrivals near the start instead of piling the field into one instant', () => {
+    const start = { startTimeClock: '06:00:00', runnerCount: 1000, startSpreadMinutes: 10 };
+    // 0.5 km in, the field is still bunched but must not all share one timestamp.
+    const samples = samplePaceModelArrivals(band, start, 0.5, 200);
+    const distinct = new Set(samples);
+    expect(distinct.size).toBeGreaterThan(50);
+  });
+
+  it('produces a single arrival instant at km 0 when there is no start spread', () => {
+    const start = { startTimeClock: '06:00:00', runnerCount: 1000, startSpreadMinutes: 0 };
+    const samples = samplePaceModelArrivals(band, start, 0, 200);
+    expect(new Set(samples).size).toBe(1);
   });
 });
 
