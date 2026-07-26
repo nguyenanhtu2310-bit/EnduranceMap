@@ -371,3 +371,18 @@ details summary {
   display: block;
   margin-top: 0.15rem;
 }
+
+.station-name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.renumber-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}

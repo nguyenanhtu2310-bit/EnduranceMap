@@ -52,6 +52,12 @@ export interface PipelineOptions extends KmlParseOptions, SnapOptions, ScheduleO
   coincidentToleranceKm?: number;
   /** Samples per distance used to synthesize arrival timestamps from a pace band. */
   paceModelSampleSize?: number;
+  /**
+   * When set, stations are renamed "<prefix> 1" … "<prefix> N" in course order. Crews
+   * work from a sequential station list rather than the map's internal placemark names;
+   * the original names stay on `sourceNames` so the mapping remains checkable.
+   */
+  renumberStationsAs?: string;
 }
 
 export interface StationCrossingDetail {
@@ -265,6 +271,13 @@ export function runPipeline(
     const bKm = Math.min(...b.crossings.map((c) => c.kmFromStart));
     return aKm - bKm;
   });
+
+  if (options.renumberStationsAs) {
+    const prefix = options.renumberStationsAs;
+    stations.forEach((station, i) => {
+      station.schedule = { ...station.schedule, name: `${prefix} ${i + 1}` };
+    });
+  }
 
   return {
     courses,

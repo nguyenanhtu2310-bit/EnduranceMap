@@ -67,6 +67,8 @@ export default function App() {
   const [folders, setFolders] = useState<FolderSummary[]>([]);
   const [selectedFolders, setSelectedFolders] = useState<string[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [renumber, setRenumber] = useState(true);
+  const [renumberPrefix, setRenumberPrefix] = useState('Station');
   const [result, setResult] = useState<PipelineResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -128,6 +130,7 @@ export default function App() {
       setResult(
         runPipeline(kml.text, inputs, {
           stationFolders: selectedFolders,
+          renumberStationsAs: renumber ? renumberPrefix.trim() || 'Station' : undefined,
           setupBufferMinutes: settings.setupBufferMinutes,
           teardownBufferMinutes: settings.teardownBufferMinutes,
           binMinutes: settings.binMinutes,
@@ -169,7 +172,15 @@ export default function App() {
               <span className="step">2</span>Which positions to schedule
             </h2>
             <p className="hint">Map folders holding point placemarks. Tick the ones you need staffing for.</p>
-            <FolderPicker folders={folders} selected={selectedFolders} onChange={setSelectedFolders} />
+            <FolderPicker
+              folders={folders}
+              selected={selectedFolders}
+              onChange={setSelectedFolders}
+              renumber={renumber}
+              renumberPrefix={renumberPrefix}
+              onRenumberChange={setRenumber}
+              onRenumberPrefixChange={setRenumberPrefix}
+            />
           </section>
 
           <section className="card">
@@ -229,7 +240,7 @@ export default function App() {
               the last modeled arrival plus teardown. A station shared by several distances closes on the latest
               of them.
             </p>
-            <StationScheduleTable stations={result.stations} />
+            <StationScheduleTable stations={result.stations} showSourceNames={renumber} />
           </section>
 
           {result.skipped.length > 0 && (

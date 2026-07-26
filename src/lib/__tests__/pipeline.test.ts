@@ -169,6 +169,33 @@ describe('runPipeline', () => {
     it('returns no stations when nothing is selected', () => {
       expect(runPipeline(withSignage, inputs, { stationFolders: [] }).stations).toHaveLength(0);
     });
+
+    describe('sequential numbering', () => {
+      const numbered = runPipeline(withSignage, inputs, {
+        stationFolders: ['SIGNAGE: STATION'],
+        renumberStationsAs: 'Station',
+      });
+
+      it('names stations in course order', () => {
+        expect(numbered.stations.map((s) => s.schedule.name)).toEqual(['Station 1', 'Station 2']);
+      });
+
+      it('keeps the map names so the numbering stays checkable', () => {
+        expect(numbered.stations[0].sourceNames).toEqual(['S1']);
+        expect(numbered.stations[1].sourceNames).toEqual(['S2 & S3']);
+      });
+
+      it('carries the numbering into the cut-off table', () => {
+        const rows = numbered.cutoffTable.filter((r) => r.stationName.startsWith('Station'));
+        expect(rows.length).toBeGreaterThan(0);
+        expect(rows.every((r) => /^Station \d+$/.test(r.stationName))).toBe(true);
+      });
+
+      it('leaves the map names in place when numbering is off', () => {
+        const plain = runPipeline(withSignage, inputs, { stationFolders: ['SIGNAGE: STATION'] });
+        expect(plain.stations.map((s) => s.schedule.name)).toEqual(['S1', 'S2 & S3']);
+      });
+    });
   });
 
   it('keeps a staffed position that happens to sit beside an unlabeled course marker', () => {

@@ -2,20 +2,21 @@ import type { PipelineStation } from '../lib/pipeline';
 
 interface Props {
   stations: PipelineStation[];
+  /** Shows the map's own placemark names under each station. */
+  showSourceNames?: boolean;
 }
 
 function formatHm(clock: string): string {
   return clock.slice(0, 5);
 }
 
-export function StationScheduleTable({ stations }: Props) {
+export function StationScheduleTable({ stations, showSourceNames = true }: Props) {
   return (
     <div className="table-scroll">
       <table>
         <thead>
           <tr>
             <th>Station</th>
-            <th>Folder</th>
             <th>Crossings</th>
             <th className="num">Open</th>
             <th className="num">Close</th>
@@ -27,7 +28,7 @@ export function StationScheduleTable({ stations }: Props) {
           {stations.map((station) => (
             <tr key={station.schedule.name + station.crossings[0]?.kmFromStart}>
               <td>
-                {station.schedule.name}
+                <span className="station-name">{station.schedule.name}</span>
                 {station.schedule.cutoffExceeded && (
                   <>
                     {' '}
@@ -36,13 +37,15 @@ export function StationScheduleTable({ stations }: Props) {
                     </span>
                   </>
                 )}
+                {showSourceNames && station.sourceNames.length > 0 && (
+                  <span className="colocated">{station.sourceNames.join(', ')}</span>
+                )}
                 {station.coLocatedNames.length > 0 && (
                   <span className="colocated" title="Placemarks from other folders at this same position">
                     at {station.coLocatedNames.join(', ')}
                   </span>
                 )}
               </td>
-              <td className="muted small">{station.folder}</td>
               <td>
                 {station.crossings.map((crossing, i) => (
                   <span
