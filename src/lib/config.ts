@@ -21,6 +21,15 @@ export const DEFAULT_SNAP_OFFSET_WARNING_KM = 0.08;
 /** Perpendicular offset (km) beyond which a placemark is considered not on that course at all. */
 export const DEFAULT_MAX_MATCH_OFFSET_KM = 2;
 
+/** Perpendicular offset (km) within which a course counts as passing a placemark. */
+export const DEFAULT_CROSSING_MAX_OFFSET_KM = 0.05;
+
+/** Minimum gap (km) along a course between two positions for them to count as separate passes. */
+export const DEFAULT_CROSSING_MIN_SEPARATION_KM = 1;
+
+/** Tolerance (km) for matching a course's measured length to a race distance named in a label. */
+export const DEFAULT_COURSE_DISTANCE_MATCH_TOLERANCE_KM = 2;
+
 /** Divergence (km) between a placemark's computed position and its parsed name label that triggers a mismatch flag. */
 export const DEFAULT_LABEL_MISMATCH_THRESHOLD_KM = 0.3;
 

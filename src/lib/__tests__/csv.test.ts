@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   extractRunnerArrivals,
@@ -10,8 +10,7 @@ import {
 } from '../csv';
 
 function loadFixture(name: string): string {
-  const url = new URL(`../../test/fixtures/${name}`, import.meta.url);
-  return readFileSync(fileURLToPath(url), 'utf-8');
+  return readFileSync(resolve(process.cwd(), 'src/test/fixtures', name), 'utf-8');
 }
 
 describe('parseCsv', () => {

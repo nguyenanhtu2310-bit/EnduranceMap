@@ -3,7 +3,16 @@ import type { LatLon } from './geo';
 
 export interface RawCourse {
   name: string;
+  folder: string;
   points: LatLon[];
+}
+
+/** A LineString outside the course folder — road-closure/setup segments, kept for reference. */
+export interface RawSegment {
+  name: string;
+  folder: string;
+  points: LatLon[];
+  label: ParsedLabel;
 }
 
 export interface RawPlacemark {
@@ -15,9 +24,27 @@ export interface RawPlacemark {
 }
 
 export interface KmlParseResult {
+  /** LineStrings inside the course folder — the actual race routes. */
   courses: RawCourse[];
+  /** LineStrings everywhere else — road closures and course setup, not race routes. */
+  segments: RawSegment[];
   placemarks: RawPlacemark[];
   warnings: string[];
+}
+
+export interface KmlParseOptions {
+  /**
+   * Name of the folder holding the race-route LineStrings. Real maps carry hundreds of
+   * other LineStrings (barrier runs, road-closure spans) that must not be mistaken for
+   * courses, so only this folder's lines are treated as routes.
+   */
+  courseFolderName?: string;
+}
+
+export const DEFAULT_COURSE_FOLDER_NAME = 'RACE ROUTE';
+
+function normalizeFolderName(name: string): string {
+  return name.trim().toLowerCase();
 }
 
 function localName(el: Element): string {
@@ -45,7 +72,7 @@ function parseCoordinatesText(text: string): LatLon[] {
     .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
 }
 
-function handlePlacemark(placemarkEl: Element, folderName: string, result: KmlParseResult) {
+function handlePlacemark(placemarkEl: Element, folderName: string, courseFolder: string, result: KmlParseResult) {
   const name = getChildText(placemarkEl, 'name')?.trim() || '(unnamed)';
 
   const lineString = findDescendant(placemarkEl, 'LineString');
@@ -53,10 +80,14 @@ function handlePlacemark(placemarkEl: Element, folderName: string, result: KmlPa
     const coordsEl = findDescendant(lineString, 'coordinates');
     const points = coordsEl ? parseCoordinatesText(coordsEl.textContent ?? '') : [];
     if (points.length < 2) {
-      result.warnings.push(`Course "${name}" has fewer than 2 valid coordinate points and was skipped.`);
+      result.warnings.push(`Line "${name}" has fewer than 2 valid coordinate points and was skipped.`);
       return;
     }
-    result.courses.push({ name, points });
+    if (normalizeFolderName(folderName) === courseFolder) {
+      result.courses.push({ name, folder: folderName, points });
+    } else {
+      result.segments.push({ name, folder: folderName, points, label: parsePlacemarkLabel(name) });
+    }
     return;
   }
 
@@ -80,19 +111,22 @@ function handlePlacemark(placemarkEl: Element, folderName: string, result: KmlPa
   // Placemarks with other geometry types (Polygon, MultiGeometry, ...) are out of scope for the MVP.
 }
 
-function walkFolder(folderEl: Element, folderName: string, result: KmlParseResult) {
+function walkFolder(folderEl: Element, folderName: string, courseFolder: string, result: KmlParseResult) {
   for (const child of Array.from(folderEl.children)) {
     const tag = localName(child);
     if (tag === 'Folder') {
       const nestedName = getChildText(child, 'name')?.trim() || folderName;
-      walkFolder(child, nestedName, result);
+      walkFolder(child, nestedName, courseFolder, result);
     } else if (tag === 'Placemark') {
-      handlePlacemark(child, folderName, result);
+      handlePlacemark(child, folderName, courseFolder, result);
     }
   }
 }
 
-export function parseKml(xmlText: string): KmlParseResult {
+export function parseKml(xmlText: string, options: KmlParseOptions = {}): KmlParseResult {
+  const courseFolderName = options.courseFolderName ?? DEFAULT_COURSE_FOLDER_NAME;
+  const courseFolder = normalizeFolderName(courseFolderName);
+
   const parser = new DOMParser();
   const doc = parser.parseFromString(xmlText, 'text/xml');
 
@@ -101,14 +135,16 @@ export function parseKml(xmlText: string): KmlParseResult {
     throw new Error(`Invalid KML/XML: ${parserError.textContent?.trim() ?? 'unknown parse error'}`);
   }
 
-  const result: KmlParseResult = { courses: [], placemarks: [], warnings: [] };
+  const result: KmlParseResult = { courses: [], segments: [], placemarks: [], warnings: [] };
 
   const documentEl = doc.getElementsByTagName('Document')[0] ?? doc.documentElement;
-  walkFolder(documentEl, '', result);
+  walkFolder(documentEl, '', courseFolder, result);
 
   if (result.courses.length === 0) {
+    const seen = Array.from(new Set(result.segments.map((s) => s.folder))).filter(Boolean);
     result.warnings.push(
-      'No course LineStrings found — expected a "RACE ROUTE" folder with one LineString per distance.'
+      `No course LineStrings found in a folder named "${courseFolderName}".` +
+        (seen.length ? ` Folders containing lines: ${seen.map((f) => `"${f}"`).join(', ')}.` : '')
     );
   }
 

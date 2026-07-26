@@ -1,9 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Structured to mirror a real Google My Maps race export:
+    - courses live in RACE ROUTE alongside Point placemarks (Start/Finish/U-turns)
+    - hundreds of unrelated LineStrings live in COURSE SETUP and must not be
+      mistaken for race routes
+    - the Half Marathon is an out-and-back, so a mid-course point is passed twice
+    - cut-off names use the real "(KM7.4/42 - 4:10 AM)" shape, including the
+      multi-distance and multi-window variants
+  Coordinates are synthetic: 1 degree of latitude is ~111.2 km at the equator.
+-->
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <name>Sample Race</name>
     <Folder>
       <name>RACE ROUTE</name>
+      <Placemark>
+        <name>Start</name>
+        <Point><coordinates>106.000000,10.000000,0</coordinates></Point>
+      </Placemark>
       <Placemark>
         <name>10km</name>
         <LineString>
@@ -16,7 +30,22 @@
         <name>Half Marathon</name>
         <LineString>
           <coordinates>
-            106.000000,9.950000,0 106.000000,10.140000,0
+            106.000000,10.000000,0 106.000000,10.095000,0 106.000000,10.000000,0
+          </coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>U-turn 21km/10km: Sample Street</name>
+        <Point><coordinates>106.000000,10.095000,0</coordinates></Point>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>COURSE SETUP</name>
+      <Placemark>
+        <name>Sample Street (Start -&gt; Corner): Toàn bộ phần đường (03:00 - 04:24)</name>
+        <LineString>
+          <coordinates>
+            106.001000,10.000000,0 106.001000,10.002000,0
           </coordinates>
         </LineString>
       </Placemark>
@@ -24,25 +53,27 @@
     <Folder>
       <name>CUT-OFF TIME</name>
       <Placemark>
-        <name>KM5/10 Water Station (05:30 - 08:15)</name>
-        <Point>
-          <coordinates>106.000000,10.045000,0</coordinates>
-        </Point>
+        <name>COT 1 (KM5/10 - 5:15 AM)</name>
+        <Point><coordinates>106.000000,10.045000,0</coordinates></Point>
       </Placemark>
       <Placemark>
-        <name>KM8/10 Turnaround</name>
-        <Point>
-          <coordinates>106.000000,10.020000,0</coordinates>
-        </Point>
+        <name>COT 2 (KM7.5/10 &amp; KM7.5/21 - 6:00 AM)</name>
+        <Point><coordinates>106.000000,10.067400,0</coordinates></Point>
+      </Placemark>
+      <Placemark>
+        <name>COT 3 (KM2.5/21 - 4:30 AM) (KM18.6/21 - 8:30 AM)</name>
+        <Point><coordinates>106.000000,10.022500,0</coordinates></Point>
+      </Placemark>
+      <Placemark>
+        <name>COT 4 (9/10 - 7:15 AM)</name>
+        <Point><coordinates>106.000000,10.081000,0</coordinates></Point>
       </Placemark>
     </Folder>
     <Folder>
       <name>MEDICAL STATION &amp; AMBULANCE</name>
       <Placemark>
-        <name>Medical Post 1</name>
-        <Point>
-          <coordinates>106.000000,10.030000,0</coordinates>
-        </Point>
+        <name>MEDICAL 1 (03:00 - 09:30)</name>
+        <Point><coordinates>106.000000,10.030000,0</coordinates></Point>
       </Placemark>
     </Folder>
   </Document>
