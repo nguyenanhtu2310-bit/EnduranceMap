@@ -6,6 +6,7 @@ import { KmlDropzone } from './components/KmlDropzone';
 import { PaceBandForm, type DistanceFormRow } from './components/PaceBandForm';
 import { SettingsPanel, type Settings } from './components/SettingsPanel';
 import { StationScheduleTable } from './components/StationScheduleTable';
+import { TimingMatrix } from './components/TimingMatrix';
 import { parseKml } from './lib/kml';
 import { buildCourses } from './lib/snap';
 import {
@@ -52,15 +53,18 @@ function seedRow(courseName: string, measuredKm: number): DistanceFormRow {
 }
 
 /**
- * Folder to schedule when a map contains one. Most operational questions are asked
- * about a single class of position at a time, so defaulting to every folder buries the
- * answer in a hundred rows.
+ * Folders to schedule when a map contains one, most specific first. Most operational
+ * questions are asked about a single class of position at a time, so defaulting to
+ * every folder buries the answer in a hundred rows.
  */
-const PREFERRED_DEFAULT_FOLDER = 'SIGNAGE: STATION';
+const PREFERRED_DEFAULT_FOLDERS = ['TIMING', 'SIGNAGE: STATION'];
 
 function defaultSelection(folders: FolderSummary[]): string[] {
-  const preferred = folders.find((f) => f.folder.trim().toLowerCase() === PREFERRED_DEFAULT_FOLDER.toLowerCase());
-  return preferred ? [preferred.folder] : folders.map((f) => f.folder);
+  for (const preferred of PREFERRED_DEFAULT_FOLDERS) {
+    const match = folders.find((f) => f.folder.trim().toLowerCase() === preferred.toLowerCase());
+    if (match) return [match.folder];
+  }
+  return folders.map((f) => f.folder);
 }
 
 export default function App() {
@@ -150,11 +154,17 @@ export default function App() {
 
   return (
     <div className="app">
+      <div className="masthead">
+        {/* Phosphor map-pin, per the brand's icon set. */}
+        <svg width="20" height="20" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+          <path d="M128 16a88.1 88.1 0 0 0-88 88c0 75.3 80 132.17 83.41 134.55a8 8 0 0 0 9.18 0C136 236.17 216 179.3 216 104a88.1 88.1 0 0 0-88-88Zm0 56a32 32 0 1 1-32 32 32 32 0 0 1 32-32Z" />
+        </svg>
+        <span className="wordmark">EnduranceMap</span>
+      </div>
+
       <header>
-        <h1>EnduranceMap — Race CP Operations Calculator</h1>
-        <p>
-          Turn a course map into a checkpoint operating schedule. Runs entirely in your browser.
-        </p>
+        <h1>Race CP Operations Calculator</h1>
+        <p>Turn a course map into a checkpoint operating schedule. Runs entirely in your browser.</p>
       </header>
 
       {error && <div className="error">{error}</div>}
@@ -246,6 +256,16 @@ export default function App() {
           </section>
 
           <section className="card">
+            <span className="kicker">For the timing team</span>
+            <h2>Timing points</h2>
+            <p className="hint">
+              Every point each distance runs through, with the kilometre it falls at on that distance's own
+              route and the hours the position is staffed.
+            </p>
+            <TimingMatrix result={result} />
+          </section>
+
+          <section className="card">
             <h2>Crossing time distribution</h2>
             <p className="hint">
               Runner arrivals per {result.binMinutes} minutes, stacked by distance, on one shared clock. Rows
@@ -289,6 +309,13 @@ export default function App() {
           )}
         </>
       )}
+
+      <footer className="powered-by">
+        <span>Powered by</span>
+        <span className="chip">
+          <img src="/sportstats-logo.png" alt="Sportstats" />
+        </span>
+      </footer>
     </div>
   );
 }

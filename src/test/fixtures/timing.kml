@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Four distances sharing one out-and-back corridor along lon=106.0, with a TIMING
+  folder holding the points the timing team cares about. Mirrors the shape of a real
+  multi-distance road race: every course starts at the same line, and the shorter
+  distances turn back earlier, so one physical point reads at a different kilometre
+  on each race.
+
+  1 degree of latitude is ~111.2 km, so 0.001 deg is ~111 m.
+-->
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Matrix Sample</name>
+    <Folder>
+      <name>RACE ROUTE</name>
+      <Placemark>
+        <name>42k</name>
+        <LineString>
+          <coordinates>106.000000,10.000000,0 106.000000,10.191200,0 106.000000,10.000000,0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>21k</name>
+        <LineString>
+          <coordinates>106.000000,10.000000,0 106.000000,10.095000,0 106.000000,10.000000,0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>10k</name>
+        <LineString>
+          <coordinates>106.000000,10.000000,0 106.000000,10.045000,0 106.000000,10.000000,0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>5k</name>
+        <LineString>
+          <coordinates>106.000000,10.000000,0 106.000000,10.022500,0 106.000000,10.000000,0</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>TIMING</name>
+      <Placemark>
+        <name>CP Far 42K</name>
+        <Point><coordinates>106.000000,10.123000,0</coordinates></Point>
+      </Placemark>
+      <Placemark>
+        <name>CP 21K</name>
+        <Point><coordinates>106.000000,10.061000,0</coordinates></Point>
+      </Placemark>
+      <Placemark>
+        <name>CP 10K</name>
+        <Point><coordinates>106.000000,10.028000,0</coordinates></Point>
+      </Placemark>
+      <Placemark>
+        <name>CP 5K</name>
+        <Point><coordinates>106.000000,10.015000,0</coordinates></Point>
+      </Placemark>
+      <Placemark>
+        <name>Finish</name>
+        <Point><coordinates>106.000000,10.000500,0</coordinates></Point>
+      </Placemark>
+    </Folder>
+  </Document>
+</kml>

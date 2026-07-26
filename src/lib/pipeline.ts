@@ -99,6 +99,8 @@ export interface PipelineResult {
   courses: Course[];
   stations: PipelineStation[];
   cutoffTable: CutoffTableRow[];
+  /** The per-distance inputs this run used, for tables that show start times. */
+  distanceInputs: DistanceInput[];
   /**
    * Course names in the order their colours are assigned, so every station's
    * distribution stacks the same distance in the same slot.
@@ -354,6 +356,7 @@ export function runPipeline(
     courses,
     stations,
     cutoffTable: buildCutoffTable(stations.map((s) => s.schedule)),
+    distanceInputs,
     courseOrder,
     timeRangeSeconds,
     binMinutes,
