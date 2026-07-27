@@ -5,6 +5,8 @@ import { parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
 interface Props {
   result: PipelineResult;
   notes?: Record<string, string>;
+  /** Supplying this makes the note editable here as well as in the schedule. */
+  onNoteChange?: (mapName: string, note: string) => void;
 }
 
 function hm(clock: string): string {
@@ -35,7 +37,7 @@ function cellFor(station: PipelineStation, courseName: string): Cell {
   };
 }
 
-export function TimingMatrix({ result, notes }: Props) {
+export function TimingMatrix({ result, notes, onNoteChange }: Props) {
   const courses = orderedCourses(result);
   const startByCourse = new Map(result.distanceInputs.map((d) => [d.courseName, d.startTimeClock]));
 
@@ -80,7 +82,17 @@ export function TimingMatrix({ result, notes }: Props) {
                   station.sourceNames.join(', ') !== station.schedule.name && (
                     <span className="colocated">{station.sourceNames.join(', ')}</span>
                   )}
-                {notes?.[station.mapName] && <span className="colocated note">{notes[station.mapName]}</span>}
+                {onNoteChange ? (
+                  <input
+                    className="note-input"
+                    type="text"
+                    value={notes?.[station.mapName] ?? ''}
+                    placeholder="Note — staff / decoder no."
+                    onChange={(e) => onNoteChange(station.mapName, e.target.value)}
+                  />
+                ) : (
+                  notes?.[station.mapName] && <span className="colocated note">{notes[station.mapName]}</span>
+                )}
               </td>
               <td className="km">
                 {hm(station.schedule.openClockTime)}–{hm(station.schedule.closeClockTime)}

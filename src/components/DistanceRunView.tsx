@@ -18,6 +18,8 @@ interface Props {
   /** Removes a single course pass — see `passKey`. */
   onRemovePass?: (key: string) => void;
   notes?: Record<string, string>;
+  /** Supplying this makes the note editable here as well as in the schedule. */
+  onNoteChange?: (mapName: string, note: string) => void;
 }
 
 /**
@@ -75,7 +77,15 @@ function buildRun(result: PipelineResult, courseName: string): Stop[] {
   return stops;
 }
 
-export function DistanceRunView({ result, rules, overrides, onOverridesChange, onRemovePass, notes }: Props) {
+export function DistanceRunView({
+  result,
+  rules,
+  overrides,
+  onOverridesChange,
+  onRemovePass,
+  notes,
+  onNoteChange,
+}: Props) {
   const courses = [...result.courses]
     .filter((c) => result.courseOrder.includes(c.name))
     .sort((a, b) => b.totalKm - a.totalKm);
@@ -151,8 +161,18 @@ export function DistanceRunView({ result, rules, overrides, onOverridesChange, o
                         pass {stop.passIndex + 1} of {stop.passCount}
                       </span>
                     )}
-                    {notes?.[stop.station.mapName] && (
-                      <span className="colocated note">{notes[stop.station.mapName]}</span>
+                    {onNoteChange ? (
+                      <input
+                        className="note-input"
+                        type="text"
+                        value={notes?.[stop.station.mapName] ?? ''}
+                        placeholder="Note — staff / decoder no."
+                        onChange={(e) => onNoteChange(stop.station.mapName, e.target.value)}
+                      />
+                    ) : (
+                      notes?.[stop.station.mapName] && (
+                        <span className="colocated note">{notes[stop.station.mapName]}</span>
+                      )
                     )}
                   </td>
                   <td className="num">{stop.kmFromStart.toFixed(1)}</td>

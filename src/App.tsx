@@ -199,6 +199,19 @@ export default function App() {
 
   const liveLabel = raceName.trim() || kml?.fileName.replace(/\.kml$/i, '') || 'Untitled race';
 
+  /**
+   * A note belongs to the physical station, not to the row it was typed in, so editing
+   * it anywhere updates every section — including the other passes of an out-and-back.
+   */
+  function changeStationNote(mapName: string, note: string) {
+    setStationNotes((current) => {
+      const next = { ...current };
+      if (note) next[mapName] = note;
+      else delete next[mapName];
+      return next;
+    });
+  }
+
   function captureSnapshot(): RaceSnapshot {
     return {
       kml, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
@@ -747,12 +760,7 @@ export default function App() {
                 );
               }}
               notes={stationNotes}
-              onNoteChange={(mapName, note) => {
-                const next = { ...stationNotes };
-                if (note) next[mapName] = note;
-                else delete next[mapName];
-                setStationNotes(next);
-              }}
+              onNoteChange={changeStationNote}
               onRemove={(mapName) => {
                 const next = [...removedStations, mapName];
                 setRemovedStations(next);
@@ -797,6 +805,7 @@ export default function App() {
               overrides={amenityOverrides}
               onOverridesChange={setAmenityOverrides}
               notes={stationNotes}
+              onNoteChange={changeStationNote}
               onRemovePass={(key) => {
                 const next = [...removedPasses, key];
                 setRemovedPasses(next);
@@ -811,7 +820,7 @@ export default function App() {
               Every point each distance runs through, with the kilometre it falls at on that distance's own
               route and the hours the position is staffed.
             </p>
-            <TimingMatrix result={result} notes={stationNotes} />
+            <TimingMatrix result={result} notes={stationNotes} onNoteChange={changeStationNote} />
           </section>
 
           <section className="card">
