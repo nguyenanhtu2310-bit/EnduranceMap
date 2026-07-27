@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { CrossingDistribution } from './components/CrossingDistribution';
+import { EnduranceMapLogo } from './components/Logo';
 import { CutoffTable } from './components/CutoffTable';
 import { DistanceRunView } from './components/DistanceRunView';
 import { DEFAULT_AMENITY_RULES, migrateAmenityOverrides, type AmenitySet } from './lib/amenities';
@@ -534,13 +535,12 @@ export default function App() {
       </div>
 
       <div className="masthead">
-        {/* Phosphor map-pin, per the brand's icon set. */}
-        <svg width="20" height="20" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
-          <path d="M128 16a88.1 88.1 0 0 0-88 88c0 75.3 80 132.17 83.41 134.55a8 8 0 0 0 9.18 0C136 236.17 216 179.3 216 104a88.1 88.1 0 0 0-88-88Zm0 56a32 32 0 1 1-32 32 32 32 0 0 1 32-32Z" />
-        </svg>
-        <span className="wordmark">EnduranceMap</span>
-        <span className="chip masthead-chip">
-          <img src="/sportstats-logo.png" alt="Sportstats" />
+        <EnduranceMapLogo size={60} />
+        <span className="powered-by-mark">
+          <span className="powered-by-label">Powered by</span>
+          <span className="chip masthead-chip">
+            <img src="/sportstats-logo.png" alt="Sportstats" />
+          </span>
         </span>
       </div>
 

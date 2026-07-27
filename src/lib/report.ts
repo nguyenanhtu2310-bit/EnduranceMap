@@ -359,8 +359,9 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
     max-width: 1140px; margin-inline: auto;
   }
   .masthead { display: flex; align-items: center; gap: 8px; margin-bottom: 22px; }
-  .masthead svg { color: var(--accent); flex: none; }
-  .wordmark { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+  .masthead svg { flex: none; }
+  .wordmark { font-weight: 700; font-size: 20px; letter-spacing: -0.03em; }
+  .wordmark-accent { color: #07bc02; }
   h1 { font-size: 26px; margin: 0 0 6px; font-weight: 600; letter-spacing: -0.02em; }
   h2 {
     font-size: 15px; margin: 30px 0 6px; font-weight: 600; letter-spacing: -0.01em;
@@ -421,8 +422,12 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
 </style></head>
 <body>
   <div class="masthead">
-    <svg width="18" height="18" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128 16a88.1 88.1 0 0 0-88 88c0 75.3 80 132.17 83.41 134.55a8 8 0 0 0 9.18 0C136 236.17 216 179.3 216 104a88.1 88.1 0 0 0-88-88Zm0 56a32 32 0 1 1-32 32 32 32 0 0 1 32-32Z"/></svg>
-    <span class="wordmark">EnduranceMap</span>
+    <svg width="30" height="30" viewBox="0 0 88 88" fill="none" aria-hidden="true">
+      <path d="M44 4 C64 4 80 20 80 42 C80 62 60 76 44 84 C28 76 8 62 8 42 C8 20 24 4 44 4Z" fill="#07bc02"/>
+      <path d="M18 54 L33 31 L43 45 L55 24 L70 53" stroke="#0d0f10" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <circle cx="55" cy="24" r="5" fill="#eafbe6"/>
+    </svg>
+    <span class="wordmark">Endurance<span class="wordmark-accent">Map</span></span>
   </div>
   <span class="kicker">Checkpoint operations plan</span>
   <h1>${esc(raceName)}</h1>

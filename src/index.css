@@ -59,19 +59,42 @@ body {
 .masthead {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 1.75rem;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
 }
 
-.masthead svg {
+/* Icon + wordmark are one lockup; the gap is set inline so it scales with the icon. */
+.em-logo {
+  display: inline-flex;
+  align-items: center;
+}
+
+.em-wordmark {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.em-wordmark-accent {
   color: var(--color-accent);
-  flex: none;
 }
 
-.wordmark {
-  font-weight: 500;
-  font-size: 1rem;
-  letter-spacing: -0.01em;
+.powered-by-mark {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.powered-by-label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+  white-space: nowrap;
 }
 
 header h1 {
@@ -772,16 +795,16 @@ tr.end-zone td {
 /* — task-2/3 chrome — */
 
 .masthead-chip {
-  margin-left: auto;
   background: var(--color-neutral-100);
-  border-radius: var(--radius-sm);
-  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  padding: 7px 16px;
   display: inline-flex;
   align-items: center;
 }
 
+/* Doubled from the original 16px — the mark reads as a partner credit, not a footnote. */
 .masthead-chip img {
-  height: 16px;
+  height: 32px;
   display: block;
 }
 
