@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { PipelineResult, PipelineStation } from '../lib/pipeline';
+import { passKey, type PipelineResult, type PipelineStation } from '../lib/pipeline';
 import { parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
 import {
   AMENITIES,
@@ -15,7 +15,16 @@ interface Props {
   /** Per-station hand edits, keyed by the station's map name then amenity key. */
   overrides: Record<string, Partial<AmenitySet>>;
   onOverridesChange: (next: Record<string, Partial<AmenitySet>>) => void;
+  /** Removes a single course pass — see `passKey`. */
+  onRemovePass?: (key: string) => void;
 }
+
+/**
+ * How close to either end of the route a stop counts as start or finish furniture
+ * rather than a stop on the course. Aid spacing is about what a runner meets between
+ * the two, so the start and finish lines are not stops to be spaced.
+ */
+const END_ZONE_KM = 0.5;
 
 function hm(clock: string): string {
   const seconds = parseClockTimeToSeconds(clock);
@@ -65,7 +74,7 @@ function buildRun(result: PipelineResult, courseName: string): Stop[] {
   return stops;
 }
 
-export function DistanceRunView({ result, rules, overrides, onOverridesChange }: Props) {
+export function DistanceRunView({ result, rules, overrides, onOverridesChange, onRemovePass }: Props) {
   const courses = [...result.courses]
     .filter((c) => result.courseOrder.includes(c.name))
     .sort((a, b) => b.totalKm - a.totalKm);
@@ -78,8 +87,14 @@ export function DistanceRunView({ result, rules, overrides, onOverridesChange }:
   const stops = buildRun(result, course.name);
   const finalGap = course.totalKm - (stops[stops.length - 1]?.kmFromStart ?? 0);
   const longestGap = Math.max(0, ...stops.map((s) => s.gapKm), finalGap);
+  const onCourse = (stop: Stop) =>
+    stop.kmFromStart > END_ZONE_KM && stop.kmFromStart < course.totalKm - END_ZONE_KM;
+  const courseStops = stops.filter(onCourse);
+
+  // Totals describe the stops runners actually meet between the lines, so start and
+  // finish furniture is listed but not counted.
   const totals = totalAmenities(
-    stops.map((stop) =>
+    courseStops.map((stop) =>
       resolveAmenities(stop.station.schedule.activityLevel, rules, overrides[stop.station.mapName])
     )
   );
@@ -118,12 +133,16 @@ export function DistanceRunView({ result, rules, overrides, onOverridesChange }:
                     {a.label}
                   </th>
                 ))}
+                {onRemovePass && <th aria-label="Remove" />}
               </tr>
             </thead>
             <tbody>
-              {stops.map((stop, i) => (
-                <tr key={`${stop.station.mapName}-${stop.passIndex}`}>
-                  <td className="num muted">{i + 1}</td>
+              {stops.map((stop) => (
+                <tr
+                  key={`${stop.station.mapName}-${stop.passIndex}`}
+                  className={onCourse(stop) ? undefined : 'end-zone'}
+                >
+                  <td className="num muted">{onCourse(stop) ? courseStops.indexOf(stop) + 1 : '—'}</td>
                   <td>
                     <span className="station-name">{stop.station.schedule.name}</span>
                     {stop.passCount > 1 && (
@@ -173,6 +192,20 @@ export function DistanceRunView({ result, rules, overrides, onOverridesChange }:
                       </td>
                     );
                   })}
+                  {onRemovePass && (
+                    <td>
+                      <button
+                        type="button"
+                        className="row-remove"
+                        title={`Remove this ${stop.station.schedule.name} pass from every section`}
+                        onClick={() =>
+                          onRemovePass(passKey(stop.station.mapName, course.name, stop.passIndex))
+                        }
+                      >
+                        ×
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
               <tr>
@@ -194,11 +227,12 @@ export function DistanceRunView({ result, rules, overrides, onOverridesChange }:
                 {AMENITIES.map((a) => (
                   <td key={a.key} />
                 ))}
+                {onRemovePass && <td />}
               </tr>
               <tr className="total-row">
                 <td />
                 <td className="row-head">Total</td>
-                <td className="num">{stops.length} stops</td>
+                <td className="num">{courseStops.length} on course</td>
                 <td className="num" />
                 <td className="num" />
                 <td className="num" />
@@ -209,6 +243,7 @@ export function DistanceRunView({ result, rules, overrides, onOverridesChange }:
                     {totals[a.key]}
                   </td>
                 ))}
+                {onRemovePass && <td />}
               </tr>
             </tbody>
           </table>
@@ -216,9 +251,12 @@ export function DistanceRunView({ result, rules, overrides, onOverridesChange }:
       )}
 
       <p className="hint" style={{ margin: '0.85rem 0 0' }}>
-        {stops.length} stop{stops.length === 1 ? '' : 's'} over {course.totalKm.toFixed(1)} km, longest gap{' '}
-        <strong>{longestGap.toFixed(1)} km</strong>. Gaps are measured along this distance's own route, so a
-        point the course passes twice is listed twice — the second visit is a separate resupply.
+        {courseStops.length} stop{courseStops.length === 1 ? '' : 's'} on course over{' '}
+        {course.totalKm.toFixed(1)} km, longest gap <strong>{longestGap.toFixed(1)} km</strong>. Start and
+        finish furniture is greyed out and left out of the counts. Gaps are measured along this distance's own
+        route, so a point the course passes twice is listed twice — the second visit is a separate resupply.
+        Where a divided road puts the two carriageways within the snapping corridor, a pass may appear that
+        runners cannot actually reach; remove it with the × and every section follows.
       </p>
     </>
   );

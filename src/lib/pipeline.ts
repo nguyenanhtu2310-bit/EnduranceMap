@@ -28,11 +28,10 @@ import {
   type StackedBin,
   type StationSchedule,
 } from './schedule';
-import { DEFAULT_HISTOGRAM_BIN_MINUTES } from './config';
-import { parseClockTimeToSeconds } from './time';
 import {
   DEFAULT_COURSE_DISTANCE_MATCH_TOLERANCE_KM,
   DEFAULT_CUTOFF_PASS_MATCH_TOLERANCE_KM,
+  DEFAULT_HISTOGRAM_BIN_MINUTES,
 } from './config';
 
 /** Pace and field-size input for one race distance. */
@@ -74,12 +73,13 @@ export interface PipelineOptions extends KmlParseOptions, SnapOptions, ScheduleO
    */
   excludeStations?: string[];
   /**
-   * Cut-offs supplied by the organiser, keyed by station name then course name. These
-   * are authoritative: a time entered here overrides whatever the map's placemark names
-   * happen to say, because the organiser's sheet is the source of truth and the map is
-   * a transcription of it.
+   * Individual course passes to drop, keyed by `passKey`. Snapping works on proximity
+   * to a line, so where a course runs out and back along a divided road the two
+   * carriageways sit within the crossing corridor and one mat reads as two passes —
+   * even though a runner on the far side cannot reach it. That is a judgement about the
+   * ground, not something the geometry can settle, so the pass is removed by hand.
    */
-  manualCutoffs?: Record<string, Record<string, string>>;
+  excludePasses?: string[];
   courseDistanceToleranceKm?: number;
   /** How near a cut-off's labelled km must be to a pass for it to govern that pass. */
   cutoffPassToleranceKm?: number;
@@ -87,6 +87,8 @@ export interface PipelineOptions extends KmlParseOptions, SnapOptions, ScheduleO
   coincidentToleranceKm?: number;
   /** Samples per distance used to synthesize arrival timestamps from a pace band. */
   paceModelSampleSize?: number;
+  /** Minutes added to the slowest arrival when proposing a cut-off. */
+  cutoffGraceMinutes?: number;
   /**
    * When set, stations are renamed "<prefix> 1" … "<prefix> N" in course order. Crews
    * work from a sequential station list rather than the map's internal placemark names;
@@ -154,6 +156,14 @@ function normalize(value: string): string {
 export interface FolderSummary {
   folder: string;
   placemarkCount: number;
+}
+
+/**
+ * Stable identity for one course pass at one station. Used to remove a single crossing
+ * without touching the station's other passes or the other distances through it.
+ */
+export function passKey(mapName: string, courseName: string, passIndex: number): string {
+  return `${mapName}|${courseName}|${passIndex}`;
 }
 
 /**
@@ -240,6 +250,7 @@ export function runPipeline(
   const stationFolders = (options.stationFolders ?? DEFAULT_STATION_FOLDERS).map(normalize);
   const excluded = (options.excludePlacemarkNames ?? []).map(normalize);
   const excludedStations = new Set(options.excludeStations ?? []);
+  const excludedPasses = new Set(options.excludePasses ?? []);
   const toleranceKm = options.courseDistanceToleranceKm ?? DEFAULT_COURSE_DISTANCE_MATCH_TOLERANCE_KM;
   const cutoffPassToleranceKm = options.cutoffPassToleranceKm ?? DEFAULT_CUTOFF_PASS_MATCH_TOLERANCE_KM;
   const sampleSize = options.paceModelSampleSize ?? 200;
@@ -320,13 +331,16 @@ export function runPipeline(
     for (const snap of group.snaps) {
       const input = inputByCourse.get(snap.courseName);
       if (!input) continue;
+      if (excludedPasses.has(passKey(stationName, snap.courseName, snap.passIndex))) continue;
 
-      // An organiser-entered time wins over anything parsed from the map.
-      const manual = options.manualCutoffs?.[stationName]?.[snap.courseName]?.trim();
-      const officialCutoffClock =
-        manual && parseClockTimeToSeconds(manual) !== null
-          ? manual
-          : findCutoffForCrossing(group, snap, courses, toleranceKm, cutoffPassToleranceKm);
+      // Read from the map only; cut-offs are proposed by the tool, not typed in.
+      const officialCutoffClock = findCutoffForCrossing(
+        group,
+        snap,
+        courses,
+        toleranceKm,
+        cutoffPassToleranceKm
+      );
 
       const usesRealField = !!input.samples && input.samples.length > 0;
 
@@ -454,7 +468,9 @@ export function runPipeline(
   return {
     courses,
     stations,
-    cutoffTable: buildCutoffTable(stations.map((s) => s.schedule)),
+    cutoffTable: buildCutoffTable(stations.map((s) => s.schedule), {
+      graceMinutes: options.cutoffGraceMinutes,
+    }),
     distanceInputs,
     courseOrder,
     timeRangeSeconds,

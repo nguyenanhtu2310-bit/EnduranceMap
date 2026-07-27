@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { CrossingDistribution } from './components/CrossingDistribution';
-import { CutoffEntry } from './components/CutoffEntry';
 import { CutoffTable } from './components/CutoffTable';
 import { DistanceRunView } from './components/DistanceRunView';
 import { DEFAULT_AMENITY_RULES, type AmenitySet } from './lib/amenities';
@@ -32,6 +31,7 @@ import {
 } from './lib/pipeline';
 import {
   DEFAULT_ACTIVITY_THRESHOLDS,
+  DEFAULT_CUTOFF_GRACE_MINUTES,
   DEFAULT_HISTOGRAM_BIN_MINUTES,
   DEFAULT_SETUP_BUFFER_MINUTES,
   DEFAULT_TEARDOWN_BUFFER_MINUTES,
@@ -46,6 +46,7 @@ interface LoadedKml {
 const DEFAULT_SETTINGS: Settings = {
   setupBufferMinutes: DEFAULT_SETUP_BUFFER_MINUTES,
   teardownBufferMinutes: DEFAULT_TEARDOWN_BUFFER_MINUTES,
+  cutoffGraceMinutes: DEFAULT_CUTOFF_GRACE_MINUTES,
   binMinutes: DEFAULT_HISTOGRAM_BIN_MINUTES,
   mediumRunnersPerHour: DEFAULT_ACTIVITY_THRESHOLDS.mediumRunnersPerHour,
   highRunnersPerHour: DEFAULT_ACTIVITY_THRESHOLDS.highRunnersPerHour,
@@ -126,11 +127,11 @@ export default function App() {
   const [results, setResults] = useState<{ fileName: string; profiles: ContestProfile[] } | null>(null);
   const [contestMapping, setContestMapping] = useState<Record<string, string>>({});
   const [courses, setCourses] = useState<Course[]>([]);
-  const [manualCutoffs, setManualCutoffs] = useState<Record<string, Record<string, string>>>({});
   const [stationOrder, setStationOrder] = useState<string[]>([]);
   const [amenityOverrides, setAmenityOverrides] = useState<Record<string, Partial<AmenitySet>>>({});
   const [raceName, setRaceName] = useState('');
   const [removedStations, setRemovedStations] = useState<string[]>([]);
+  const [removedPasses, setRemovedPasses] = useState<string[]>([]);
   const [reportSections, setReportSections] = useState<ReportSections>(ALL_REPORT_SECTIONS);
 
   function loadKml(text: string, fileName: string) {
@@ -233,9 +234,10 @@ export default function App() {
     applyProfilesToRows(parsed.profiles, mapping);
   }
 
-  function calculate(removedOverride?: string[]) {
+  function calculate(overrides?: { stations?: string[]; passes?: string[] }) {
     if (!kml) return;
-    const excludeStations = removedOverride ?? removedStations;
+    const excludeStations = overrides?.stations ?? removedStations;
+    const excludePasses = overrides?.passes ?? removedPasses;
     setError(null);
     try {
       const samplesByCourse = new Map<string, ContestProfile['samples']>();
@@ -258,10 +260,11 @@ export default function App() {
       const computed = runPipeline(kml.text, inputs, {
           stationFolders: selectedFolders,
           excludeStations,
-          manualCutoffs,
+          excludePasses,
           renumberStationsAs: renumber ? renumberPrefix.trim() || 'Station' : undefined,
           setupBufferMinutes: settings.setupBufferMinutes,
           teardownBufferMinutes: settings.teardownBufferMinutes,
+          cutoffGraceMinutes: settings.cutoffGraceMinutes,
           binMinutes: settings.binMinutes,
           activityThresholds: {
             mediumRunnersPerHour: settings.mediumRunnersPerHour,
@@ -476,7 +479,7 @@ export default function App() {
                     onClick={() => {
                       const next = removedStations.filter((n) => n !== name);
                       setRemovedStations(next);
-                      calculate(next);
+                      calculate({ stations: next });
                     }}
                   >
                     {name} ↩
@@ -496,22 +499,51 @@ export default function App() {
               onRemove={(mapName) => {
                 const next = [...removedStations, mapName];
                 setRemovedStations(next);
-                calculate(next);
+                calculate({ stations: next });
               }}
             />
           </section>
 
           <section className="card">
-            <h2>What each distance runs through</h2>
+            <h2>Course amenities</h2>
             <p className="hint">
-              The points a runner meets in order, with the gap from the previous one — the view for spacing
-              water and aid.
+              The points a runner meets in order, with the gap from the previous one and what each one stocks
+              — the view for spacing water and aid.
             </p>
+            {removedPasses.length > 0 && (
+              <div className="actions" style={{ marginBottom: '0.85rem' }}>
+                <span className="hint" style={{ margin: 0 }}>
+                  {removedPasses.length} pass{removedPasses.length === 1 ? '' : 'es'} removed:
+                </span>
+                {removedPasses.map((key) => {
+                  const [station, courseName] = key.split('|');
+                  return (
+                    <button
+                      key={key}
+                      className="secondary"
+                      title="Put this pass back"
+                      onClick={() => {
+                        const next = removedPasses.filter((k) => k !== key);
+                        setRemovedPasses(next);
+                        calculate({ passes: next });
+                      }}
+                    >
+                      {station} · {courseName} ↩
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <DistanceRunView
               result={result}
               rules={DEFAULT_AMENITY_RULES}
               overrides={amenityOverrides}
               onOverridesChange={setAmenityOverrides}
+              onRemovePass={(key) => {
+                const next = [...removedPasses, key];
+                setRemovedPasses(next);
+                calculate({ passes: next });
+              }}
             />
           </section>
 
@@ -536,23 +568,9 @@ export default function App() {
 
           <section className="card">
             <h2>Cut-off times</h2>
-            <CutoffTable result={result} />
+            <CutoffTable result={result} graceMinutes={settings.cutoffGraceMinutes} />
           </section>
 
-          <section className="card">
-            <span className="kicker">From the organiser</span>
-            <h2>Enter official cut-offs</h2>
-            <p className="hint">
-              Type the times the organiser has set. Anything entered here replaces what the map's placemark
-              names say, then re-run the calculation.
-            </p>
-            <CutoffEntry
-              stations={result.stations}
-              courses={courses}
-              value={manualCutoffs}
-              onChange={setManualCutoffs}
-            />
-          </section>
 
           {result.skipped.length > 0 && (
             <section className="card">

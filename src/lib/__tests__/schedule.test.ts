@@ -173,12 +173,23 @@ describe('buildCutoffTable', () => {
 
     const rows = buildCutoffTable(stations);
     expect(rows).toHaveLength(2);
-    expect(rows.find((r) => r.stationName === 'Turnaround')?.exceeded).toBe(true);
-    expect(rows.find((r) => r.stationName === 'Finish')?.exceeded).toBe(false);
+    // The map's 13:00 is tighter than a proposal built on a 13:30 tail.
+    expect(rows.find((r) => r.stationName === 'Turnaround')?.mapIsTighter).toBe(true);
+    expect(rows.find((r) => r.stationName === 'Finish')?.mapIsTighter).toBe(false);
   });
 
-  it('skips crossings with no official cutoff', () => {
+  it('proposes a cut-off for every crossing, not only those the map named', () => {
     const stations = [buildStationSchedule('No Cutoff', [crossing('10km', 5, '07:00', '09:00')])];
-    expect(buildCutoffTable(stations)).toEqual([]);
+    const rows = buildCutoffTable(stations);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].mapClockTime).toBeUndefined();
+    // 09:00 tail + 15 min grace, already on a quarter hour.
+    expect(rows[0].suggestedClockTime).toBe('09:15:00');
+  });
+
+  it('rounds a proposal up to the next quarter hour rather than to nearest', () => {
+    const stations = [buildStationSchedule('Odd', [crossing('10km', 5, '07:00', '09:01')])];
+    // 09:01 + 15 = 09:16, which rounds up to 09:30 — never back to 09:15.
+    expect(buildCutoffTable(stations)[0].suggestedClockTime).toBe('09:30:00');
   });
 });

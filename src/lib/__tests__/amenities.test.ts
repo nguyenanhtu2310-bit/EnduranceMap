@@ -90,16 +90,47 @@ describe('report sections', () => {
 
     const scheduleOnly = buildReportHtml(result, {
       ...base,
-      sections: { schedule: true, perDistance: false, cutoffs: false },
+      sections: { schedule: true, perDistance: false, splits: false, distribution: false, cutoffs: false },
     });
     expect(scheduleOnly).toContain('Station operating schedule');
     expect(scheduleOnly).not.toContain('Cut-off times');
 
     const cutoffsOnly = buildReportHtml(result, {
       ...base,
-      sections: { schedule: false, perDistance: false, cutoffs: true },
+      sections: { schedule: false, perDistance: false, splits: false, distribution: false, cutoffs: true },
     });
     expect(cutoffsOnly).not.toContain('Station operating schedule');
+  });
+
+  it('embeds the Sportstats mark so the report stays self-contained offline', async () => {
+    const { buildReportHtml } = await import('../report');
+    const { runPipeline } = await import('../pipeline');
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+
+    const kml = readFileSync(resolve(process.cwd(), 'src/test/fixtures/sample.kml'), 'utf-8');
+    const result = runPipeline(kml, [
+      {
+        courseName: '10km',
+        startTimeClock: '05:00',
+        runnerCount: 100,
+        fastestMinPerKm: 4,
+        typicalMinPerKm: 6,
+        slowestMinPerKm: 9,
+      },
+    ]);
+
+    const html = buildReportHtml(result, {
+      raceName: 'Test',
+      rules: DEFAULT_AMENITY_RULES,
+      overrides: {},
+    });
+
+    expect(html).toContain('Powered by');
+    expect(html).toContain('data:image/png;base64,');
+    // Nothing may be fetched at open time — no scripts, no remote hosts.
+    expect(html).not.toMatch(/<script/i);
+    expect(html.replace(/data:image\/png;base64,[A-Za-z0-9+/=]+/g, '')).not.toMatch(/https?:\/\//);
   });
 
   it('escapes race names so a stray quote cannot break the markup', async () => {

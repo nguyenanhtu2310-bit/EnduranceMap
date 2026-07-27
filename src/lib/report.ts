@@ -1,21 +1,32 @@
 import type { PipelineResult, PipelineStation } from './pipeline';
 import { parseClockTimeToSeconds, secondsToClockTime } from './time';
 import { AMENITIES, resolveAmenities, totalAmenities, type AmenityRules, type AmenitySet } from './amenities';
+import { SPORTSTATS_LOGO_DATA_URI } from '../assets/sportstatsLogo';
 
 /** Which parts of the plan to print. An organiser rarely needs all of it at once. */
 export interface ReportSections {
   schedule: boolean;
   perDistance: boolean;
+  splits: boolean;
+  distribution: boolean;
   cutoffs: boolean;
 }
 
 export const REPORT_SECTIONS: { key: keyof ReportSections; label: string; hint: string }[] = [
   { key: 'schedule', label: 'Station operating schedule', hint: 'Open and close times per position' },
-  { key: 'perDistance', label: 'What each distance runs through', hint: 'Stops, gaps and amenities per race' },
-  { key: 'cutoffs', label: 'Cut-off times', hint: 'Official cut-offs against modelled arrivals' },
+  { key: 'perDistance', label: 'Course amenities', hint: 'Stops, gaps and amenities per race' },
+  { key: 'splits', label: 'Split calculation', hint: 'Every point by distance, with km on each route' },
+  { key: 'distribution', label: 'Crossing time distribution', hint: 'Peak window and load per station' },
+  { key: 'cutoffs', label: 'Cut-off times', hint: 'Proposed cut-offs against modelled arrivals' },
 ];
 
-export const ALL_REPORT_SECTIONS: ReportSections = { schedule: true, perDistance: true, cutoffs: true };
+export const ALL_REPORT_SECTIONS: ReportSections = {
+  schedule: true,
+  perDistance: true,
+  splits: true,
+  distribution: true,
+  cutoffs: true,
+};
 
 export interface ReportOptions {
   raceName: string;
@@ -168,12 +179,65 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         <td>${esc(row.stationName)}</td>
         <td>${esc(row.courseName)}</td>
         <td class="num">${row.kmFromStart.toFixed(1)}</td>
-        <td class="num">${hm(row.cutoffClockTime)}</td>
         <td class="num">${row.modeledLastArrivalClockTime.slice(0, 5)}</td>
-        <td class="${row.exceeded ? 'risk' : ''}">${row.exceeded ? 'Over cut-off' : 'Clears'}</td>
+        <td class="num"><strong>${hm(row.suggestedClockTime)}</strong></td>
+        <td class="num${row.mapIsTighter ? ' risk' : ''}">${row.mapClockTime ? hm(row.mapClockTime) : '–'}</td>
       </tr>`
     )
     .join('');
+
+  const splitTable = !sections.splits
+    ? ''
+    : (() => {
+        const head = courses.map((c) => `<th class="num">${esc(c.name)}</th>`).join('');
+        const body = result.stations
+          .map((station) => {
+            const cells = courses
+              .map((course) => {
+                const passes = station.crossings
+                  .filter((c) => c.courseName === course.name)
+                  .map((c) => `${c.kmFromStart.toFixed(1)}k`);
+                return `<td class="num">${passes.length ? passes.join(' / ') : '–'}</td>`;
+              })
+              .join('');
+            return `<tr><td>${esc(station.schedule.name)}</td><td class="num">${hm(
+              station.schedule.openClockTime
+            )}–${hm(station.schedule.closeClockTime)}</td>${cells}</tr>`;
+          })
+          .join('');
+        return `<h2>Split calculation</h2>
+        <p class="note">Kilometres are measured along each distance's own route, so one point reads differently per race.</p>
+        <table><thead><tr><th>Timing point</th><th class="num">Operating</th>${head}</tr></thead>
+        <tbody>${body}</tbody></table>`;
+      })();
+
+  const distributionTable = !sections.distribution
+    ? ''
+    : (() => {
+        const body = result.stations
+          .map((station) => {
+            const peak = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
+            const window = peak
+              ? `${secondsToClockTime(peak.binStartSeconds).slice(0, 5)}–${secondsToClockTime(
+                  peak.binEndSeconds
+                ).slice(0, 5)}`
+              : '–';
+            return `<tr>
+              <td>${esc(station.schedule.name)}</td>
+              <td class="num">${window}</td>
+              <td class="num">${peak ? peak.total.toLocaleString() : '–'}</td>
+              <td class="num">${Math.round(station.schedule.peakRunnersPerHour).toLocaleString()}</td>
+              <td><span class="tag ${station.schedule.activityLevel}">${station.schedule.activityLevel}</span></td>
+            </tr>`;
+          })
+          .join('');
+        return `<h2>Crossing time distribution</h2>
+        <p class="note">The busiest ${result.binMinutes}-minute window at each position, and the rate it implies.</p>
+        <table><thead><tr>
+          <th>Station</th><th class="num">Peak window</th><th class="num">Runners in window</th>
+          <th class="num">Rate /hr</th><th>Activity</th>
+        </tr></thead><tbody>${body}</tbody></table>`;
+      })();
 
   const sources = [
     options.sourceFileName ? `Course map: ${esc(options.sourceFileName)}` : '',
@@ -187,34 +251,96 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(raceName)} — CP operations</title>
 <style>
-  :root { color-scheme: light; }
-  body { font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: #16221f; background: #fff;
-         margin: 0; padding: 32px; }
-  h1 { font-size: 22px; margin: 0 0 4px; font-weight: 600; }
-  h2 { font-size: 15px; margin: 28px 0 6px; font-weight: 600; }
-  .meta, .note { color: #5c6b68; font-size: 12px; margin: 0 0 4px; }
-  table { width: 100%; border-collapse: collapse; margin: 8px 0 20px; font-size: 12px; }
-  th, td { border: 1px solid #d9e0de; padding: 5px 7px; text-align: left; vertical-align: middle; }
-  th { background: #f2f6f5; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #5c6b68;
-       font-weight: 600; }
+  /* EnduranceMap brand — dark ground on screen, per design-tokens.json. A report is
+     also a printed document, so the print rules below drop to ink-on-paper rather than
+     flooding a page with the brand ground. */
+  :root {
+    --bg: #16221f;
+    --surface: #223532;
+    --text: #f3f8ff;
+    --accent: #07bc02;
+    --divider: rgba(243, 248, 255, 0.16);
+    --muted: rgba(243, 248, 255, 0.58);
+    --faint: rgba(243, 248, 255, 0.40);
+    --danger: #ff8a80;
+    --warn: #f0b46a;
+    --ok: #5ed350;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 400 13px/1.55 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--text); background: var(--bg);
+    margin: 0; padding: 40px 32px; -webkit-font-smoothing: antialiased;
+  }
+  .masthead { display: flex; align-items: center; gap: 8px; margin-bottom: 22px; }
+  .masthead svg { color: var(--accent); flex: none; }
+  .wordmark { font-weight: 500; font-size: 15px; letter-spacing: -0.01em; }
+  h1 { font-size: 26px; margin: 0 0 6px; font-weight: 500; letter-spacing: -0.02em; }
+  h2 {
+    font-size: 15px; margin: 30px 0 6px; font-weight: 500; letter-spacing: -0.01em;
+    padding-top: 14px; border-top: 1px solid var(--divider);
+  }
+  .meta, .note { color: var(--muted); font-size: 12px; margin: 0 0 4px; }
+  .kicker {
+    display: block; font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 6px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 10px 0 22px; font-size: 12px;
+    background: var(--surface); border-radius: 8px; overflow: hidden;
+  }
+  th, td { border-bottom: 1px solid var(--divider); padding: 6px 8px; text-align: left; vertical-align: middle; }
+  th {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--faint);
+    font-weight: 500; white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   td.mid, th.mid { text-align: center; }
-  .sub { color: #5c6b68; font-size: 11px; }
-  .risk { color: #b42318; font-weight: 600; }
-  .total td { background: #f2f6f5; }
-  .tag { font-size: 11px; font-weight: 600; }
-  .tag.High { color: #b42318; } .tag.Medium { color: #b54708; } .tag.Low { color: #067647; }
-  footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #d9e0de; color: #5c6b68; font-size: 11px; }
+  .sub { color: var(--faint); font-size: 11px; }
+  .risk { color: var(--danger); font-weight: 500; }
+  .total td { background: rgba(243, 248, 255, 0.05); font-weight: 500; }
+  .tag { font-size: 11px; font-weight: 500; }
+  .tag.High { color: var(--danger); } .tag.Medium { color: var(--warn); } .tag.Low { color: var(--ok); }
+  footer {
+    margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--divider);
+    color: var(--faint); font-size: 11px;
+  }
+  .powered {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-bottom: 12px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  }
+  .powered .chip {
+    background: #eef4f3; border-radius: 4px; padding: 4px 10px; display: inline-flex; align-items: center;
+  }
+  .powered img { height: 16px; display: block; }
+  .disclaimer { text-align: center; }
+
   @media print {
+    :root {
+      --bg: #ffffff; --surface: #ffffff; --text: #16221f;
+      --divider: #d9e0de; --muted: #5c6b68; --faint: #5c6b68;
+      --danger: #b42318; --warn: #b54708; --ok: #067647;
+      color-scheme: light;
+    }
     body { padding: 0; }
+    table { border: 1px solid var(--divider); }
+    th, td { border: 1px solid var(--divider); }
+    .total td { background: #f2f6f5; }
     h2 { page-break-after: avoid; }
-    table { page-break-inside: auto; }
     tr { page-break-inside: avoid; }
+    footer { page-break-inside: avoid; }
   }
 </style></head>
 <body>
+  <div class="masthead">
+    <svg width="18" height="18" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128 16a88.1 88.1 0 0 0-88 88c0 75.3 80 132.17 83.41 134.55a8 8 0 0 0 9.18 0C136 236.17 216 179.3 216 104a88.1 88.1 0 0 0-88-88Zm0 56a32 32 0 1 1-32 32 32 32 0 0 1 32-32Z"/></svg>
+    <span class="wordmark">EnduranceMap</span>
+  </div>
+  <span class="kicker">Checkpoint operations plan</span>
   <h1>${esc(raceName)}</h1>
-  <p class="meta">Checkpoint operations plan &middot; generated ${esc(generated)}</p>
+  <p class="meta">Generated ${esc(generated)}</p>
   <p class="meta">${sources}</p>
 
   ${
@@ -232,13 +358,17 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
 
   ${perDistance}
 
+  ${splitTable}
+
+  ${distributionTable}
+
   ${
     cutoffRows
       ? `<h2>Cut-off times</h2>
   <table>
     <thead><tr>
-      <th>Station</th><th>Distance</th><th class="num">Km</th><th class="num">Cut-off</th>
-      <th class="num">Modeled last arrival</th><th>Status</th>
+      <th>Station</th><th>Distance</th><th class="num">Km</th>
+      <th class="num">Slowest arrival</th><th class="num">Proposed cut-off</th><th class="num">On map</th>
     </tr></thead>
     <tbody>${cutoffRows}</tbody>
   </table>`
@@ -246,8 +376,13 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   }
 
   <footer>
-    Open and close times are modelled from the pace data named above; they are a plan, not a measurement.
-    Generated by EnduranceMap &middot; Powered by Sportstats.
+    <div class="powered">
+      <span>Powered by</span>
+      <span class="chip"><img src="${SPORTSTATS_LOGO_DATA_URI}" alt="Sportstats"></span>
+    </div>
+    <p class="disclaimer">
+      Open and close times are modelled from the pace data named above; they are a plan, not a measurement.
+    </p>
   </footer>
 </body></html>`;
 }

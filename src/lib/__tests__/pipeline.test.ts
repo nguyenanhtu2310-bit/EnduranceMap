@@ -2,7 +2,13 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseKml } from '../kml';
-import { applyStationOrder, listPlacemarkFolders, runPipeline, type DistanceInput } from '../pipeline';
+import {
+  applyStationOrder,
+  listPlacemarkFolders,
+  passKey,
+  runPipeline,
+  type DistanceInput,
+} from '../pipeline';
 
 function loadFixture(name: string): string {
   return readFileSync(resolve(process.cwd(), 'src/test/fixtures', name), 'utf-8');
@@ -128,12 +134,18 @@ describe('runPipeline', () => {
     expect(half.every((c) => c.officialCutoffClock === undefined)).toBe(true);
   });
 
-  it('flags a station whose modeled arrivals run past its cut-off', () => {
-    const rows = result.cutoffTable.filter((r) => r.exceeded);
-    for (const row of rows) {
-      expect(row.modeledLastArrivalClockTime > row.cutoffClockTime.padStart(8, '0')).toBeTruthy();
-    }
+  it('proposes a cut-off behind every modelled tail', () => {
     expect(result.cutoffTable.length).toBeGreaterThan(0);
+    for (const row of result.cutoffTable) {
+      expect(row.suggestedClockTime > row.modeledLastArrivalClockTime).toBe(true);
+    }
+  });
+
+  it('marks a map cut-off that falls tighter than the proposal', () => {
+    const flagged = result.cutoffTable.filter((r) => r.mapIsTighter);
+    for (const row of flagged) {
+      expect(row.mapClockTime).toBeDefined();
+    }
   });
 
   describe('crossing distribution', () => {
@@ -319,5 +331,67 @@ describe('applyStationOrder', () => {
     const stations = [mk('A'), mk('B')];
     applyStationOrder(stations, ['B', 'A']);
     expect(stations.map((s) => s.mapName)).toEqual(['A', 'B']);
+  });
+});
+
+describe('removing a single course pass', () => {
+  const key = (station: string, course: string, pass: number) => passKey(station, course, pass);
+
+  it('drops only the named pass, keeping the station and its other passes', () => {
+    const before = runPipeline(kml, inputs);
+    const cot3 = before.stations.find((s) => s.mapName.includes('COT 3'))!;
+    const passes = cot3.crossings.filter((c) => c.courseName === 'Half Marathon');
+    expect(passes).toHaveLength(2);
+
+    const after = runPipeline(kml, inputs, {
+      excludePasses: [key(cot3.mapName, 'Half Marathon', 1)],
+    });
+    const stillThere = after.stations.find((s) => s.mapName === cot3.mapName)!;
+    const remaining = stillThere.crossings.filter((c) => c.courseName === 'Half Marathon');
+
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].passIndex).toBe(0);
+  });
+
+  it('leaves the other distances through that station untouched', () => {
+    const before = runPipeline(kml, inputs);
+    const cot1 = before.stations.find((s) => s.mapName.includes('COT 1'))!;
+    const tenKBefore = cot1.crossings.filter((c) => c.courseName === '10km').length;
+
+    const after = runPipeline(kml, inputs, {
+      excludePasses: [key(cot1.mapName, 'Half Marathon', 0)],
+    });
+    const cot1After = after.stations.find((s) => s.mapName === cot1.mapName)!;
+
+    expect(cot1After.crossings.filter((c) => c.courseName === '10km')).toHaveLength(tenKBefore);
+  });
+
+  it('removes a station entirely once its last pass is gone', () => {
+    const before = runPipeline(kml, inputs);
+    const target = before.stations.find((s) => s.crossings.length === 1);
+    if (!target) return;
+
+    const after = runPipeline(kml, inputs, {
+      excludePasses: [key(target.mapName, target.crossings[0].courseName, target.crossings[0].passIndex)],
+    });
+    expect(after.stations.some((s) => s.mapName === target.mapName)).toBe(false);
+  });
+});
+
+describe('excludeStations', () => {
+  it('drops the station and renumbers the rest without leaving a gap', () => {
+    const before = runPipeline(kml, inputs, { renumberStationsAs: 'Station' });
+    const victim = before.stations[1];
+
+    const after = runPipeline(kml, inputs, {
+      renumberStationsAs: 'Station',
+      excludeStations: [victim.mapName],
+    });
+
+    expect(after.stations).toHaveLength(before.stations.length - 1);
+    expect(after.stations.some((s) => s.mapName === victim.mapName)).toBe(false);
+    expect(after.stations.map((s) => s.schedule.name)).toEqual(
+      after.stations.map((_, i) => `Station ${i + 1}`)
+    );
   });
 });

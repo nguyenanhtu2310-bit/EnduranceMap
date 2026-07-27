@@ -58,6 +58,20 @@ export const DEFAULT_TEARDOWN_BUFFER_MINUTES = 30;
 /** Bin width (minutes) for crossing-time histograms. */
 export const DEFAULT_HISTOGRAM_BIN_MINUTES = 15;
 
+/**
+ * Margin added to the slowest modelled arrival when proposing a cut-off. A cut-off set
+ * exactly on the tail of the field would turn every modelling error into a runner pulled
+ * off the course, so the proposal sits behind it.
+ */
+export const DEFAULT_CUTOFF_GRACE_MINUTES = 15;
+
+/**
+ * Proposed cut-offs are rounded up to this many minutes. Crews and runners work from
+ * quarter hours, not 08:37, and rounding up never makes a cut-off tighter than the
+ * calculation intended.
+ */
+export const DEFAULT_CUTOFF_ROUNDING_MINUTES = 15;
+
 export interface ActivityThresholds {
   mediumRunnersPerHour: number;
   highRunnersPerHour: number;

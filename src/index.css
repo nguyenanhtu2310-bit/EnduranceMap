@@ -764,3 +764,7 @@ button.row-remove:hover {
   background: var(--color-danger-bg);
   color: var(--color-danger);
 }
+
+tr.end-zone td {
+  opacity: 0.5;
+}

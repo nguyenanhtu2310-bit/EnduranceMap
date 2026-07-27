@@ -2,6 +2,8 @@ import { parseClockTimeToSeconds, secondsToClockTime } from './time';
 import type { PercentileResult } from './percentiles';
 import {
   DEFAULT_ACTIVITY_THRESHOLDS,
+  DEFAULT_CUTOFF_GRACE_MINUTES,
+  DEFAULT_CUTOFF_ROUNDING_MINUTES,
   DEFAULT_HISTOGRAM_BIN_MINUTES,
   DEFAULT_SETUP_BUFFER_MINUTES,
   DEFAULT_TEARDOWN_BUFFER_MINUTES,
@@ -212,30 +214,70 @@ export interface CutoffTableRow {
   stationName: string;
   courseName: string;
   kmFromStart: number;
-  cutoffClockTime: string;
+  /** Cut-off proposed by the tool, from the modelled tail plus grace, rounded up. */
+  suggestedClockTime: string;
+  /** Cut-off written on the source map, where the placemark carried one. */
+  mapClockTime?: string;
   modeledLastArrivalClockTime: string;
-  exceeded: boolean;
+  /** True when the map's cut-off falls before the proposal — the map is tighter. */
+  mapIsTighter: boolean;
 }
 
-/** Flattens every distance/station pair that carries an official cutoff into a single table for display. */
-export function buildCutoffTable(stations: StationSchedule[]): CutoffTableRow[] {
+/**
+ * Proposes when a position should stop runners: the slowest modelled arrival plus a
+ * grace margin, rounded up to the next quarter hour. Rounding up matters — rounding to
+ * nearest could pull a cut-off earlier than the calculation, which is the one direction
+ * that costs a runner their race.
+ */
+export function suggestCutoffSeconds(
+  slowestArrivalSeconds: number,
+  graceMinutes = DEFAULT_CUTOFF_GRACE_MINUTES,
+  roundingMinutes = DEFAULT_CUTOFF_ROUNDING_MINUTES
+): number {
+  const withGrace = slowestArrivalSeconds + graceMinutes * 60;
+  if (roundingMinutes <= 0) return withGrace;
+  const step = roundingMinutes * 60;
+  return Math.ceil(withGrace / step) * step;
+}
+
+export interface CutoffTableOptions {
+  graceMinutes?: number;
+  roundingMinutes?: number;
+}
+
+/**
+ * Proposes a cut-off for every course pass, and reports any cut-off already written on
+ * the map beside it. The tool's job here is to support the decision, so it computes a
+ * time rather than waiting for one to be typed in; where the map already carries a
+ * cut-off, the two sit side by side so a tighter one is visible.
+ */
+export function buildCutoffTable(
+  stations: StationSchedule[],
+  options: CutoffTableOptions = {}
+): CutoffTableRow[] {
+  const graceMinutes = options.graceMinutes ?? DEFAULT_CUTOFF_GRACE_MINUTES;
+  const roundingMinutes = options.roundingMinutes ?? DEFAULT_CUTOFF_ROUNDING_MINUTES;
   const rows: CutoffTableRow[] = [];
 
   for (const station of stations) {
     for (const crossing of station.crossings) {
-      if (!crossing.officialCutoffClock) continue;
-
       const percentiles = crossing.arrivalPercentiles;
       const p99 = percentiles.find((p) => p.percentile === 99) ?? percentiles[percentiles.length - 1];
-      const cutoffSeconds = parseClockTimeToSeconds(crossing.officialCutoffClock);
+      if (!p99) continue;
+
+      const suggestedSeconds = suggestCutoffSeconds(p99.seconds, graceMinutes, roundingMinutes);
+      const mapSeconds = crossing.officialCutoffClock
+        ? parseClockTimeToSeconds(crossing.officialCutoffClock)
+        : null;
 
       rows.push({
         stationName: station.name,
         courseName: crossing.courseName,
         kmFromStart: crossing.kmFromStart,
-        cutoffClockTime: crossing.officialCutoffClock,
-        modeledLastArrivalClockTime: p99?.clockTime ?? 'n/a',
-        exceeded: !!p99 && cutoffSeconds !== null && p99.seconds > cutoffSeconds,
+        suggestedClockTime: secondsToClockTime(suggestedSeconds),
+        mapClockTime: crossing.officialCutoffClock,
+        modeledLastArrivalClockTime: p99.clockTime,
+        mapIsTighter: mapSeconds !== null && mapSeconds < suggestedSeconds,
       });
     }
   }

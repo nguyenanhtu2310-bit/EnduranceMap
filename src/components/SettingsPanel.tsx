@@ -1,6 +1,7 @@
 export interface Settings {
   setupBufferMinutes: number;
   teardownBufferMinutes: number;
+  cutoffGraceMinutes: number;
   binMinutes: number;
   mediumRunnersPerHour: number;
   highRunnersPerHour: number;
@@ -14,6 +15,11 @@ interface Props {
 const FIELDS: { key: keyof Settings; label: string; hint: string; step?: number }[] = [
   { key: 'setupBufferMinutes', label: 'Setup buffer (min)', hint: 'Opens this long before the first arrival' },
   { key: 'teardownBufferMinutes', label: 'Teardown buffer (min)', hint: 'Stays open this long after the last' },
+  {
+    key: 'cutoffGraceMinutes',
+    label: 'Cut-off grace (min)',
+    hint: 'Added to the slowest arrival before rounding up to the quarter hour',
+  },
   { key: 'binMinutes', label: 'Histogram bin (min)', hint: 'Width of each arrival bucket' },
   { key: 'mediumRunnersPerHour', label: 'Medium at (/hr)', hint: 'Peak load to tag Medium', step: 10 },
   { key: 'highRunnersPerHour', label: 'High at (/hr)', hint: 'Peak load to tag High', step: 10 },
