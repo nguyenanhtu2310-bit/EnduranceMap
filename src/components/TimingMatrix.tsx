@@ -87,7 +87,7 @@ export function TimingMatrix({ result, notes, onNoteChange }: Props) {
                     className="note-input"
                     type="text"
                     value={notes?.[station.mapName] ?? ''}
-                    placeholder="Note — staff / decoder no."
+                    placeholder="Note"
                     onChange={(e) => onNoteChange(station.mapName, e.target.value)}
                   />
                 ) : (

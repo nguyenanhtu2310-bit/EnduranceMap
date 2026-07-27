@@ -100,7 +100,7 @@ export function StationScheduleTable({ stations, showSourceNames = true, onReord
                     className="note-input"
                     type="text"
                     value={notes?.[station.mapName] ?? ''}
-                    placeholder="Note — staff / decoder no."
+                    placeholder="Note"
                     title="Shown under this station in every section and in the report"
                     onChange={(e) => onNoteChange(station.mapName, e.target.value)}
                   />

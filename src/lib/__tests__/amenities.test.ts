@@ -180,3 +180,70 @@ describe('migrateAmenityOverrides', () => {
     expect(migrateAmenityOverrides(undefined as never)).toEqual({});
   });
 });
+
+describe('cut-off highlighting in the report', () => {
+  async function build(theme: 'light' | 'dark') {
+    const { buildReportHtml } = await import('../report');
+    const { runPipeline } = await import('../pipeline');
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+
+    const kml = readFileSync(resolve(process.cwd(), 'src/test/fixtures/sample.kml'), 'utf-8');
+    const result = runPipeline(kml, [
+      {
+        courseName: '10km',
+        startTimeClock: '05:00',
+        runnerCount: 100,
+        fastestMinPerKm: 4,
+        typicalMinPerKm: 6,
+        slowestMinPerKm: 9,
+      },
+      {
+        courseName: 'Half Marathon',
+        startTimeClock: '04:30',
+        runnerCount: 100,
+        fastestMinPerKm: 4,
+        typicalMinPerKm: 6,
+        slowestMinPerKm: 9,
+      },
+    ]);
+
+    return {
+      result,
+      html: buildReportHtml(result, {
+        raceName: 'Test',
+        theme,
+        rules: DEFAULT_AMENITY_RULES,
+        overrides: {},
+      }),
+    };
+  }
+
+  it('marks the final cut-off in both themes', async () => {
+    for (const theme of ['light', 'dark'] as const) {
+      const { html } = await build(theme);
+      expect(html).toContain('final-row');
+      expect(html).toContain('cot-final');
+      expect(html).toContain('>final<');
+    }
+  });
+
+  it('marks exactly one row per station as final', async () => {
+    const { result, html } = await build('dark');
+    const stations = new Set(result.cutoffTable.map((r) => r.stationName));
+    const finals = (html.match(/class="final-row"/g) ?? []).length;
+    expect(finals).toBe(stations.size);
+  });
+
+  it('picks the latest proposal at a station served by several distances', async () => {
+    const { result } = await build('dark');
+    const shared = [...new Set(result.cutoffTable.map((r) => r.stationName))].find(
+      (name) => result.cutoffTable.filter((r) => r.stationName === name).length > 1
+    );
+    expect(shared).toBeDefined();
+
+    const rows = result.cutoffTable.filter((r) => r.stationName === shared);
+    const latest = rows.map((r) => r.suggestedClockTime).sort().at(-1);
+    expect(rows.some((r) => r.suggestedClockTime === latest)).toBe(true);
+  });
+});

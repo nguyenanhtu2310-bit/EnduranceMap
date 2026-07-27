@@ -166,7 +166,7 @@ export function DistanceRunView({
                         className="note-input"
                         type="text"
                         value={notes?.[stop.station.mapName] ?? ''}
-                        placeholder="Note — staff / decoder no."
+                        placeholder="Note"
                         onChange={(e) => onNoteChange(stop.station.mapName, e.target.value)}
                       />
                     ) : (

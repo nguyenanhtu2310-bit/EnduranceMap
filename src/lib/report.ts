@@ -246,17 +246,32 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
     })
     .join('');
 
+  // The time a CP actually works to is the LATEST proposal across the distances through
+  // it — usually the slowest arrival of the longest race. Without marking it, the sheet
+  // is a wall of equal-looking times and the one that governs the position is lost.
+  const finalCutoffByStation = new Map<string, number>();
+  for (const row of result.cutoffTable) {
+    const seconds = parseClockTimeToSeconds(row.suggestedClockTime) ?? -1;
+    if (seconds > (finalCutoffByStation.get(row.stationName) ?? -1)) {
+      finalCutoffByStation.set(row.stationName, seconds);
+    }
+  }
+
   const cutoffRows = !sections.cutoffs ? '' : result.cutoffTable
-    .map(
-      (row) => `<tr>
+    .map((row) => {
+      const isFinal =
+        parseClockTimeToSeconds(row.suggestedClockTime) === finalCutoffByStation.get(row.stationName);
+      return `<tr${isFinal ? ' class="final-row"' : ''}>
         <td>${esc(row.stationName)}</td>
         <td>${esc(row.courseName)}</td>
         <td class="num">${row.kmFromStart.toFixed(1)}</td>
         <td class="num">${row.modeledLastArrivalClockTime.slice(0, 5)}</td>
-        <td class="num"><strong>${hm(row.suggestedClockTime)}</strong></td>
+        <td class="num ${isFinal ? 'cot-final' : 'cot-other'}"><strong>${hm(row.suggestedClockTime)}</strong>${
+          isFinal ? '<span class="final-tag">final</span>' : ''
+        }</td>
         <td class="num${row.mapIsTighter ? ' risk' : ''}">${row.mapClockTime ? hm(row.mapClockTime) : '–'}</td>
-      </tr>`
-    )
+      </tr>`;
+    })
     .join('');
 
   const splitTable = !sections.splits
@@ -386,6 +401,15 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   .sub { color: var(--muted); font-size: 11px; }
   .sub.note { color: var(--accent); }
   .risk { color: var(--danger); font-weight: 600; }
+  .cot-final { color: var(--accent); }
+  .cot-other { color: var(--muted); }
+  .final-row td { background: ${dark ? 'rgba(7, 188, 2, 0.07)' : '#f2faf5'}; }
+  .final-tag {
+    display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 4px;
+    background: ${dark ? 'rgba(7, 188, 2, 0.16)' : '#dff2e5'};
+    color: var(--accent); font-size: 9px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em; vertical-align: 1px;
+  }
   .total td { background: var(--surface); font-weight: 600; }
   .tag { font-size: 11px; font-weight: 600; }
   .tag.High { color: var(--danger); } .tag.Medium { color: var(--warn); } .tag.Low { color: var(--ok); }
@@ -456,6 +480,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   ${
     cutoffRows
       ? `<h2>Cut-off times</h2>
+  <p class="note">The highlighted row is the final cut-off for that station — the latest across every distance through it.</p>
   <table>
     <thead><tr>
       <th>Station</th><th>Distance</th><th class="num">Km</th>
