@@ -244,6 +244,27 @@ input:focus-visible {
   outline: none;
 }
 
+select {
+  min-height: 34px;
+  padding: 5px 9px;
+  font: inherit;
+  font-size: 0.86rem;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+select:hover {
+  border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
+select:focus-visible {
+  border-color: var(--color-accent);
+  outline: none;
+}
+
 label.field {
   display: block;
   font-size: 12px;

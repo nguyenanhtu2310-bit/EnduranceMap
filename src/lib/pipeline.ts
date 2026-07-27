@@ -11,10 +11,13 @@ import {
 } from './snap';
 import {
   arrivalPercentilesFromPaceBand,
+  arrivalPercentilesFromSamples,
+  projectSampleArrivals,
   samplePaceModelArrivals,
   type PaceBand,
   type StartField,
 } from './paceModel';
+import type { RunnerSample } from './results';
 import {
   buildCutoffTable,
   buildStackedHistogram,
@@ -31,9 +34,15 @@ import {
   DEFAULT_CUTOFF_PASS_MATCH_TOLERANCE_KM,
 } from './config';
 
-/** Manual pace-band and field-size input for one race distance. */
+/** Pace and field-size input for one race distance. */
 export interface DistanceInput extends PaceBand, StartField {
   courseName: string;
+  /**
+   * Real finishers from a previous race. When present these drive the arrival times and
+   * the pace band is only shown for reference; the band is a three-point approximation
+   * and the samples are the actual distribution.
+   */
+  samples?: RunnerSample[];
 }
 
 /** Folders whose point placemarks represent positions that have to be staffed. */
@@ -266,11 +275,17 @@ export function runPipeline(
 
       const officialCutoffClock = findCutoffForCrossing(group, snap, courses, toleranceKm, cutoffPassToleranceKm);
 
+      const usesRealField = !!input.samples && input.samples.length > 0;
+
       crossings.push({
         courseName: snap.courseName,
         kmFromStart: snap.kmFromStart,
-        arrivalPercentiles: arrivalPercentilesFromPaceBand(input, input, snap.kmFromStart),
-        runnerArrivalsSeconds: samplePaceModelArrivals(input, input, snap.kmFromStart, sampleSize),
+        arrivalPercentiles: usesRealField
+          ? arrivalPercentilesFromSamples(input.samples!, input, snap.kmFromStart)
+          : arrivalPercentilesFromPaceBand(input, input, snap.kmFromStart),
+        runnerArrivalsSeconds: usesRealField
+          ? projectSampleArrivals(input.samples!, input, snap.kmFromStart)
+          : samplePaceModelArrivals(input, input, snap.kmFromStart, sampleSize),
         officialCutoffClock,
       });
 

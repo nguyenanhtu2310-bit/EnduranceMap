@@ -1,6 +1,7 @@
 import { parseClockTimeToSeconds, secondsToClockTime } from './time';
 import { DEFAULT_PERCENTILES } from './config';
-import type { PercentileResult } from './percentiles';
+import { computeArrivalPercentiles, type PercentileResult } from './percentiles';
+import type { RunnerSample } from './results';
 
 export interface PaceBand {
   fastestMinPerKm: number;
@@ -106,4 +107,55 @@ export function samplePaceModelArrivals(
     for (let i = 0; i < repeats; i++) samples.push(point.seconds);
   }
   return samples;
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Empirical model — used when a past race's results have been loaded.
+ *
+ * A real field is not a smooth interpolation between a fast, a typical and a slow
+ * runner: measured against a 9,600-entrant road race, the three-anchor model above put
+ * the 25th percentile of the 10K a full minute per km too fast. When real results are
+ * available each finisher is replayed instead, carrying their own start offset and
+ * their own pace, which also preserves the fact that quicker runners start nearer the
+ * front.
+ * ---------------------------------------------------------------------------
+ */
+
+/**
+ * Projects the loaded field onto a planned race: every sampled runner starts at the new
+ * gun time plus the offset they had last time, then runs their own pace to `kmFromStart`.
+ * Scaled to `runnerCount` by walking the distribution evenly, so a bigger or smaller
+ * entry list keeps the same shape.
+ */
+export function projectSampleArrivals(
+  samples: RunnerSample[],
+  start: StartField,
+  kmFromStart: number
+): number[] {
+  const startSeconds = parseClockTimeToSeconds(start.startTimeClock);
+  if (startSeconds === null) throw new Error(`Invalid start time: "${start.startTimeClock}"`);
+  if (samples.length === 0 || start.runnerCount <= 0) return [];
+
+  const count = Math.round(start.runnerCount);
+  const arrivals: number[] = new Array(count);
+
+  for (let i = 0; i < count; i++) {
+    // Even walk across the reference field rather than random draws, so the same inputs
+    // always produce the same schedule.
+    const source = samples[Math.floor((i * samples.length) / count)];
+    arrivals[i] = startSeconds + source.startOffsetSeconds + source.paceMinPerKm * kmFromStart * 60;
+  }
+
+  return arrivals;
+}
+
+/** Arrival-time percentiles at a km mark, taken from the projected real field. */
+export function arrivalPercentilesFromSamples(
+  samples: RunnerSample[],
+  start: StartField,
+  kmFromStart: number,
+  percentiles: number[] = DEFAULT_PERCENTILES
+): PercentileResult[] {
+  return computeArrivalPercentiles(projectSampleArrivals(samples, start, kmFromStart), percentiles);
 }

@@ -9,6 +9,8 @@ export interface DistanceFormRow extends Omit<DistanceInput, 'runnerCount'> {
 interface Props {
   rows: DistanceFormRow[];
   onChange: (rows: DistanceFormRow[]) => void;
+  /** Courses whose pace comes from a results file, so the band here is reference only. */
+  drivenByResults?: Set<string>;
 }
 
 const NUMERIC_FIELDS = [
@@ -17,7 +19,7 @@ const NUMERIC_FIELDS = [
   { key: 'slowestMinPerKm', label: 'Slowest', title: 'Pace of the final finishers, in minutes per km' },
 ] as const;
 
-export function PaceBandForm({ rows, onChange }: Props) {
+export function PaceBandForm({ rows, onChange, drivenByResults }: Props) {
   function update(index: number, patch: Partial<DistanceFormRow>) {
     onChange(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   }
@@ -46,6 +48,9 @@ export function PaceBandForm({ rows, onChange }: Props) {
             <tr key={row.courseName}>
               <td>
                 <strong>{row.courseName}</strong>
+                {drivenByResults?.has(row.courseName) && (
+                  <span className="colocated">from results file</span>
+                )}
               </td>
               <td className="num muted">{row.measuredKm.toFixed(2)} km</td>
               <td style={{ minWidth: 110 }}>

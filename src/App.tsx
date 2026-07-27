@@ -5,8 +5,11 @@ import { FolderPicker } from './components/FolderPicker';
 import { KmlDropzone } from './components/KmlDropzone';
 import { PaceBandForm, type DistanceFormRow } from './components/PaceBandForm';
 import { SettingsPanel, type Settings } from './components/SettingsPanel';
+import { ResultsPanel } from './components/ResultsPanel';
 import { StationScheduleTable } from './components/StationScheduleTable';
 import { TimingMatrix } from './components/TimingMatrix';
+import { parseResultsCsv, summarizeProfile, type ContestProfile } from './lib/results';
+import type { Course } from './lib/snap';
 import { parseKml } from './lib/kml';
 import { buildCourses } from './lib/snap';
 import {
@@ -67,6 +70,38 @@ function defaultSelection(folders: FolderSummary[]): string[] {
   return folders.map((f) => f.folder);
 }
 
+/**
+ * Pairs each contest in a results file with the course it should drive, by matching the
+ * contest's own distance against each course's measured length. A "Half Marathon" from
+ * last year's export lands on this year's 21 km route without the operator wiring it up
+ * by hand, and a course with no comparable contest is simply left unmapped.
+ */
+function autoMapContests(profiles: ContestProfile[], courses: Course[]): Record<string, string> {
+  const mapping: Record<string, string> = {};
+  const taken = new Set<string>();
+
+  for (const profile of profiles) {
+    if (profile.distanceKm <= 0) continue;
+    let best: Course | undefined;
+    let bestDelta = Infinity;
+    for (const course of courses) {
+      if (taken.has(course.name)) continue;
+      const delta = Math.abs(course.totalKm - profile.distanceKm);
+      if (delta < bestDelta) {
+        best = course;
+        bestDelta = delta;
+      }
+    }
+    // Allow for GPS-traced routes running long, but never pair a 10K with a marathon.
+    if (best && bestDelta <= Math.max(1, profile.distanceKm * 0.1)) {
+      mapping[profile.contest] = best.name;
+      taken.add(best.name);
+    }
+  }
+
+  return mapping;
+}
+
 export default function App() {
   const [kml, setKml] = useState<LoadedKml | null>(null);
   const [rows, setRows] = useState<DistanceFormRow[]>([]);
@@ -77,6 +112,9 @@ export default function App() {
   const [renumberPrefix, setRenumberPrefix] = useState('Station');
   const [result, setResult] = useState<PipelineResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [results, setResults] = useState<{ fileName: string; profiles: ContestProfile[] } | null>(null);
+  const [contestMapping, setContestMapping] = useState<Record<string, string>>({});
+  const [courses, setCourses] = useState<Course[]>([]);
 
   function loadKml(text: string, fileName: string) {
     setError(null);
@@ -97,8 +135,10 @@ export default function App() {
       const detected = listPlacemarkFolders(parsed.placemarks);
       setKml({ text, fileName });
       setRows(courses.map((c) => seedRow(c.name, c.totalKm)));
+      setCourses(courses);
       setFolders(detected);
       setSelectedFolders(defaultSelection(detected));
+      if (results) setContestMapping(autoMapContests(results.profiles, courses));
     } catch (e) {
       setKml(null);
       setRows([]);
@@ -106,6 +146,16 @@ export default function App() {
       setError(e instanceof Error ? e.message : 'Could not parse that KML.');
     }
   }
+
+  /** Courses whose arrivals come from the results file rather than the pace band. */
+  const mappedCourses = useMemo(() => {
+    const names = new Set<string>();
+    for (const profile of results?.profiles ?? []) {
+      const courseName = contestMapping[profile.contest];
+      if (courseName && profile.samples.length > 0) names.add(courseName);
+    }
+    return names;
+  }, [results, contestMapping]);
 
   const invalidRows = useMemo(
     () =>
@@ -119,10 +169,50 @@ export default function App() {
     [rows]
   );
 
+  function loadResults(text: string, fileName: string) {
+    setError(null);
+    setResult(null);
+    const parsed = parseResultsCsv(text);
+    if (parsed.profiles.length === 0) {
+      setError(parsed.warnings[0] ?? 'No contests found in that results file.');
+      return;
+    }
+    const mapping = autoMapContests(parsed.profiles, courses);
+    setResults({ fileName, profiles: parsed.profiles });
+    setContestMapping(mapping);
+
+    // Seed each pace band from the real distribution so the numbers on screen match the
+    // data actually driving the schedule.
+    const profileByCourse = new Map(
+      parsed.profiles.filter((p) => mapping[p.contest]).map((p) => [mapping[p.contest], p])
+    );
+
+    setRows((current) =>
+      current.map((row) => {
+        const profile = profileByCourse.get(row.courseName);
+        const summary = profile ? summarizeProfile(profile) : null;
+        if (!profile || !summary) return row;
+        return {
+          ...row,
+          fastestMinPerKm: Number(summary.pace.p1.toFixed(2)),
+          typicalMinPerKm: Number(summary.pace.p50.toFixed(2)),
+          slowestMinPerKm: Number(summary.pace.p99.toFixed(2)),
+          runnerCountText: String(profile.finishers),
+        };
+      })
+    );
+  }
+
   function calculate() {
     if (!kml) return;
     setError(null);
     try {
+      const samplesByCourse = new Map<string, ContestProfile['samples']>();
+      for (const profile of results?.profiles ?? []) {
+        const courseName = contestMapping[profile.contest];
+        if (courseName && profile.samples.length > 0) samplesByCourse.set(courseName, profile.samples);
+      }
+
       const inputs: DistanceInput[] = rows.map((r) => ({
         courseName: r.courseName,
         startTimeClock: r.startTimeClock,
@@ -131,6 +221,7 @@ export default function App() {
         fastestMinPerKm: r.fastestMinPerKm,
         typicalMinPerKm: r.typicalMinPerKm,
         slowestMinPerKm: r.slowestMinPerKm,
+        samples: samplesByCourse.get(r.courseName),
       }));
 
       setResult(
@@ -197,17 +288,43 @@ export default function App() {
 
           <section className="card">
             <h2>
-              <span className="step">3</span>Pace bands and field size
+              <span className="step">3</span>Previous race results
             </h2>
             <p className="hint">
-              One row per distance found in the map. These stand in for a results CSV until you have one.
+              Optional. A finish-line export from a comparable race replaces the estimated pace band with the
+              real field — every runner's own pace and start offset.
             </p>
-            <PaceBandForm rows={rows} onChange={setRows} />
+            <ResultsPanel
+              fileName={results?.fileName}
+              profiles={results?.profiles ?? []}
+              courses={courses}
+              mapping={contestMapping}
+              onLoad={loadResults}
+              onMappingChange={setContestMapping}
+              onClear={() => {
+                setResults(null);
+                setContestMapping({});
+                setResult(null);
+              }}
+              onError={setError}
+            />
           </section>
 
           <section className="card">
             <h2>
-              <span className="step">4</span>Operating assumptions
+              <span className="step">4</span>Pace bands and field size
+            </h2>
+            <p className="hint">
+              {mappedCourses.size > 0
+                ? `Start time and field size apply to every distance. Pace is taken from the results file for ${[...mappedCourses].join(', ')} — the band shown there is for reference only.`
+                : 'One row per distance found in the map. These stand in for a results CSV until you have one.'}
+            </p>
+            <PaceBandForm rows={rows} onChange={setRows} drivenByResults={mappedCourses} />
+          </section>
+
+          <section className="card">
+            <h2>
+              <span className="step">5</span>Operating assumptions
             </h2>
             <SettingsPanel settings={settings} onChange={setSettings} />
           </section>

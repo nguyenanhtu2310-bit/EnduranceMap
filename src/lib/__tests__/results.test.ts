@@ -1,0 +1,155 @@
+import { describe, expect, it } from 'vitest';
+import { inferContestDistanceKm, parseElapsedToSeconds, parseResultsCsv, summarizeProfile } from '../results';
+import { arrivalPercentilesFromSamples, projectSampleArrivals } from '../paceModel';
+
+/** Mirrors a real finish-line export: BOM, contest column, chip/gun times, statuses. */
+const CSV =
+  '﻿"Contest","Name","Bib","Gender","startTOD","GunTime","ChipTime","finishTOD","Status"\n' +
+  '"Full Marathon","A","1","M","03:00:00","3:00:00","3:00:00","06:00:00",""\n' +
+  '"Full Marathon","B","2","F","03:01:00","4:00:00","3:59:00","07:01:00",""\n' +
+  '"Full Marathon","C","3","M","03:02:00","5:02:00","5:00:00","08:04:00",""\n' +
+  '"Full Marathon","D","4","M","03:00:00","","","","DNF"\n' +
+  '"Full Marathon","E","5","F","","","","","DNS"\n' +
+  '"10K","F","6","M","05:00:00","0:50:00","0:50:00","05:50:00",""\n' +
+  '"10K","G","7","F","05:00:30","1:10:00","1:09:30","06:10:00",""\n';
+
+describe('parseElapsedToSeconds', () => {
+  it('parses H:MM:SS and MM:SS', () => {
+    expect(parseElapsedToSeconds('2:25:44')).toBe(2 * 3600 + 25 * 60 + 44);
+    expect(parseElapsedToSeconds('50:00')).toBe(50 * 60);
+  });
+
+  it('accepts durations past 24 hours, which a clock time may not', () => {
+    expect(parseElapsedToSeconds('30:15:00')).toBe(30 * 3600 + 15 * 60);
+  });
+
+  it('rejects nonsense', () => {
+    expect(parseElapsedToSeconds('')).toBeNull();
+    expect(parseElapsedToSeconds('abc')).toBeNull();
+    expect(parseElapsedToSeconds('1:75:00')).toBeNull();
+  });
+});
+
+describe('inferContestDistanceKm', () => {
+  it('reads the standard road distances', () => {
+    expect(inferContestDistanceKm('Full Marathon')).toBeCloseTo(42.195, 3);
+    expect(inferContestDistanceKm('Half Marathon')).toBeCloseTo(21.0975, 4);
+    expect(inferContestDistanceKm('10K')).toBe(10);
+    expect(inferContestDistanceKm('5km')).toBe(5);
+  });
+
+  it('returns undefined rather than guessing at an unknown name', () => {
+    expect(inferContestDistanceKm('Kids Dash')).toBeUndefined();
+  });
+});
+
+describe('parseResultsCsv', () => {
+  const { profiles, warnings } = parseResultsCsv(CSV);
+
+  it('strips the byte-order mark so the first column still matches', () => {
+    expect(warnings).toEqual([]);
+    expect(profiles.map((p) => p.contest)).toEqual(['Full Marathon', '10K']);
+  });
+
+  it('excludes DNS and DNF from the finisher counts', () => {
+    const marathon = profiles.find((p) => p.contest === 'Full Marathon')!;
+    expect(marathon.entrants).toBe(5);
+    expect(marathon.finishers).toBe(3);
+    expect(marathon.samples).toHaveLength(3);
+  });
+
+  it('derives pace from chip time over the contest distance', () => {
+    const marathon = profiles.find((p) => p.contest === 'Full Marathon')!;
+    // 3:00:00 over 42.195 km = 4.266 min/km.
+    expect(marathon.samples[0].paceMinPerKm).toBeCloseTo(180 / 42.195, 3);
+  });
+
+  it('measures each start offset from the first starter in that contest', () => {
+    const marathon = profiles.find((p) => p.contest === 'Full Marathon')!;
+    expect(marathon.samples.map((s) => s.startOffsetSeconds)).toEqual([0, 60, 120]);
+  });
+
+  it('keeps contests separate, each with its own first start', () => {
+    const tenK = profiles.find((p) => p.contest === '10K')!;
+    expect(tenK.samples.map((s) => s.startOffsetSeconds)).toEqual([0, 30]);
+  });
+
+  it('falls back to finish minus start when no elapsed column parses', () => {
+    const noElapsed = CSV.replace(/"3:00:00","3:00:00"/, '"",""');
+    const marathon = parseResultsCsv(noElapsed).profiles.find((p) => p.contest === 'Full Marathon')!;
+    expect(marathon.samples[0].paceMinPerKm).toBeCloseTo(180 / 42.195, 3);
+  });
+
+  it('reports a missing contest column instead of parsing nothing silently', () => {
+    const result = parseResultsCsv('"Name","Time"\n"A","1:00:00"\n');
+    expect(result.profiles).toEqual([]);
+    expect(result.warnings[0]).toMatch(/contest column/i);
+  });
+
+  it('flags a contest whose distance cannot be inferred', () => {
+    const odd = CSV.replace(/"10K"/g, '"Fun Run"');
+    const funRun = parseResultsCsv(odd).profiles.find((p) => p.contest === 'Fun Run')!;
+    expect(funRun.distanceKm).toBe(0);
+    expect(funRun.warnings[0]).toMatch(/distance/i);
+  });
+
+  it('accepts a manual distance override for an unnamed contest', () => {
+    const odd = CSV.replace(/"10K"/g, '"Fun Run"');
+    const funRun = parseResultsCsv(odd, { distanceOverrides: { 'Fun Run': 10 } }).profiles.find(
+      (p) => p.contest === 'Fun Run'
+    )!;
+    expect(funRun.distanceKm).toBe(10);
+    expect(funRun.samples).toHaveLength(2);
+  });
+});
+
+describe('summarizeProfile', () => {
+  it('reports the pace spread and the observed start spread', () => {
+    const marathon = parseResultsCsv(CSV).profiles.find((p) => p.contest === 'Full Marathon')!;
+    const summary = summarizeProfile(marathon)!;
+    expect(summary.pace.p1).toBeLessThan(summary.pace.p50);
+    expect(summary.pace.p50).toBeLessThan(summary.pace.p99);
+    expect(summary.startSpreadSeconds.max).toBe(120);
+  });
+});
+
+describe('projecting a real field onto a new race', () => {
+  const marathon = parseResultsCsv(CSV).profiles.find((p) => p.contest === 'Full Marathon')!;
+
+  it('replays each runner at the new gun time, keeping their own offset and pace', () => {
+    const arrivals = projectSampleArrivals(marathon.samples, {
+      startTimeClock: '06:00',
+      runnerCount: 3,
+    }, 42.195);
+
+    // Runner A: 06:00 gun, no corral delay, 3:00:00 of running.
+    expect(arrivals[0]).toBe(9 * 3600);
+    // Runner B: started 60s back, ran 3:59:00.
+    expect(arrivals[1]).toBe(6 * 3600 + 60 + 239 * 60);
+  });
+
+  it('scales a reference field up to a larger planned entry list', () => {
+    const arrivals = projectSampleArrivals(marathon.samples, {
+      startTimeClock: '06:00',
+      runnerCount: 300,
+    }, 42.195);
+    expect(arrivals).toHaveLength(300);
+    expect(Math.min(...arrivals)).toBe(9 * 3600);
+  });
+
+  it('produces percentiles ordered from fastest to slowest', () => {
+    const results = arrivalPercentilesFromSamples(
+      marathon.samples,
+      { startTimeClock: '06:00', runnerCount: 300 },
+      42.195
+    );
+    for (let i = 1; i < results.length; i++) {
+      expect(results[i].seconds).toBeGreaterThanOrEqual(results[i - 1].seconds);
+    }
+  });
+
+  it('returns nothing when the field is empty', () => {
+    expect(projectSampleArrivals([], { startTimeClock: '06:00', runnerCount: 100 }, 10)).toEqual([]);
+    expect(projectSampleArrivals(marathon.samples, { startTimeClock: '06:00', runnerCount: 0 }, 10)).toEqual([]);
+  });
+});

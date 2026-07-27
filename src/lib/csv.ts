@@ -55,7 +55,9 @@ function parseCsvRows(text: string): string[][] {
 
 /** Parses CSV text into an array of header-keyed row objects. */
 export function parseCsv(text: string): Record<string, string>[] {
-  const rows = parseCsvRows(text);
+  // Timing exports are commonly UTF-8 with a BOM; left in place it becomes part of the
+  // first header name, so "Contest" silently stops matching.
+  const rows = parseCsvRows(text.replace(/^﻿/, ''));
   if (rows.length === 0) return [];
 
   const headers = rows[0].map((h) => h.trim());
