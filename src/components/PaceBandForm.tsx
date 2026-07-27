@@ -41,6 +41,9 @@ export function PaceBandForm({ rows, onChange, drivenByResults }: Props) {
                 {f.label}
               </th>
             ))}
+            <th className="num" title="Cut-off time provided by the organizer — leave blank if not provided yet">
+              COT
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -89,13 +92,21 @@ export function PaceBandForm({ rows, onChange, drivenByResults }: Props) {
                   />
                 </td>
               ))}
+              <td className="num" style={{ minWidth: 104 }}>
+                <input
+                  type="time"
+                  value={row.organizerCutoffClock ?? ''}
+                  onChange={(e) => update(i, { organizerCutoffClock: e.target.value })}
+                />
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
       <p className="hint" style={{ margin: '0.75rem 0 0' }}>
         Paces are minutes per km. Fastest and slowest anchor the P1 and P99 arrivals; spread is how long the
-        field takes to clear the start line, which is what keeps early stations from reading as impossibly busy.
+        field takes to clear the start line. COT is the finish cut-off the organizer has set for that distance
+        — leave it blank if it has not been provided yet, and the tool proposes one instead.
       </p>
     </div>
   );

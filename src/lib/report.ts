@@ -30,6 +30,14 @@ export const ALL_REPORT_SECTIONS: ReportSections = {
 
 export interface ReportOptions {
   raceName: string;
+  /**
+   * 'light' is the printable document; 'dark' is the on-screen share page in the
+   * brand's own theme, with the distribution chart drawn in the dark palette. Both
+   * print light — paper is paper whatever the screen looked like.
+   */
+  theme?: 'light' | 'dark';
+  /** Operator notes per station (staff, decoder serial), keyed by map name. */
+  notes?: Record<string, string>;
   /** Defaults to every section when omitted. */
   sections?: ReportSections;
   rules: AmenityRules;
@@ -86,6 +94,69 @@ function buildRun(result: PipelineResult, courseName: string): Stop[] {
   return stops;
 }
 
+/** Categorical slots validated against each surface — same sets the app charts use. */
+const LIGHT_SERIES = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
+const DARK_SERIES = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#5ed350', '#9085e9', '#e66767'];
+
+/**
+ * The crossing-time distribution as a static SVG: one row per station on a shared
+ * clock, arrivals stacked by distance. Each row is scaled to its own peak — on a
+ * multi-distance race the late stations see a fraction of the start-line field, and a
+ * shared scale would flatten exactly the rows a reader opens the chart to see. The
+ * table beneath carries the absolute numbers.
+ */
+function buildDistributionSvg(result: PipelineResult, series: string[], ink: { label: string; axis: string; grid: string; base: string; peak: string }): string {
+  const stations = result.stations;
+  const binCount = stations[0]?.distribution.length ?? 0;
+  if (binCount === 0) return '';
+
+  const ROW_H = 40;
+  const AXIS_H = 26;
+  const LABEL_W = 190;
+  const PLOT_W = Math.max(560, Math.min(860, binCount * 8));
+  const width = LABEL_W + PLOT_W + 12;
+  const height = stations.length * ROW_H + AXIS_H;
+  const span = result.timeRangeSeconds.end - result.timeRangeSeconds.start || 1;
+  const binW = PLOT_W / binCount;
+  const barW = Math.max(1, binW - 2);
+  const x = (sec: number) => LABEL_W + ((sec - result.timeRangeSeconds.start) / span) * PLOT_W;
+
+  const parts: string[] = [];
+  const firstHour = Math.ceil(result.timeRangeSeconds.start / 3600) * 3600;
+  for (let t = firstHour; t <= result.timeRangeSeconds.end; t += 3600) {
+    parts.push(`<line x1="${x(t).toFixed(1)}" y1="0" x2="${x(t).toFixed(1)}" y2="${height - AXIS_H}" stroke="${ink.grid}" stroke-width="1"/>`);
+    parts.push(`<text x="${x(t).toFixed(1)}" y="${height - 8}" text-anchor="middle" fill="${ink.axis}" font-size="11">${secondsToClockTime(t).slice(0, 5)}</text>`);
+  }
+
+  stations.forEach((station, row) => {
+    const top = row * ROW_H;
+    const baseline = top + ROW_H - 6;
+    const usable = ROW_H - 14;
+    const rowMax = Math.max(1, ...station.distribution.map((b) => b.total));
+    const label = station.schedule.name.length > 28 ? `${station.schedule.name.slice(0, 27)}…` : station.schedule.name;
+
+    parts.push(`<text x="0" y="${top + ROW_H / 2 + 4}" fill="${ink.label}" font-size="12" font-weight="500">${esc(label)}</text>`);
+    parts.push(`<line x1="${LABEL_W}" y1="${baseline}" x2="${LABEL_W + PLOT_W}" y2="${baseline}" stroke="${ink.base}" stroke-width="1"/>`);
+
+    station.distribution.forEach((bin, i) => {
+      if (bin.total === 0) return;
+      const bx = LABEL_W + i * binW;
+      let cursor = baseline;
+      bin.byCourse.forEach((count, courseIndex) => {
+        if (count === 0) return;
+        const h = (count / rowMax) * usable;
+        cursor -= h;
+        parts.push(`<rect x="${bx.toFixed(1)}" y="${cursor.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(h - (h >= 6 ? 2 : 0), 0.5).toFixed(1)}" fill="${series[courseIndex % series.length]}"/>`);
+      });
+      if (i === station.peakBinIndex) {
+        parts.push(`<rect x="${(bx - 1.5).toFixed(1)}" y="${(baseline - (bin.total / rowMax) * usable - 5).toFixed(1)}" width="${(barW + 3).toFixed(1)}" height="3" fill="${ink.peak}"/>`);
+      }
+    });
+  });
+
+  return `<svg viewBox="0 0 ${width} ${height}" width="100%" role="img" aria-label="Runner arrivals over time at each station" style="max-width:${width}px">${parts.join('')}</svg>`;
+}
+
 /**
  * Renders the whole plan as one self-contained HTML file — no scripts, no external
  * styles, no fonts to fetch. An organiser can open it offline, print it, or forward it
@@ -94,6 +165,8 @@ function buildRun(result: PipelineResult, courseName: string): Stop[] {
  */
 export function buildReportHtml(result: PipelineResult, options: ReportOptions): string {
   const { raceName, rules, overrides } = options;
+  const dark = options.theme === 'dark';
+  const notes = options.notes ?? {};
   const sections = options.sections ?? ALL_REPORT_SECTIONS;
   const generated = new Date().toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' });
 
@@ -111,7 +184,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
           station.sourceNames.join(', ') !== station.schedule.name
             ? `<div class="sub">${esc(station.sourceNames.join(', '))}</div>`
             : ''
-        }</td>
+        }${notes[station.mapName] ? `<div class="sub note">${esc(notes[station.mapName])}</div>` : ''}</td>
         <td class="sub">${crossings}</td>
         <td class="num">${hm(station.schedule.openClockTime)}</td>
         <td class="num">${hm(station.schedule.closeClockTime)}</td>
@@ -143,7 +216,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
             <td class="num sub">${i + 1}</td>
             <td>${esc(stop.station.schedule.name)}${
               stop.passCount > 1 ? `<div class="sub">pass ${stop.passIndex + 1} of ${stop.passCount}</div>` : ''
-            }</td>
+            }${notes[stop.station.mapName] ? `<div class="sub note">${esc(notes[stop.station.mapName])}</div>` : ''}</td>
             <td class="num">${stop.kmFromStart.toFixed(1)}</td>
             <td class="num${stop.gapKm === longest && longest > 0 ? ' risk' : ''}">${stop.gapKm.toFixed(1)}</td>
             <td class="num">${hm(stop.station.schedule.openClockTime)}</td>
@@ -200,7 +273,8 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
                 return `<td class="num">${passes.length ? passes.join(' / ') : '–'}</td>`;
               })
               .join('');
-            return `<tr><td>${esc(station.schedule.name)}</td><td class="num">${hm(
+            const note = notes[station.mapName] ? `<div class="sub note">${esc(notes[station.mapName])}</div>` : '';
+            return `<tr><td>${esc(station.schedule.name)}${note}</td><td class="num">${hm(
               station.schedule.openClockTime
             )}–${hm(station.schedule.closeClockTime)}</td>${cells}</tr>`;
           })
@@ -231,8 +305,18 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
             </tr>`;
           })
           .join('');
+        const series = dark ? DARK_SERIES : LIGHT_SERIES;
+        const ink = dark
+          ? { label: '#f3f8ff', axis: 'rgba(243,248,255,0.4)', grid: 'rgba(243,248,255,0.1)', base: 'rgba(243,248,255,0.22)', peak: '#f3f8ff' }
+          : { label: '#16221f', axis: '#7b8a87', grid: '#e5eae8', base: '#c7d0cd', peak: '#16221f' };
+        const legend = courses
+          .map((c, i) => `<span class="key"><span class="swatch" style="background:${series[i % series.length]}"></span>${esc(c.name)}</span>`)
+          .join('');
+        const svg = buildDistributionSvg(result, series, ink);
         return `<h2>Crossing time distribution</h2>
-        <p class="note">The busiest ${result.binMinutes}-minute window at each position, and the rate it implies.</p>
+        <p class="note">Runner arrivals per ${result.binMinutes} minutes on one shared clock, stacked by distance. Each row is scaled to its own peak; the table beneath carries the absolute numbers.</p>
+        <div class="legend">${legend}<span class="key"><span class="swatch peak"></span>Peak window</span></div>
+        ${svg}
         <table><thead><tr>
           <th>Station</th><th class="num">Peak window</th><th class="num">Runners in window</th>
           <th class="num">Rate /hr</th><th>Activity</th>
@@ -251,27 +335,28 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(raceName)} — CP operations</title>
 <style>
-  /* EnduranceMap brand, on paper. The app is dark-only, but a report is a document:
-     it gets printed and forwarded, so it stays ink-on-white and carries the brand
-     through the accent, the type and the Sportstats mark rather than the ground. */
+  /* EnduranceMap brand. The dark variant is the on-screen share page in the app's own
+     theme; the light variant is the printable document. Print always drops to
+     ink-on-paper — paper is paper whatever the screen looked like. */
   :root {
-    --bg: #ffffff;
-    --surface: #f7faf9;
-    --text: #16221f;
-    --accent: #05864e;
-    --divider: #d9e0de;
-    --muted: #5c6b68;
-    --faint: #7b8a87;
-    --danger: #b42318;
-    --warn: #b54708;
-    --ok: #067647;
-    color-scheme: light;
+    ${
+      dark
+        ? `--bg: #16221f; --surface: #223532; --text: #f3f8ff; --accent: #07bc02;
+    --divider: rgba(243, 248, 255, 0.16); --muted: rgba(243, 248, 255, 0.58);
+    --faint: rgba(243, 248, 255, 0.40); --danger: #ff8a80; --warn: #f0b46a; --ok: #5ed350;
+    color-scheme: dark;`
+        : `--bg: #ffffff; --surface: #f7faf9; --text: #16221f; --accent: #05864e;
+    --divider: #d9e0de; --muted: #5c6b68; --faint: #7b8a87;
+    --danger: #b42318; --warn: #b54708; --ok: #067647;
+    color-scheme: light;`
+    }
   }
   * { box-sizing: border-box; }
   body {
     font: 400 13px/1.55 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
     color: var(--text); background: var(--bg);
     margin: 0; padding: 40px 32px; -webkit-font-smoothing: antialiased;
+    max-width: 1140px; margin-inline: auto;
   }
   .masthead { display: flex; align-items: center; gap: 8px; margin-bottom: 22px; }
   .masthead svg { color: var(--accent); flex: none; }
@@ -298,10 +383,15 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   td.mid, th.mid { text-align: center; }
   .sub { color: var(--muted); font-size: 11px; }
+  .sub.note { color: var(--accent); }
   .risk { color: var(--danger); font-weight: 600; }
   .total td { background: var(--surface); font-weight: 600; }
   .tag { font-size: 11px; font-weight: 600; }
   .tag.High { color: var(--danger); } .tag.Medium { color: var(--warn); } .tag.Low { color: var(--ok); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 8px; font-size: 12px; color: var(--muted); }
+  .key { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  .swatch.peak { height: 3px; border-radius: 1px; background: var(--text); }
   footer {
     margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--divider);
     color: var(--muted); font-size: 11px;
@@ -311,10 +401,18 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
     margin-bottom: 12px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
     color: var(--faint);
   }
+  .powered .chip {
+    background: #eef4f3; border-radius: 4px; padding: 4px 10px; display: inline-flex; align-items: center;
+  }
   .powered img { height: 16px; display: block; }
   .disclaimer { text-align: center; }
 
   @media print {
+    :root {
+      --bg: #ffffff; --surface: #f2f6f5; --text: #16221f; --divider: #d9e0de;
+      --muted: #5c6b68; --faint: #5c6b68; --danger: #b42318; --warn: #b54708; --ok: #067647;
+      color-scheme: light;
+    }
     body { padding: 0; }
     h2 { page-break-after: avoid; }
     tr { page-break-inside: avoid; }
@@ -356,7 +454,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   <table>
     <thead><tr>
       <th>Station</th><th>Distance</th><th class="num">Km</th>
-      <th class="num">Slowest arrival</th><th class="num">Proposed cut-off</th><th class="num">On map</th>
+      <th class="num">Slowest arrival</th><th class="num">Proposed cut-off</th><th class="num">Provided</th>
     </tr></thead>
     <tbody>${cutoffRows}</tbody>
   </table>`
@@ -366,7 +464,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   <footer>
     <div class="powered">
       <span>Powered by</span>
-      <img src="${SPORTSTATS_LOGO_DATA_URI}" alt="Sportstats">
+      <span class="chip"><img src="${SPORTSTATS_LOGO_DATA_URI}" alt="Sportstats"></span>
     </div>
     <p class="disclaimer">
       Open and close times are modelled from the pace data named above; they are a plan, not a measurement.

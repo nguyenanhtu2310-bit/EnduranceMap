@@ -768,3 +768,130 @@ button.row-remove:hover {
 tr.end-zone td {
   opacity: 0.5;
 }
+
+/* — task-2/3 chrome — */
+
+.masthead-chip {
+  margin-left: auto;
+  background: var(--color-neutral-100);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.masthead-chip img {
+  height: 16px;
+  display: block;
+}
+
+.loaded-file {
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+button.cta {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 0.75rem 2.75rem;
+}
+
+.note-input {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  min-height: 24px;
+  max-width: 200px;
+  padding: 2px 7px;
+  background: transparent;
+  border: 1px dashed var(--color-divider);
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+}
+
+.note-input:focus-visible {
+  border-style: solid;
+  color: var(--color-text);
+}
+
+.colocated.note {
+  color: var(--color-accent-2);
+}
+
+.cot-final {
+  color: var(--color-accent);
+}
+
+.cot-final strong {
+  font-weight: 600;
+}
+
+.cot-final-tag {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* — race tabs — */
+
+.race-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.race-tab {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.race-tab.active {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.race-tab-label {
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-weight: 400;
+  font-size: 0.86rem;
+  padding: 0.35rem 0.75rem;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-tab.active .race-tab-label {
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+.race-tab-close {
+  border: none;
+  background: transparent;
+  color: var(--color-faint);
+  padding: 0.35rem 0.5rem 0.35rem 0;
+  font-size: 0.95rem;
+}
+
+.race-tab-close:hover {
+  color: var(--color-danger);
+  background: transparent;
+}

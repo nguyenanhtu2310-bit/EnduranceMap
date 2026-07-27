@@ -9,13 +9,16 @@ interface Props {
   onReorder?: (mapNames: string[]) => void;
   /** Supplying this adds a per-row remove control; receives the station's map name. */
   onRemove?: (mapName: string) => void;
+  /** Operator note under each name — staff assignment, decoder serial. */
+  notes?: Record<string, string>;
+  onNoteChange?: (mapName: string, note: string) => void;
 }
 
 function formatHm(clock: string): string {
   return clock.slice(0, 5);
 }
 
-export function StationScheduleTable({ stations, showSourceNames = true, onReorder, onRemove }: Props) {
+export function StationScheduleTable({ stations, showSourceNames = true, onReorder, onRemove, notes, onNoteChange }: Props) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
 
@@ -91,6 +94,16 @@ export function StationScheduleTable({ stations, showSourceNames = true, onReord
                   <span className="colocated" title="Placemarks from other folders at this same position">
                     at {station.coLocatedNames.join(', ')}
                   </span>
+                )}
+                {onNoteChange && (
+                  <input
+                    className="note-input"
+                    type="text"
+                    value={notes?.[station.mapName] ?? ''}
+                    placeholder="Note — staff / decoder no."
+                    title="Shown under this station in every section and in the report"
+                    onChange={(e) => onNoteChange(station.mapName, e.target.value)}
+                  />
                 )}
               </td>
               <td>

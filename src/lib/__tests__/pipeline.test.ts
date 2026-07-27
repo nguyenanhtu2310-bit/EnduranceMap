@@ -395,3 +395,31 @@ describe('excludeStations', () => {
     );
   });
 });
+
+describe('organizer-provided finish COT', () => {
+  it('applies the COT to the finish-area pass of its own distance only', () => {
+    const withCot = runPipeline(kml, [
+      inputs[0],
+      { ...inputs[1], organizerCutoffClock: '12:00' }, // Half Marathon
+    ]);
+
+    // "Start" sits on the start/finish line, so the Half crosses it at ~0 and ~21.1 km.
+    const startStation = withCot.stations.find((s) => s.mapName.includes('Start'))!;
+    const outbound = startStation.crossings.find((c) => c.courseName === 'Half Marathon' && c.kmFromStart < 1)!;
+    const finish = startStation.crossings.find((c) => c.courseName === 'Half Marathon' && c.kmFromStart > 20)!;
+
+    expect(finish.officialCutoffClock).toBe('12:00');
+    expect(outbound.officialCutoffClock).toBeUndefined();
+
+    // The 10km through the same station keeps its own (absent) cut-off.
+    const tenK = startStation.crossings.filter((c) => c.courseName === '10km');
+    expect(tenK.every((c) => c.officialCutoffClock !== '12:00')).toBe(true);
+  });
+
+  it('ignores an unparseable COT rather than corrupting the schedule', () => {
+    const bad = runPipeline(kml, [inputs[0], { ...inputs[1], organizerCutoffClock: 'soon' }]);
+    const startStation = bad.stations.find((s) => s.mapName.includes('Start'))!;
+    const finish = startStation.crossings.find((c) => c.courseName === 'Half Marathon' && c.kmFromStart > 20)!;
+    expect(finish.officialCutoffClock).toBeUndefined();
+  });
+});

@@ -27,7 +27,7 @@ export function KmlDropzone({ fileName, onLoad, onError }: Props) {
     return (
       <div className="file-line">
         <span>
-          Loaded <strong>{fileName}</strong>
+          <span className="tag ok">Loaded</span> <strong className="loaded-file">{fileName}</strong>
         </span>
         <button className="secondary" onClick={() => inputRef.current?.click()}>
           Choose a different file

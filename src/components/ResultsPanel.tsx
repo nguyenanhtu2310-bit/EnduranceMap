@@ -71,7 +71,7 @@ export function ResultsPanel({
     <>
       <div className="file-line" style={{ marginBottom: '1rem' }}>
         <span>
-          Loaded <strong>{fileName}</strong> — {profiles.length} contest{profiles.length === 1 ? '' : 's'}
+          <span className="tag ok">Loaded</span> <strong className="loaded-file">{fileName}</strong> — {profiles.length} contest{profiles.length === 1 ? '' : 's'}
         </span>
         <span style={{ display: 'inline-flex', gap: '0.6rem' }}>
           <button className="secondary" onClick={() => inputRef.current?.click()}>

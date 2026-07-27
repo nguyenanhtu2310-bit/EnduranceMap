@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { CrossingDistribution } from './components/CrossingDistribution';
 import { CutoffTable } from './components/CutoffTable';
 import { DistanceRunView } from './components/DistanceRunView';
@@ -61,6 +61,7 @@ function seedRow(courseName: string, measuredKm: number): DistanceFormRow {
     startTimeClock: '05:00',
     startSpreadMinutes: DEFAULT_START_SPREAD_MINUTES,
     runnerCountText: '500',
+    organizerCutoffClock: '',
     fastestMinPerKm: isLong ? 3.2 : 3.5,
     typicalMinPerKm: isLong ? 6.5 : 6.8,
     slowestMinPerKm: isLong ? 10 : 11,
@@ -114,6 +115,62 @@ function autoMapContests(profiles: ContestProfile[], courses: Course[]): Record<
   return mapping;
 }
 
+/**
+ * Everything one race's planning session holds. Tabs swap these wholesale, and the
+ * saved .race.json is this minus what can be recomputed (the result) or re-derived
+ * from the KML text (courses, folders).
+ */
+interface RaceSnapshot {
+  kml: LoadedKml | null;
+  rows: DistanceFormRow[];
+  folders: FolderSummary[];
+  selectedFolders: string[];
+  settings: Settings;
+  renumber: boolean;
+  renumberPrefix: string;
+  result: PipelineResult | null;
+  results: { fileName: string; profiles: ContestProfile[] } | null;
+  contestMapping: Record<string, string>;
+  courses: Course[];
+  stationOrder: string[];
+  amenityOverrides: Record<string, Partial<AmenitySet>>;
+  raceName: string;
+  removedStations: string[];
+  removedPasses: string[];
+  reportSections: ReportSections;
+  stationNotes: Record<string, string>;
+}
+
+function blankSnapshot(): RaceSnapshot {
+  return {
+    kml: null,
+    rows: [],
+    folders: [],
+    selectedFolders: [],
+    settings: DEFAULT_SETTINGS,
+    renumber: true,
+    renumberPrefix: 'Station',
+    result: null,
+    results: null,
+    contestMapping: {},
+    courses: [],
+    stationOrder: [],
+    amenityOverrides: {},
+    raceName: '',
+    removedStations: [],
+    removedPasses: [],
+    reportSections: ALL_REPORT_SECTIONS,
+    stationNotes: {},
+  };
+}
+
+/** Fields that go into a saved race file — the recomputable ones stay out. */
+const RACE_FILE_FIELDS = [
+  'kml', 'rows', 'selectedFolders', 'settings', 'renumber', 'renumberPrefix',
+  'results', 'contestMapping', 'stationOrder', 'amenityOverrides', 'raceName',
+  'removedStations', 'removedPasses', 'reportSections', 'stationNotes',
+] as const;
+
 export default function App() {
   const [kml, setKml] = useState<LoadedKml | null>(null);
   const [rows, setRows] = useState<DistanceFormRow[]>([]);
@@ -133,6 +190,126 @@ export default function App() {
   const [removedStations, setRemovedStations] = useState<string[]>([]);
   const [removedPasses, setRemovedPasses] = useState<string[]>([]);
   const [reportSections, setReportSections] = useState<ReportSections>(ALL_REPORT_SECTIONS);
+  const [stationNotes, setStationNotes] = useState<Record<string, string>>({});
+
+  const [tabs, setTabs] = useState<{ id: string; label: string }[]>([{ id: 'race-1', label: 'Race 1' }]);
+  const [activeTab, setActiveTab] = useState('race-1');
+  const snapshotsRef = useRef(new Map<string, RaceSnapshot>());
+  const raceFileRef = useRef<HTMLInputElement>(null);
+
+  const liveLabel = raceName.trim() || kml?.fileName.replace(/\.kml$/i, '') || 'Untitled race';
+
+  function captureSnapshot(): RaceSnapshot {
+    return {
+      kml, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
+      results, contestMapping, courses, stationOrder, amenityOverrides, raceName,
+      removedStations, removedPasses, reportSections, stationNotes,
+    };
+  }
+
+  function applySnapshot(snap: RaceSnapshot) {
+    setKml(snap.kml);
+    setRows(snap.rows);
+    setFolders(snap.folders);
+    setSelectedFolders(snap.selectedFolders);
+    setSettings(snap.settings);
+    setRenumber(snap.renumber);
+    setRenumberPrefix(snap.renumberPrefix);
+    setResult(snap.result);
+    setResults(snap.results);
+    setContestMapping(snap.contestMapping);
+    setCourses(snap.courses);
+    setStationOrder(snap.stationOrder);
+    setAmenityOverrides(snap.amenityOverrides);
+    setRaceName(snap.raceName);
+    setRemovedStations(snap.removedStations);
+    setRemovedPasses(snap.removedPasses);
+    setReportSections(snap.reportSections);
+    setStationNotes(snap.stationNotes);
+    setError(null);
+  }
+
+  /** Parks the active race before anything replaces it on screen. */
+  function parkActive() {
+    snapshotsRef.current.set(activeTab, captureSnapshot());
+    setTabs((list) => list.map((t) => (t.id === activeTab ? { ...t, label: liveLabel } : t)));
+  }
+
+  function switchTab(id: string) {
+    if (id === activeTab) return;
+    parkActive();
+    applySnapshot(snapshotsRef.current.get(id) ?? blankSnapshot());
+    setActiveTab(id);
+  }
+
+  function newTab(label = 'New race', snap?: RaceSnapshot) {
+    parkActive();
+    const id = `race-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
+    setTabs((list) => [...list, { id, label }]);
+    applySnapshot(snap ?? blankSnapshot());
+    setActiveTab(id);
+  }
+
+  function closeTab(id: string) {
+    if (tabs.length <= 1) return;
+    const label = id === activeTab ? liveLabel : tabs.find((t) => t.id === id)?.label;
+    if (!window.confirm(`Close “${label}”? Anything not saved to a race file is lost.`)) return;
+
+    const remaining = tabs.filter((t) => t.id !== id);
+    snapshotsRef.current.delete(id);
+    setTabs(remaining);
+    if (id === activeTab) {
+      const next = remaining[remaining.length - 1];
+      applySnapshot(snapshotsRef.current.get(next.id) ?? blankSnapshot());
+      setActiveTab(next.id);
+    }
+  }
+
+  function saveRaceFile() {
+    const snap = captureSnapshot();
+    const body: Record<string, unknown> = {};
+    for (const key of RACE_FILE_FIELDS) body[key] = snap[key];
+    const file = {
+      app: 'EnduranceMap',
+      kind: 'race',
+      version: 1,
+      savedAt: new Date().toISOString(),
+      label: liveLabel,
+      snapshot: body,
+    };
+    const blob = new Blob([JSON.stringify(file)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${liveLabel.replace(/[^\w\d -]+/g, '').trim() || 'race'}.race.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function openRaceFile(file: File | undefined) {
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      if (data?.app !== 'EnduranceMap' || data?.kind !== 'race' || !data?.snapshot) {
+        setError(`"${file.name}" is not an EnduranceMap race file.`);
+        return;
+      }
+      const saved = data.snapshot as Partial<RaceSnapshot>;
+      const snap: RaceSnapshot = { ...blankSnapshot(), ...saved, result: null, courses: [], folders: [] };
+      // Courses and folders are re-derived from the saved KML text rather than trusted
+      // from the file, so a hand-edited file cannot desync the two.
+      if (snap.kml) {
+        const parsed = parseKml(snap.kml.text);
+        snap.courses = buildCourses(parsed.courses);
+        snap.folders = listPlacemarkFolders(parsed.placemarks);
+      }
+      newTab(data.label || file.name.replace(/\.race\.json$/i, ''), snap);
+    } catch {
+      setError(`Could not read "${file.name}" as a race file.`);
+    }
+  }
 
   function loadKml(text: string, fileName: string) {
     setError(null);
@@ -234,6 +411,26 @@ export default function App() {
     applyProfilesToRows(parsed.profiles, mapping);
   }
 
+  /** Builds the report once, for whichever way the user chooses to take it away. */
+  function renderReport(computed: PipelineResult, theme: 'light' | 'dark'): { html: string; fileName: string } {
+    const name = raceName.trim() || kml?.fileName.replace(/\.kml$/i, '') || 'Race';
+    const html = buildReportHtml(computed, {
+      raceName: name,
+      theme,
+      notes: stationNotes,
+      sections: reportSections,
+      rules: DEFAULT_AMENITY_RULES,
+      overrides: amenityOverrides,
+      sourceFileName: kml?.fileName,
+      resultsFileName: results?.fileName,
+    });
+    const base = name.replace(/[^\w\d -]+/g, '').trim() || 'race';
+    return {
+      html,
+      fileName: theme === 'dark' ? `${base} - CP operations (share).html` : `${base} - CP operations.html`,
+    };
+  }
+
   function calculate(overrides?: { stations?: string[]; passes?: string[] }) {
     if (!kml) return;
     const excludeStations = overrides?.stations ?? removedStations;
@@ -254,6 +451,7 @@ export default function App() {
         fastestMinPerKm: r.fastestMinPerKm,
         typicalMinPerKm: r.typicalMinPerKm,
         slowestMinPerKm: r.slowestMinPerKm,
+        organizerCutoffClock: r.organizerCutoffClock?.trim() || undefined,
         samples: samplesByCourse.get(r.courseName),
       }));
 
@@ -281,17 +479,60 @@ export default function App() {
 
   return (
     <div className="app">
+      <div className="race-tabs">
+        {tabs.map((t) => (
+          <span key={t.id} className={t.id === activeTab ? 'race-tab active' : 'race-tab'}>
+            <button className="race-tab-label" onClick={() => switchTab(t.id)}>
+              {t.id === activeTab ? liveLabel : t.label}
+            </button>
+            {tabs.length > 1 && (
+              <button className="race-tab-close" title="Close race" onClick={() => closeTab(t.id)}>
+                ×
+              </button>
+            )}
+          </span>
+        ))}
+        <button className="secondary" onClick={() => newTab()}>
+          + New race
+        </button>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: '0.5rem' }}>
+          <button className="secondary" onClick={saveRaceFile} title="Save this race to a file on your machine">
+            Save race
+          </button>
+          <button
+            className="secondary"
+            onClick={() => raceFileRef.current?.click()}
+            title="Open a saved .race.json file"
+          >
+            Open…
+          </button>
+          <input
+            ref={raceFileRef}
+            type="file"
+            accept=".json,application/json"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              void openRaceFile(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+        </span>
+      </div>
+
       <div className="masthead">
         {/* Phosphor map-pin, per the brand's icon set. */}
         <svg width="20" height="20" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
           <path d="M128 16a88.1 88.1 0 0 0-88 88c0 75.3 80 132.17 83.41 134.55a8 8 0 0 0 9.18 0C136 236.17 216 179.3 216 104a88.1 88.1 0 0 0-88-88Zm0 56a32 32 0 1 1-32 32 32 32 0 0 1 32-32Z" />
         </svg>
         <span className="wordmark">EnduranceMap</span>
+        <span className="chip masthead-chip">
+          <img src="/sportstats-logo.png" alt="Sportstats" />
+        </span>
       </div>
 
       <header>
         <h1>Race CP Operations Calculator</h1>
-        <p>Turn a course map into a checkpoint operating schedule. Runs entirely in your browser.</p>
+        <p>Turn a course map into a checkpoint operating schedule.</p>
       </header>
 
       {error && <div className="error">{error}</div>}
@@ -300,7 +541,7 @@ export default function App() {
         <h2>
           <span className="step">1</span>Course map
         </h2>
-        <p className="hint">A KML exported from Google My Maps.</p>
+        <p className="hint">Choose an exported KML from Google My Maps. Make sure all the race routes are placed in one layer, and each CP type on its own separate layer.</p>
         <KmlDropzone fileName={kml?.fileName} onLoad={loadKml} onError={setError} />
       </section>
 
@@ -308,9 +549,9 @@ export default function App() {
         <>
           <section className="card">
             <h2>
-              <span className="step">2</span>Which positions to schedule
+              <span className="step">2</span>CP type
             </h2>
-            <p className="hint">Map folders holding point placemarks. Tick the ones you need staffing for.</p>
+            <p className="hint">Choose the layer that contains the type of CP you want to calculate.</p>
             <FolderPicker
               folders={folders}
               selected={selectedFolders}
@@ -324,11 +565,11 @@ export default function App() {
 
           <section className="card">
             <h2>
-              <span className="step">3</span>Previous race results
+              <span className="step">3</span>Pace distribution
             </h2>
             <p className="hint">
-              Optional. A finish-line export from a comparable race replaces the estimated pace band with the
-              real field — every runner's own pace and start offset.
+              Optional. Choose a CSV finish-line result from a comparable race to replace the estimated pace
+              band with the real field — every runner's own pace and start offset.
             </p>
             <ResultsPanel
               fileName={results?.fileName}
@@ -348,7 +589,7 @@ export default function App() {
 
           <section className="card">
             <h2>
-              <span className="step">4</span>Pace bands and field size
+              <span className="step">4</span>Race details and pace band
             </h2>
             <p className="hint">
               {mappedCourses.size > 0
@@ -360,14 +601,18 @@ export default function App() {
 
           <section className="card">
             <h2>
-              <span className="step">5</span>Operating assumptions
+              <span className="step">5</span>Operating details
             </h2>
             <SettingsPanel settings={settings} onChange={setSettings} />
           </section>
 
-          <div className="actions" style={{ marginBottom: '1.75rem' }}>
-            <button onClick={() => calculate()} disabled={invalidRows.length > 0 || selectedFolders.length === 0}>
-              Calculate schedule
+          <div className="actions" style={{ marginBottom: '1.75rem', justifyContent: 'center' }}>
+            <button
+              className="cta"
+              onClick={() => calculate()}
+              disabled={invalidRows.length > 0 || selectedFolders.length === 0}
+            >
+              CALCULATE
             </button>
             {selectedFolders.length === 0 && (
               <span className="hint" style={{ margin: 0 }}>
@@ -389,8 +634,9 @@ export default function App() {
           <section className="card">
             <h2>Export</h2>
             <p className="hint">
-              A single self-contained HTML file — no scripts, no external styles. The organiser can open it
-              offline, print it, or forward it without needing this tool.
+              The share page carries the brand theme and the crossing-time distribution chart — put it on
+              Drive or a web host and send the organiser the link. The print report is the same content
+              ink-on-white for paper and email. Both are single self-contained files that open offline.
             </p>
             <div className="folder-list" style={{ marginBottom: '1rem' }}>
               {REPORT_SECTIONS.map((section) => (
@@ -424,20 +670,24 @@ export default function App() {
               </label>
               <button
                 onClick={() => {
-                  const name = raceName.trim() || kml?.fileName.replace(/\.kml$/i, '') || 'Race';
-                  const html = buildReportHtml(result, {
-                    raceName: name,
-                    sections: reportSections,
-                    rules: DEFAULT_AMENITY_RULES,
-                    overrides: amenityOverrides,
-                    sourceFileName: kml?.fileName,
-                    resultsFileName: results?.fileName,
-                  });
-                  downloadReport(html, `${name.replace(/[^\w\d -]+/g, '').trim() || 'race'} - CP operations.html`);
+                  const { html, fileName } = renderReport(result, 'dark');
+                  downloadReport(html, fileName);
                 }}
                 disabled={!Object.values(reportSections).some(Boolean)}
+                title="Brand theme with the distribution chart — for viewing on screen or hosting behind a link"
               >
-                Download report
+                Download share page
+              </button>
+              <button
+                className="secondary"
+                onClick={() => {
+                  const { html, fileName } = renderReport(result, 'light');
+                  downloadReport(html, fileName);
+                }}
+                disabled={!Object.values(reportSections).some(Boolean)}
+                title="Ink-on-white document for printing or emailing"
+              >
+                Download print report
               </button>
               {!Object.values(reportSections).some(Boolean) && (
                 <span className="hint" style={{ margin: 0 }}>
@@ -496,6 +746,13 @@ export default function App() {
                   current ? { ...current, stations: applyStationOrder(current.stations, order) } : current
                 );
               }}
+              notes={stationNotes}
+              onNoteChange={(mapName, note) => {
+                const next = { ...stationNotes };
+                if (note) next[mapName] = note;
+                else delete next[mapName];
+                setStationNotes(next);
+              }}
               onRemove={(mapName) => {
                 const next = [...removedStations, mapName];
                 setRemovedStations(next);
@@ -539,6 +796,7 @@ export default function App() {
               rules={DEFAULT_AMENITY_RULES}
               overrides={amenityOverrides}
               onOverridesChange={setAmenityOverrides}
+              notes={stationNotes}
               onRemovePass={(key) => {
                 const next = [...removedPasses, key];
                 setRemovedPasses(next);
@@ -553,7 +811,7 @@ export default function App() {
               Every point each distance runs through, with the kilometre it falls at on that distance's own
               route and the hours the position is staffed.
             </p>
-            <TimingMatrix result={result} />
+            <TimingMatrix result={result} notes={stationNotes} />
           </section>
 
           <section className="card">

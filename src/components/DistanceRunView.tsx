@@ -17,6 +17,7 @@ interface Props {
   onOverridesChange: (next: Record<string, Partial<AmenitySet>>) => void;
   /** Removes a single course pass — see `passKey`. */
   onRemovePass?: (key: string) => void;
+  notes?: Record<string, string>;
 }
 
 /**
@@ -74,7 +75,7 @@ function buildRun(result: PipelineResult, courseName: string): Stop[] {
   return stops;
 }
 
-export function DistanceRunView({ result, rules, overrides, onOverridesChange, onRemovePass }: Props) {
+export function DistanceRunView({ result, rules, overrides, onOverridesChange, onRemovePass, notes }: Props) {
   const courses = [...result.courses]
     .filter((c) => result.courseOrder.includes(c.name))
     .sort((a, b) => b.totalKm - a.totalKm);
@@ -149,6 +150,9 @@ export function DistanceRunView({ result, rules, overrides, onOverridesChange, o
                       <span className="colocated">
                         pass {stop.passIndex + 1} of {stop.passCount}
                       </span>
+                    )}
+                    {notes?.[stop.station.mapName] && (
+                      <span className="colocated note">{notes[stop.station.mapName]}</span>
                     )}
                   </td>
                   <td className="num">{stop.kmFromStart.toFixed(1)}</td>

@@ -4,6 +4,7 @@ import { parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
 
 interface Props {
   result: PipelineResult;
+  notes?: Record<string, string>;
 }
 
 function hm(clock: string): string {
@@ -34,7 +35,7 @@ function cellFor(station: PipelineStation, courseName: string): Cell {
   };
 }
 
-export function TimingMatrix({ result }: Props) {
+export function TimingMatrix({ result, notes }: Props) {
   const courses = orderedCourses(result);
   const startByCourse = new Map(result.distanceInputs.map((d) => [d.courseName, d.startTimeClock]));
 
@@ -79,6 +80,7 @@ export function TimingMatrix({ result }: Props) {
                   station.sourceNames.join(', ') !== station.schedule.name && (
                     <span className="colocated">{station.sourceNames.join(', ')}</span>
                   )}
+                {notes?.[station.mapName] && <span className="colocated note">{notes[station.mapName]}</span>}
               </td>
               <td className="km">
                 {hm(station.schedule.openClockTime)}–{hm(station.schedule.closeClockTime)}

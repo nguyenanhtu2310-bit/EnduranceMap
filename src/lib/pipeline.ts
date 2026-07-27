@@ -1,4 +1,5 @@
 import { parseKml, type KmlParseOptions } from './kml';
+import { parseClockTimeToSeconds } from './time';
 import {
   buildCourses,
   groupCoincidentPlacemarks,
@@ -37,6 +38,13 @@ import {
 /** Pace and field-size input for one race distance. */
 export interface DistanceInput extends PaceBand, StartField {
   courseName: string;
+  /**
+   * The finish cut-off the organizer has set for this distance, "HH:MM". Optional —
+   * when blank the tool proposes one from the modelled tail instead. Applied to the
+   * finish-area pass only: a race's official COT governs its finish line, and the
+   * intermediate points get their own proposals.
+   */
+  organizerCutoffClock?: string;
   /**
    * Real finishers from a previous race. When present these drive the arrival times and
    * the pace band is only shown for reference; the band is a three-point approximation
@@ -333,14 +341,16 @@ export function runPipeline(
       if (!input) continue;
       if (excludedPasses.has(passKey(stationName, snap.courseName, snap.passIndex))) continue;
 
-      // Read from the map only; cut-offs are proposed by the tool, not typed in.
-      const officialCutoffClock = findCutoffForCrossing(
-        group,
-        snap,
-        courses,
-        toleranceKm,
-        cutoffPassToleranceKm
-      );
+      // The organizer's finish COT governs the finish-area pass of its own distance;
+      // everything else falls back to whatever the map's placemark names carry.
+      const course = courses.find((c) => c.name === snap.courseName);
+      const atFinish = !!course && course.totalKm > 0 && snap.kmFromStart >= course.totalKm * FINISH_AREA_FRACTION;
+      const organizerCot =
+        atFinish && input.organizerCutoffClock && parseClockTimeToSeconds(input.organizerCutoffClock) !== null
+          ? input.organizerCutoffClock
+          : undefined;
+      const officialCutoffClock =
+        organizerCot ?? findCutoffForCrossing(group, snap, courses, toleranceKm, cutoffPassToleranceKm);
 
       const usesRealField = !!input.samples && input.samples.length > 0;
 

@@ -27,6 +27,17 @@ export function CutoffTable({ result, graceMinutes }: Props) {
 
   const tighter = rows.filter((r) => r.mapIsTighter).length;
 
+  // The time a CP actually works to is the LATEST proposal across the distances through
+  // it — usually the slowest arrival of the longest race. Highlight it, or a table of
+  // white numbers hides the one that matters.
+  const finalByStation = new Map<string, number>();
+  for (const row of rows) {
+    const seconds = parseClockTimeToSeconds(row.suggestedClockTime) ?? -1;
+    if (seconds > (finalByStation.get(row.stationName) ?? -1)) finalByStation.set(row.stationName, seconds);
+  }
+  const isFinal = (row: (typeof rows)[number]) =>
+    parseClockTimeToSeconds(row.suggestedClockTime) === finalByStation.get(row.stationName);
+
   return (
     <>
       <p className="hint">
@@ -51,7 +62,7 @@ export function CutoffTable({ result, graceMinutes }: Props) {
               <th className="num">Slowest arrival</th>
               <th className="num">Proposed cut-off</th>
               <th className="num">Margin</th>
-              <th className="num">On map</th>
+              <th className="num">Provided</th>
             </tr>
           </thead>
           <tbody>
@@ -65,8 +76,9 @@ export function CutoffTable({ result, graceMinutes }: Props) {
                   <td>{row.courseName}</td>
                   <td className="num">{row.kmFromStart.toFixed(1)}</td>
                   <td className="num muted">{row.modeledLastArrivalClockTime.slice(0, 5)}</td>
-                  <td className="num">
+                  <td className={isFinal(row) ? 'num cot-final' : 'num muted'}>
                     <strong>{hm(row.suggestedClockTime)}</strong>
+                    {isFinal(row) && <span className="cot-final-tag">final</span>}
                   </td>
                   <td className="num muted">{margin === null ? '—' : `+${margin} min`}</td>
                   <td className="num">
@@ -90,9 +102,11 @@ export function CutoffTable({ result, graceMinutes }: Props) {
         </table>
       </div>
       <p className="hint" style={{ margin: '0.85rem 0 0' }}>
+        The highlighted time is the final cut-off for that CP — the latest across every distance through it.
         “Slowest arrival” is the P99 of the field driving this plan — the tail, not the absolute last runner.
-        “On map” is any cut-off already written into the placemark names, shown for comparison only; it does
-        not change the proposal.
+        “Provided” is any cut-off already given — typed into Race details or written on the map's placemark
+        names. It is shown for comparison and governs that distance's schedule, but never changes the
+        proposal.
       </p>
     </>
   );
