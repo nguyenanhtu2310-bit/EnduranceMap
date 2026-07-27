@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { CrossingDistribution } from './components/CrossingDistribution';
 import { CutoffTable } from './components/CutoffTable';
 import { DistanceRunView } from './components/DistanceRunView';
-import { DEFAULT_AMENITY_RULES, type AmenitySet } from './lib/amenities';
+import { DEFAULT_AMENITY_RULES, migrateAmenityOverrides, type AmenitySet } from './lib/amenities';
 import {
   ALL_REPORT_SECTIONS,
   REPORT_SECTIONS,
@@ -311,6 +311,7 @@ export default function App() {
       }
       const saved = data.snapshot as Partial<RaceSnapshot>;
       const snap: RaceSnapshot = { ...blankSnapshot(), ...saved, result: null, courses: [], folders: [] };
+      snap.amenityOverrides = migrateAmenityOverrides(snap.amenityOverrides);
       // Courses and folders are re-derived from the saved KML text rather than trusted
       // from the file, so a hand-edited file cannot desync the two.
       if (snap.kml) {

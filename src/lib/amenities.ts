@@ -17,7 +17,7 @@ export const AMENITIES: Amenity[] = [
   { key: 'electrolyte', label: 'Electrolyte', icon: '⚡', group: 'station' },
   { key: 'banana', label: 'Banana', icon: '🍌', group: 'station' },
   { key: 'watermelon', label: 'Watermelon', icon: '🍉', group: 'station' },
-  { key: 'cdTank', label: 'CD tank', icon: '🪣', group: 'station' },
+  { key: 'iceBucket', label: 'Ice bucket', icon: '🧊', group: 'station' },
   { key: 'portaToilet', label: 'Porta toilet', icon: '🚻', group: 'station' },
   { key: 'medical', label: 'Medical', icon: '➕', group: 'medical' },
   { key: 'ambulance', label: 'Ambulance', icon: '🚑', group: 'medical' },
@@ -39,7 +39,7 @@ const on = (...keys: string[]): AmenitySet => Object.fromEntries(keys.map((k) =>
 export const DEFAULT_AMENITY_RULES: AmenityRules = {
   Low: on('water', 'electrolyte', 'portaToilet'),
   Medium: on('water', 'electrolyte', 'portaToilet', 'banana', 'watermelon'),
-  High: on('water', 'electrolyte', 'portaToilet', 'banana', 'watermelon', 'cdTank', 'medical', 'ambulance'),
+  High: on('water', 'electrolyte', 'portaToilet', 'banana', 'watermelon', 'iceBucket', 'medical', 'ambulance'),
 };
 
 /**
@@ -59,6 +59,32 @@ export function resolveAmenities(
     resolved[amenity.key] = override !== undefined ? override : base[amenity.key] === true;
   }
   return resolved;
+}
+
+/**
+ * Amenity keys that have been renamed since a race file could have been saved with
+ * them. Hand edits are stored per amenity key, so without this a rename would silently
+ * drop the operator's decisions when an older file is reopened.
+ */
+const RENAMED_AMENITY_KEYS: Record<string, string> = {
+  cdTank: 'iceBucket',
+};
+
+/** Brings a saved override set onto the current amenity keys. */
+export function migrateAmenityOverrides(
+  overrides: Record<string, Partial<AmenitySet>>
+): Record<string, Partial<AmenitySet>> {
+  const migrated: Record<string, Partial<AmenitySet>> = {};
+
+  for (const [station, set] of Object.entries(overrides ?? {})) {
+    const next: Partial<AmenitySet> = {};
+    for (const [key, value] of Object.entries(set ?? {})) {
+      next[RENAMED_AMENITY_KEYS[key] ?? key] = value;
+    }
+    migrated[station] = next;
+  }
+
+  return migrated;
 }
 
 /** Column totals for the footer row of the operations sheet. */

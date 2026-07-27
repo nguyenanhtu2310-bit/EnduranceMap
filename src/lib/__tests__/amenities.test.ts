@@ -160,3 +160,23 @@ describe('report sections', () => {
     expect(html).not.toContain('<Trail>');
   });
 });
+
+describe('migrateAmenityOverrides', () => {
+  it('carries a renamed key onto its replacement so saved edits survive', async () => {
+    const { migrateAmenityOverrides } = await import('../amenities');
+    const migrated = migrateAmenityOverrides({ 'CP5 Bán Dọi': { cdTank: true, water: false } });
+    expect(migrated['CP5 Bán Dọi']).toEqual({ iceBucket: true, water: false });
+  });
+
+  it('leaves current keys untouched', async () => {
+    const { migrateAmenityOverrides } = await import('../amenities');
+    const set = { 'CP1': { iceBucket: false, medical: true } };
+    expect(migrateAmenityOverrides(set)).toEqual(set);
+  });
+
+  it('survives an empty or missing override set', async () => {
+    const { migrateAmenityOverrides } = await import('../amenities');
+    expect(migrateAmenityOverrides({})).toEqual({});
+    expect(migrateAmenityOverrides(undefined as never)).toEqual({});
+  });
+});
