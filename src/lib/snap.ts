@@ -58,11 +58,16 @@ export function matchCourseByDistance(
   raceDistanceKm: number,
   toleranceKm: number = DEFAULT_COURSE_DISTANCE_MATCH_TOLERANCE_KM
 ): Course | undefined {
+  // Advertised distances are marketing as much as measurement — a trail "70K" routinely
+  // measures 66 km, because a rounder number sells better. A flat tolerance that suits a
+  // road 10K would reject that, so it also scales with the distance being matched.
+  const allowedKm = Math.max(toleranceKm, raceDistanceKm * 0.08);
+
   let best: Course | undefined;
   let bestDelta = Infinity;
   for (const course of courses) {
     const delta = Math.abs(course.totalKm - raceDistanceKm);
-    if (delta <= toleranceKm && delta < bestDelta) {
+    if (delta <= allowedKm && delta < bestDelta) {
       best = course;
       bestDelta = delta;
     }

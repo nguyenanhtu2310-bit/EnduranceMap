@@ -22,9 +22,18 @@ function formatHm(seconds: number): string {
 }
 
 const ROW_HEIGHT = 46;
-const LABEL_WIDTH = 116;
 const AXIS_HEIGHT = 26;
 const RIGHT_PAD = 12;
+const LABEL_GUTTER = 10;
+const MIN_LABEL_WIDTH = 96;
+const MAX_LABEL_WIDTH = 210;
+/** Approximate advance of the 12px label face; SVG text cannot wrap or ellipsize itself. */
+const LABEL_CHAR_PX = 6.2;
+
+function truncateToWidth(text: string, widthPx: number): string {
+  const maxChars = Math.max(4, Math.floor(widthPx / LABEL_CHAR_PX));
+  return text.length <= maxChars ? text : `${text.slice(0, maxChars - 1)}…`;
+}
 
 interface HoverState {
   station: string;
@@ -58,8 +67,17 @@ export function CrossingDistribution({ result }: Props) {
     return <p className="hint">No modeled arrivals to plot.</p>;
   }
 
+  // Sized to the longest name so labels never run into the plot, but capped so a
+  // verbose timing map cannot squeeze the chart out of the card.
+  const longestLabel = Math.max(0, ...stations.map((s) => s.schedule.name.length));
+  const labelWidth = Math.min(
+    MAX_LABEL_WIDTH,
+    Math.max(MIN_LABEL_WIDTH, Math.ceil(longestLabel * LABEL_CHAR_PX) + LABEL_GUTTER)
+  );
+  const labelTextWidth = labelWidth - LABEL_GUTTER;
+
   const plotWidth = Math.max(560, binCount * 7);
-  const chartWidth = LABEL_WIDTH + plotWidth + RIGHT_PAD;
+  const chartWidth = labelWidth + plotWidth + RIGHT_PAD;
   const chartHeight = stations.length * ROW_HEIGHT + AXIS_HEIGHT;
 
   const spanSeconds = timeRangeSeconds.end - timeRangeSeconds.start || 1;
@@ -68,7 +86,7 @@ export function CrossingDistribution({ result }: Props) {
   const barWidth = Math.max(1, binWidth - 2);
 
   const xForSeconds = (seconds: number) =>
-    LABEL_WIDTH + ((seconds - timeRangeSeconds.start) / spanSeconds) * plotWidth;
+    labelWidth + ((seconds - timeRangeSeconds.start) / spanSeconds) * plotWidth;
 
   // Hour ticks across the shared axis.
   const ticks: number[] = [];
@@ -154,12 +172,13 @@ export function CrossingDistribution({ result }: Props) {
               return (
                 <g key={station.schedule.name}>
                   <text x={0} y={rowTop + ROW_HEIGHT / 2} className="row-label" dominantBaseline="middle">
-                    {station.schedule.name}
+                    <title>{station.schedule.name}</title>
+                    {truncateToWidth(station.schedule.name, labelTextWidth)}
                   </text>
 
                   <line
-                    x1={LABEL_WIDTH}
-                    x2={LABEL_WIDTH + plotWidth}
+                    x1={labelWidth}
+                    x2={labelWidth + plotWidth}
                     y1={baseline}
                     y2={baseline}
                     className="baseline"
@@ -167,7 +186,7 @@ export function CrossingDistribution({ result }: Props) {
 
                   {station.distribution.map((bin, binIndex) => {
                     if (bin.total === 0) return null;
-                    const x = LABEL_WIDTH + binIndex * binWidth;
+                    const x = labelWidth + binIndex * binWidth;
                     const isPeak = binIndex === station.peakBinIndex;
                     let yCursor = baseline;
 

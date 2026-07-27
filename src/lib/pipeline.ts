@@ -29,6 +29,7 @@ import {
   type StationSchedule,
 } from './schedule';
 import { DEFAULT_HISTOGRAM_BIN_MINUTES } from './config';
+import { parseClockTimeToSeconds } from './time';
 import {
   DEFAULT_COURSE_DISTANCE_MATCH_TOLERANCE_KM,
   DEFAULT_CUTOFF_PASS_MATCH_TOLERANCE_KM,
@@ -57,11 +58,21 @@ export const DEFAULT_STATION_FOLDERS = [
 /** Folder whose unlabeled placemarks are course markers rather than staffed positions. */
 const CUTOFF_FOLDER = 'CUT-OFF TIME';
 
+/** Fraction of a course beyond which a crossing counts as finish-line furniture. */
+const FINISH_AREA_FRACTION = 0.97;
+
 export interface PipelineOptions extends KmlParseOptions, SnapOptions, ScheduleOptions {
   /** Folder names (case-insensitive) whose points are treated as staffed stations. */
   stationFolders?: string[];
   /** Placemark names to exclude from the operational output entirely. */
   excludePlacemarkNames?: string[];
+  /**
+   * Cut-offs supplied by the organiser, keyed by station name then course name. These
+   * are authoritative: a time entered here overrides whatever the map's placemark names
+   * happen to say, because the organiser's sheet is the source of truth and the map is
+   * a transcription of it.
+   */
+  manualCutoffs?: Record<string, Record<string, string>>;
   courseDistanceToleranceKm?: number;
   /** How near a cut-off's labelled km must be to a pass for it to govern that pass. */
   cutoffPassToleranceKm?: number;
@@ -88,6 +99,12 @@ export interface StationCrossingDetail {
 
 export interface PipelineStation {
   schedule: StationSchedule;
+  /**
+   * Name derived from the map, before any sequential renumbering. Stable regardless of
+   * how the station is labelled on screen, so manual cut-offs keyed to it survive
+   * turning numbering on and off.
+   */
+  mapName: string;
   folder: string;
   /** Arrivals binned on the shared time grid, split by distance. */
   distribution: StackedBin[];
@@ -273,7 +290,12 @@ export function runPipeline(
       const input = inputByCourse.get(snap.courseName);
       if (!input) continue;
 
-      const officialCutoffClock = findCutoffForCrossing(group, snap, courses, toleranceKm, cutoffPassToleranceKm);
+      // An organiser-entered time wins over anything parsed from the map.
+      const manual = options.manualCutoffs?.[stationName]?.[snap.courseName]?.trim();
+      const officialCutoffClock =
+        manual && parseClockTimeToSeconds(manual) !== null
+          ? manual
+          : findCutoffForCrossing(group, snap, courses, toleranceKm, cutoffPassToleranceKm);
 
       const usesRealField = !!input.samples && input.samples.length > 0;
 
@@ -306,6 +328,7 @@ export function runPipeline(
 
     stations.push({
       schedule: buildStationSchedule(stationName, crossings, options),
+      mapName: stationName,
       folder,
       // Filled in below, once the shared time grid is known.
       distribution: [],
@@ -316,11 +339,41 @@ export function runPipeline(
     });
   }
 
-  stations.sort((a, b) => {
-    const aKm = Math.min(...a.crossings.map((c) => c.kmFromStart));
-    const bKm = Math.min(...b.crossings.map((c) => c.kmFromStart));
-    return aKm - bKm;
-  });
+  /**
+   * Orders stations down the route. Two things make the naive "smallest kilometre
+   * anywhere" rule wrong on a real race:
+   *
+   *  - Distances of different lengths share points. A pre-finish mat is 4.6 km into the
+   *    5K and 65.6 km into the 70K; ranking it by 4.6 puts the finish area above the
+   *    mid-course checkpoints. Positions are therefore compared as a fraction of the
+   *    course they sit on, so "most of the way round" ranks alike whichever distance it
+   *    belongs to.
+   *  - A finish line sits metres from a start, so on an out-and-back it is crossed at
+   *    both ~0 km and the full distance. Ranking it by first crossing puts the finish at
+   *    the top of the table.
+   *
+   * Points are therefore ranked by where runners FIRST meet them, which keeps an
+   * out-and-back reading in the order it is run, except for points whose last crossing
+   * is essentially at the course end — those are finish-line furniture and belong last.
+   */
+  const byLength = [...courses].sort((a, b) => b.totalKm - a.totalKm);
+  const longestKm = byLength[0]?.totalKm ?? 1;
+
+  const orderKey = (station: PipelineStation): number => {
+    for (const course of byLength) {
+      const passes = station.crossings.filter((c) => c.courseName === course.name);
+      if (passes.length === 0 || course.totalKm <= 0) continue;
+
+      const firstFraction = Math.min(...passes.map((p) => p.kmFromStart)) / course.totalKm;
+      const lastFraction = Math.max(...passes.map((p) => p.kmFromStart)) / course.totalKm;
+      const fraction = lastFraction >= FINISH_AREA_FRACTION ? lastFraction : firstFraction;
+
+      return fraction * longestKm;
+    }
+    return Infinity;
+  };
+
+  stations.sort((a, b) => orderKey(a) - orderKey(b));
 
   if (options.renumberStationsAs) {
     const prefix = options.renumberStationsAs;

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { CrossingDistribution } from './components/CrossingDistribution';
+import { CutoffEntry } from './components/CutoffEntry';
 import { CutoffTable } from './components/CutoffTable';
 import { FolderPicker } from './components/FolderPicker';
 import { KmlDropzone } from './components/KmlDropzone';
@@ -115,6 +116,7 @@ export default function App() {
   const [results, setResults] = useState<{ fileName: string; profiles: ContestProfile[] } | null>(null);
   const [contestMapping, setContestMapping] = useState<Record<string, string>>({});
   const [courses, setCourses] = useState<Course[]>([]);
+  const [manualCutoffs, setManualCutoffs] = useState<Record<string, Record<string, string>>>({});
 
   function loadKml(text: string, fileName: string) {
     setError(null);
@@ -227,6 +229,7 @@ export default function App() {
       setResult(
         runPipeline(kml.text, inputs, {
           stationFolders: selectedFolders,
+          manualCutoffs,
           renumberStationsAs: renumber ? renumberPrefix.trim() || 'Station' : undefined,
           setupBufferMinutes: settings.setupBufferMinutes,
           teardownBufferMinutes: settings.teardownBufferMinutes,
@@ -395,6 +398,21 @@ export default function App() {
           <section className="card">
             <h2>Cut-off times</h2>
             <CutoffTable result={result} />
+          </section>
+
+          <section className="card">
+            <span className="kicker">From the organiser</span>
+            <h2>Enter official cut-offs</h2>
+            <p className="hint">
+              Type the times the organiser has set. Anything entered here replaces what the map's placemark
+              names say, then re-run the calculation.
+            </p>
+            <CutoffEntry
+              stations={result.stations}
+              courses={courses}
+              value={manualCutoffs}
+              onChange={setManualCutoffs}
+            />
           </section>
 
           {result.skipped.length > 0 && (

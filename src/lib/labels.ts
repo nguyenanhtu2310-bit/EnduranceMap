@@ -187,6 +187,9 @@ export function parsePlacemarkLabel(rawName: string): ParsedLabel {
   }
 
   let cleanName = stripKmTokens(outside)
+    // Timing maps often prefix a point with the system that reads it ("Decoder_ CP1",
+    // "PTB_ CP2"). That is equipment routing, not the name of the position.
+    .replace(/^\s*[A-Za-z][A-Za-z0-9]*_\s*/, '')
     .replace(/\s{2,}/g, ' ')
     // Separators left dangling by token removal — at the start, or run up against
     // punctuation. A separator between two words is deliberate ("S3 & S4") and stays.

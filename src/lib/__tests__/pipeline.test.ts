@@ -39,11 +39,21 @@ describe('runPipeline', () => {
     expect(result.stations.length).toBeGreaterThan(0);
   });
 
-  it('orders stations by their first crossing along the course', () => {
-    const firstKms = result.stations.map((s) => Math.min(...s.crossings.map((c) => c.kmFromStart)));
-    for (let i = 1; i < firstKms.length; i++) {
-      expect(firstKms[i]).toBeGreaterThanOrEqual(firstKms[i - 1]);
-    }
+  it('orders mid-course stations by where runners first meet them', () => {
+    // On the out-and-back Half these sit at 2.5, 5.0, 7.5 and 9.0 km outbound.
+    const order = result.stations.map((s) => s.schedule.name);
+    const seq = ['COT 3', 'COT 1', 'COT 2', 'COT 4'].map((n) =>
+      order.findIndex((name) => name.includes(n))
+    );
+    expect(seq.every((i) => i >= 0)).toBe(true);
+    for (let i = 1; i < seq.length; i++) expect(seq[i]).toBeGreaterThan(seq[i - 1]);
+  });
+
+  it('sorts a point at the finish line last, even though it is also crossed at ~0 km', () => {
+    // "Start" sits on the start/finish line, so the Half crosses it at both 0 and 21.1 km.
+    const order = result.stations.map((s) => s.schedule.name);
+    const startIndex = order.findIndex((n) => n.includes('Start'));
+    expect(startIndex).toBe(order.length - 1);
   });
 
   it('opens a station before its first arrival and closes it after the last', () => {

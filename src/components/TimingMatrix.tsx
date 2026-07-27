@@ -19,24 +19,6 @@ function orderedCourses(result: PipelineResult): Course[] {
     .sort((a, b) => b.totalKm - a.totalKm);
 }
 
-/**
- * Position used to order the rows. Rows are read down the longest course, so a point
- * only the marathon passes still sits at its marathon kilometre rather than jumping the
- * queue on a shorter distance's smaller number.
- *
- * Ordering uses the LAST kilometre the course passes the point, not the first. A finish
- * line typically sits metres from the start, so on an out-and-back it is crossed at both
- * ~0 km and the full distance; ordering by first passage would list the finish at the
- * top of the table. Single-pass points are unaffected — first and last are the same.
- */
-function sortKey(station: PipelineStation, courses: Course[]): number {
-  for (const course of courses) {
-    const passes = station.crossings.filter((c) => c.courseName === course.name);
-    if (passes.length > 0) return Math.max(...passes.map((p) => p.kmFromStart));
-  }
-  return Infinity;
-}
-
 interface Cell {
   kms: number[];
   cutoffs: string[];
@@ -56,9 +38,8 @@ export function TimingMatrix({ result }: Props) {
   const courses = orderedCourses(result);
   const startByCourse = new Map(result.distanceInputs.map((d) => [d.courseName, d.startTimeClock]));
 
-  const rows = result.stations
-    .slice()
-    .sort((a, b) => sortKey(a, courses) - sortKey(b, courses));
+  // Already ordered down the route by the pipeline, so every view agrees.
+  const rows = result.stations;
 
   if (courses.length === 0 || rows.length === 0) {
     return <p className="hint">No timing points to tabulate.</p>;
