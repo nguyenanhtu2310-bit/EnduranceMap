@@ -747,3 +747,20 @@ tr.total-row td {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
+
+button.row-remove {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  border-color: transparent;
+  color: var(--color-faint);
+  background: transparent;
+}
+
+button.row-remove:hover {
+  border-color: color-mix(in srgb, var(--color-danger) 50%, transparent);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}

@@ -7,13 +7,15 @@ interface Props {
   showSourceNames?: boolean;
   /** Supplying this makes rows draggable; receives the new order as map names. */
   onReorder?: (mapNames: string[]) => void;
+  /** Supplying this adds a per-row remove control; receives the station's map name. */
+  onRemove?: (mapName: string) => void;
 }
 
 function formatHm(clock: string): string {
   return clock.slice(0, 5);
 }
 
-export function StationScheduleTable({ stations, showSourceNames = true, onReorder }: Props) {
+export function StationScheduleTable({ stations, showSourceNames = true, onReorder, onRemove }: Props) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
 
@@ -43,6 +45,7 @@ export function StationScheduleTable({ stations, showSourceNames = true, onReord
             <th className="num">Close</th>
             <th className="num">Peak /hr</th>
             <th>Activity</th>
+            {onRemove && <th aria-label="Remove" />}
           </tr>
         </thead>
         <tbody>
@@ -112,6 +115,18 @@ export function StationScheduleTable({ stations, showSourceNames = true, onReord
               <td>
                 <span className={`tag ${station.schedule.activityLevel}`}>{station.schedule.activityLevel}</span>
               </td>
+              {onRemove && (
+                <td>
+                  <button
+                    type="button"
+                    className="row-remove"
+                    title={`Remove ${station.schedule.name} from every section`}
+                    onClick={() => onRemove(station.mapName)}
+                  >
+                    ×
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

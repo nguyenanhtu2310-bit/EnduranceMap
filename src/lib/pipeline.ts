@@ -67,6 +67,13 @@ export interface PipelineOptions extends KmlParseOptions, SnapOptions, ScheduleO
   /** Placemark names to exclude from the operational output entirely. */
   excludePlacemarkNames?: string[];
   /**
+   * Stations to leave out, by map name. Distinct from `excludePlacemarkNames`: this
+   * drops a position after grouping, so removing a merged station takes all of its
+   * placemarks with it. Applied before numbering, so the remaining stations number
+   * consecutively rather than leaving a gap where the removed one was.
+   */
+  excludeStations?: string[];
+  /**
    * Cut-offs supplied by the organiser, keyed by station name then course name. These
    * are authoritative: a time entered here overrides whatever the map's placemark names
    * happen to say, because the organiser's sheet is the source of truth and the map is
@@ -232,6 +239,7 @@ export function runPipeline(
 ): PipelineResult {
   const stationFolders = (options.stationFolders ?? DEFAULT_STATION_FOLDERS).map(normalize);
   const excluded = (options.excludePlacemarkNames ?? []).map(normalize);
+  const excludedStations = new Set(options.excludeStations ?? []);
   const toleranceKm = options.courseDistanceToleranceKm ?? DEFAULT_COURSE_DISTANCE_MATCH_TOLERANCE_KM;
   const cutoffPassToleranceKm = options.cutoffPassToleranceKm ?? DEFAULT_CUTOFF_PASS_MATCH_TOLERANCE_KM;
   const sampleSize = options.paceModelSampleSize ?? 200;
@@ -271,6 +279,11 @@ export function runPipeline(
     // The station is named for the placemarks the user actually asked to schedule;
     // anything co-located from another folder is reported separately.
     const stationName = Array.from(new Set(selectedMembers.map((m) => m.label.cleanName || m.name))).join(' / ');
+
+    // Removed by the operator — a position that exists on the map but is not being run
+    // this year. Dropped silently rather than reported as skipped, since it is a
+    // deliberate choice rather than something the data could not resolve.
+    if (excludedStations.has(stationName)) continue;
 
     // Data-quality warnings are only raised for placemarks that actually bear on a
     // station in the schedule, so narrowing the folder selection narrows the noise.

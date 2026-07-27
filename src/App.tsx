@@ -4,7 +4,13 @@ import { CutoffEntry } from './components/CutoffEntry';
 import { CutoffTable } from './components/CutoffTable';
 import { DistanceRunView } from './components/DistanceRunView';
 import { DEFAULT_AMENITY_RULES, type AmenitySet } from './lib/amenities';
-import { buildReportHtml, downloadReport } from './lib/report';
+import {
+  ALL_REPORT_SECTIONS,
+  REPORT_SECTIONS,
+  buildReportHtml,
+  downloadReport,
+  type ReportSections,
+} from './lib/report';
 import { FolderPicker } from './components/FolderPicker';
 import { KmlDropzone } from './components/KmlDropzone';
 import { PaceBandForm, type DistanceFormRow } from './components/PaceBandForm';
@@ -124,6 +130,8 @@ export default function App() {
   const [stationOrder, setStationOrder] = useState<string[]>([]);
   const [amenityOverrides, setAmenityOverrides] = useState<Record<string, Partial<AmenitySet>>>({});
   const [raceName, setRaceName] = useState('');
+  const [removedStations, setRemovedStations] = useState<string[]>([]);
+  const [reportSections, setReportSections] = useState<ReportSections>(ALL_REPORT_SECTIONS);
 
   function loadKml(text: string, fileName: string) {
     setError(null);
@@ -225,8 +233,9 @@ export default function App() {
     applyProfilesToRows(parsed.profiles, mapping);
   }
 
-  function calculate() {
+  function calculate(removedOverride?: string[]) {
     if (!kml) return;
+    const excludeStations = removedOverride ?? removedStations;
     setError(null);
     try {
       const samplesByCourse = new Map<string, ContestProfile['samples']>();
@@ -248,6 +257,7 @@ export default function App() {
 
       const computed = runPipeline(kml.text, inputs, {
           stationFolders: selectedFolders,
+          excludeStations,
           manualCutoffs,
           renumberStationsAs: renumber ? renumberPrefix.trim() || 'Station' : undefined,
           setupBufferMinutes: settings.setupBufferMinutes,
@@ -353,7 +363,7 @@ export default function App() {
           </section>
 
           <div className="actions" style={{ marginBottom: '1.75rem' }}>
-            <button onClick={calculate} disabled={invalidRows.length > 0 || selectedFolders.length === 0}>
+            <button onClick={() => calculate()} disabled={invalidRows.length > 0 || selectedFolders.length === 0}>
               Calculate schedule
             </button>
             {selectedFolders.length === 0 && (
@@ -379,6 +389,25 @@ export default function App() {
               A single self-contained HTML file — no scripts, no external styles. The organiser can open it
               offline, print it, or forward it without needing this tool.
             </p>
+            <div className="folder-list" style={{ marginBottom: '1rem' }}>
+              {REPORT_SECTIONS.map((section) => (
+                <label
+                  key={section.key}
+                  className={reportSections[section.key] ? 'folder-item on' : 'folder-item'}
+                  title={section.hint}
+                >
+                  <input
+                    type="checkbox"
+                    checked={reportSections[section.key]}
+                    onChange={(e) =>
+                      setReportSections({ ...reportSections, [section.key]: e.target.checked })
+                    }
+                  />
+                  <span className="folder-name">{section.label}</span>
+                </label>
+              ))}
+            </div>
+
             <div className="actions">
               <label className="field" style={{ margin: 0, flex: '1 1 260px' }}>
                 Race name
@@ -395,6 +424,7 @@ export default function App() {
                   const name = raceName.trim() || kml?.fileName.replace(/\.kml$/i, '') || 'Race';
                   const html = buildReportHtml(result, {
                     raceName: name,
+                    sections: reportSections,
                     rules: DEFAULT_AMENITY_RULES,
                     overrides: amenityOverrides,
                     sourceFileName: kml?.fileName,
@@ -402,9 +432,15 @@ export default function App() {
                   });
                   downloadReport(html, `${name.replace(/[^\w\d -]+/g, '').trim() || 'race'} - CP operations.html`);
                 }}
+                disabled={!Object.values(reportSections).some(Boolean)}
               >
                 Download report
               </button>
+              {!Object.values(reportSections).some(Boolean) && (
+                <span className="hint" style={{ margin: 0 }}>
+                  Pick at least one section.
+                </span>
+              )}
             </div>
           </section>
 
@@ -427,6 +463,27 @@ export default function App() {
               the last modeled arrival plus teardown. A station shared by several distances closes on the latest
               of them.
             </p>
+            {removedStations.length > 0 && (
+              <div className="actions" style={{ marginBottom: '0.85rem' }}>
+                <span className="hint" style={{ margin: 0 }}>
+                  {removedStations.length} removed:
+                </span>
+                {removedStations.map((name) => (
+                  <button
+                    key={name}
+                    className="secondary"
+                    title="Put this station back"
+                    onClick={() => {
+                      const next = removedStations.filter((n) => n !== name);
+                      setRemovedStations(next);
+                      calculate(next);
+                    }}
+                  >
+                    {name} ↩
+                  </button>
+                ))}
+              </div>
+            )}
             <StationScheduleTable
               stations={result.stations}
               showSourceNames={renumber}
@@ -435,6 +492,11 @@ export default function App() {
                 setResult((current) =>
                   current ? { ...current, stations: applyStationOrder(current.stations, order) } : current
                 );
+              }}
+              onRemove={(mapName) => {
+                const next = [...removedStations, mapName];
+                setRemovedStations(next);
+                calculate(next);
               }}
             />
           </section>

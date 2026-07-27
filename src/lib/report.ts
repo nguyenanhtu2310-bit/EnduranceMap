@@ -2,8 +2,25 @@ import type { PipelineResult, PipelineStation } from './pipeline';
 import { parseClockTimeToSeconds, secondsToClockTime } from './time';
 import { AMENITIES, resolveAmenities, totalAmenities, type AmenityRules, type AmenitySet } from './amenities';
 
+/** Which parts of the plan to print. An organiser rarely needs all of it at once. */
+export interface ReportSections {
+  schedule: boolean;
+  perDistance: boolean;
+  cutoffs: boolean;
+}
+
+export const REPORT_SECTIONS: { key: keyof ReportSections; label: string; hint: string }[] = [
+  { key: 'schedule', label: 'Station operating schedule', hint: 'Open and close times per position' },
+  { key: 'perDistance', label: 'What each distance runs through', hint: 'Stops, gaps and amenities per race' },
+  { key: 'cutoffs', label: 'Cut-off times', hint: 'Official cut-offs against modelled arrivals' },
+];
+
+export const ALL_REPORT_SECTIONS: ReportSections = { schedule: true, perDistance: true, cutoffs: true };
+
 export interface ReportOptions {
   raceName: string;
+  /** Defaults to every section when omitted. */
+  sections?: ReportSections;
   rules: AmenityRules;
   overrides: Record<string, Partial<AmenitySet>>;
   /** Name of the source map, recorded so a printed sheet can be traced back. */
@@ -66,13 +83,14 @@ function buildRun(result: PipelineResult, courseName: string): Stop[] {
  */
 export function buildReportHtml(result: PipelineResult, options: ReportOptions): string {
   const { raceName, rules, overrides } = options;
+  const sections = options.sections ?? ALL_REPORT_SECTIONS;
   const generated = new Date().toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' });
 
   const courses = [...result.courses]
     .filter((c) => result.courseOrder.includes(c.name))
     .sort((a, b) => b.totalKm - a.totalKm);
 
-  const scheduleRows = result.stations
+  const scheduleRows = !sections.schedule ? '' : result.stations
     .map((station) => {
       const crossings = station.crossings
         .map((c) => `${esc(c.courseName)} ${c.kmFromStart.toFixed(1)}km`)
@@ -93,7 +111,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
     })
     .join('');
 
-  const perDistance = courses
+  const perDistance = !sections.perDistance ? '' : courses
     .map((course) => {
       const stops = buildRun(result, course.name);
       if (stops.length === 0) return '';
@@ -144,7 +162,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
     })
     .join('');
 
-  const cutoffRows = result.cutoffTable
+  const cutoffRows = !sections.cutoffs ? '' : result.cutoffTable
     .map(
       (row) => `<tr>
         <td>${esc(row.stationName)}</td>
@@ -199,14 +217,18 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   <p class="meta">Checkpoint operations plan &middot; generated ${esc(generated)}</p>
   <p class="meta">${sources}</p>
 
-  <h2>Station operating schedule</h2>
+  ${
+    scheduleRows
+      ? `<h2>Station operating schedule</h2>
   <table>
     <thead><tr>
       <th>Station</th><th>Crossings</th><th class="num">Open</th><th class="num">Close</th>
       <th class="num">Peak /hr</th><th>Activity</th><th></th>
     </tr></thead>
     <tbody>${scheduleRows}</tbody>
-  </table>
+  </table>`
+      : ''
+  }
 
   ${perDistance}
 

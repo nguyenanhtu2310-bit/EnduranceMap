@@ -62,3 +62,70 @@ describe('totalAmenities', () => {
     expect(Object.keys(totals)).toHaveLength(AMENITIES.length);
   });
 });
+
+describe('report sections', () => {
+  it('includes only the sections asked for', async () => {
+    const { buildReportHtml, ALL_REPORT_SECTIONS } = await import('../report');
+    const { runPipeline } = await import('../pipeline');
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+
+    const kml = readFileSync(resolve(process.cwd(), 'src/test/fixtures/sample.kml'), 'utf-8');
+    const result = runPipeline(kml, [
+      {
+        courseName: '10km',
+        startTimeClock: '05:00',
+        runnerCount: 100,
+        fastestMinPerKm: 4,
+        typicalMinPerKm: 6,
+        slowestMinPerKm: 9,
+      },
+    ]);
+
+    const base = { raceName: 'Test', rules: DEFAULT_AMENITY_RULES, overrides: {} };
+
+    const all = buildReportHtml(result, { ...base, sections: ALL_REPORT_SECTIONS });
+    expect(all).toContain('Station operating schedule');
+    expect(all).toContain('Cut-off times');
+
+    const scheduleOnly = buildReportHtml(result, {
+      ...base,
+      sections: { schedule: true, perDistance: false, cutoffs: false },
+    });
+    expect(scheduleOnly).toContain('Station operating schedule');
+    expect(scheduleOnly).not.toContain('Cut-off times');
+
+    const cutoffsOnly = buildReportHtml(result, {
+      ...base,
+      sections: { schedule: false, perDistance: false, cutoffs: true },
+    });
+    expect(cutoffsOnly).not.toContain('Station operating schedule');
+  });
+
+  it('escapes race names so a stray quote cannot break the markup', async () => {
+    const { buildReportHtml } = await import('../report');
+    const { runPipeline } = await import('../pipeline');
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+
+    const kml = readFileSync(resolve(process.cwd(), 'src/test/fixtures/sample.kml'), 'utf-8');
+    const result = runPipeline(kml, [
+      {
+        courseName: '10km',
+        startTimeClock: '05:00',
+        runnerCount: 100,
+        fastestMinPerKm: 4,
+        typicalMinPerKm: 6,
+        slowestMinPerKm: 9,
+      },
+    ]);
+
+    const html = buildReportHtml(result, {
+      raceName: 'Tam & "Đảo" <Trail>',
+      rules: DEFAULT_AMENITY_RULES,
+      overrides: {},
+    });
+    expect(html).toContain('Tam &amp; &quot;Đảo&quot; &lt;Trail&gt;');
+    expect(html).not.toContain('<Trail>');
+  });
+});
