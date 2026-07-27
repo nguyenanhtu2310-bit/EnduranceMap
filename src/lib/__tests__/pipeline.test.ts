@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseKml } from '../kml';
-import { listPlacemarkFolders, runPipeline, type DistanceInput } from '../pipeline';
+import { applyStationOrder, listPlacemarkFolders, runPipeline, type DistanceInput } from '../pipeline';
 
 function loadFixture(name: string): string {
   return readFileSync(resolve(process.cwd(), 'src/test/fixtures', name), 'utf-8');
@@ -294,5 +294,30 @@ describe('runPipeline', () => {
 
     const merged = runPipeline(withMarker, inputs);
     expect(merged.stations.some((s) => s.schedule.name.includes('MEDICAL 1'))).toBe(true);
+  });
+});
+
+describe('applyStationOrder', () => {
+  const mk = (mapName: string) => ({ mapName }) as unknown as import('../pipeline').PipelineStation;
+
+  it('reorders stations to the supplied presentation order', () => {
+    const stations = [mk('A'), mk('B'), mk('C')];
+    expect(applyStationOrder(stations, ['C', 'A', 'B']).map((s) => s.mapName)).toEqual(['C', 'A', 'B']);
+  });
+
+  it('leaves the computed order alone when nothing is specified', () => {
+    const stations = [mk('A'), mk('B')];
+    expect(applyStationOrder(stations, [])).toBe(stations);
+  });
+
+  it('keeps stations missing from the order at the end rather than dropping them', () => {
+    const stations = [mk('A'), mk('B'), mk('C')];
+    expect(applyStationOrder(stations, ['C']).map((s) => s.mapName)).toEqual(['C', 'A', 'B']);
+  });
+
+  it('does not mutate the array it was given', () => {
+    const stations = [mk('A'), mk('B')];
+    applyStationOrder(stations, ['B', 'A']);
+    expect(stations.map((s) => s.mapName)).toEqual(['A', 'B']);
   });
 });

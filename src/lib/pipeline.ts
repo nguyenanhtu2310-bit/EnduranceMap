@@ -149,6 +149,24 @@ export interface FolderSummary {
   placemarkCount: number;
 }
 
+/**
+ * Applies an operator-chosen presentation order to a set of stations. The computed
+ * course order is a good default, but the order a schedule is presented in is an
+ * editorial decision — an organiser may want the staffed positions grouped, or the
+ * finish area first. Stations missing from `order` keep their computed position at the
+ * end, so adding a folder does not silently drop rows.
+ */
+export function applyStationOrder(stations: PipelineStation[], order: string[]): PipelineStation[] {
+  if (order.length === 0) return stations;
+
+  const rank = new Map(order.map((mapName, i) => [mapName, i]));
+  return [...stations].sort((a, b) => {
+    const ra = rank.get(a.mapName) ?? Infinity;
+    const rb = rank.get(b.mapName) ?? Infinity;
+    return ra === rb ? 0 : ra - rb;
+  });
+}
+
 /** Lists the folders holding point placemarks, so the caller can choose what to schedule. */
 export function listPlacemarkFolders(placemarks: { folder: string }[]): FolderSummary[] {
   const counts = new Map<string, number>();

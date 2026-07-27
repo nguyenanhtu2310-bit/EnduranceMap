@@ -50,7 +50,7 @@ export const DEFAULT_COINCIDENT_STATION_TOLERANCE_KM = 0.03;
 export const DEFAULT_DUPLICATE_PASS_TOLERANCE_KM = 0.3;
 
 /** Minutes before the modeled P1 arrival that a station should open. */
-export const DEFAULT_SETUP_BUFFER_MINUTES = 30;
+export const DEFAULT_SETUP_BUFFER_MINUTES = 60;
 
 /** Minutes after the modeled P99 arrival that a station should stay open, absent an official cutoff. */
 export const DEFAULT_TEARDOWN_BUFFER_MINUTES = 30;

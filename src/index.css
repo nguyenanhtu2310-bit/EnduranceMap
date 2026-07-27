@@ -472,6 +472,23 @@ details summary {
   white-space: nowrap;
 }
 
+.drag-cell {
+  cursor: grab;
+  color: var(--color-faint);
+  user-select: none;
+  width: 1.6rem;
+  text-align: center;
+  letter-spacing: -0.05em;
+}
+
+.drag-cell:active {
+  cursor: grabbing;
+}
+
+tr.drop-target td {
+  box-shadow: inset 0 2px 0 var(--color-accent);
+}
+
 .colocated {
   color: var(--color-faint);
   font-size: 0.78rem;

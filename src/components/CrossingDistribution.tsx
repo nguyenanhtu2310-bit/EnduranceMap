@@ -24,9 +24,9 @@ function formatHm(seconds: number): string {
 const ROW_HEIGHT = 46;
 const AXIS_HEIGHT = 26;
 const RIGHT_PAD = 12;
-const LABEL_GUTTER = 10;
+const LABEL_GUTTER = 24;
 const MIN_LABEL_WIDTH = 96;
-const MAX_LABEL_WIDTH = 210;
+const MAX_LABEL_WIDTH = 280;
 /** Approximate advance of the 12px label face; SVG text cannot wrap or ellipsize itself. */
 const LABEL_CHAR_PX = 6.2;
 

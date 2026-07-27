@@ -1,21 +1,42 @@
+import { useState } from 'react';
 import type { PipelineStation } from '../lib/pipeline';
 
 interface Props {
   stations: PipelineStation[];
   /** Shows the map's own placemark names under each station. */
   showSourceNames?: boolean;
+  /** Supplying this makes rows draggable; receives the new order as map names. */
+  onReorder?: (mapNames: string[]) => void;
 }
 
 function formatHm(clock: string): string {
   return clock.slice(0, 5);
 }
 
-export function StationScheduleTable({ stations, showSourceNames = true }: Props) {
+export function StationScheduleTable({ stations, showSourceNames = true, onReorder }: Props) {
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+
+  function drop(targetMapName: string) {
+    if (!onReorder || !dragging || dragging === targetMapName) return;
+
+    const names = stations.map((s) => s.mapName);
+    const from = names.indexOf(dragging);
+    const to = names.indexOf(targetMapName);
+    if (from < 0 || to < 0) return;
+
+    names.splice(to, 0, ...names.splice(from, 1));
+    onReorder(names);
+    setDragging(null);
+    setOver(null);
+  }
+
   return (
     <div className="table-scroll">
       <table>
         <thead>
           <tr>
+            {onReorder && <th aria-label="Drag to reorder" />}
             <th>Station</th>
             <th>Crossings</th>
             <th className="num">Open</th>
@@ -26,7 +47,30 @@ export function StationScheduleTable({ stations, showSourceNames = true }: Props
         </thead>
         <tbody>
           {stations.map((station) => (
-            <tr key={station.schedule.name + station.crossings[0]?.kmFromStart}>
+            <tr
+              key={station.mapName}
+              draggable={!!onReorder}
+              onDragStart={() => setDragging(station.mapName)}
+              onDragEnd={() => {
+                setDragging(null);
+                setOver(null);
+              }}
+              onDragOver={(e) => {
+                if (!onReorder) return;
+                e.preventDefault();
+                setOver(station.mapName);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                drop(station.mapName);
+              }}
+              className={over === station.mapName && dragging !== station.mapName ? 'drop-target' : undefined}
+            >
+              {onReorder && (
+                <td className="drag-cell" title="Drag to reorder">
+                  ⠿
+                </td>
+              )}
               <td>
                 <span className="station-name">{station.schedule.name}</span>
                 {station.schedule.cutoffExceeded && (

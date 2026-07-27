@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { CrossingDistribution } from './components/CrossingDistribution';
 import { CutoffEntry } from './components/CutoffEntry';
 import { CutoffTable } from './components/CutoffTable';
+import { DistanceRunView } from './components/DistanceRunView';
 import { FolderPicker } from './components/FolderPicker';
 import { KmlDropzone } from './components/KmlDropzone';
 import { PaceBandForm, type DistanceFormRow } from './components/PaceBandForm';
@@ -17,6 +18,7 @@ import {
   listPlacemarkFolders,
   runPipeline,
   type DistanceInput,
+  applyStationOrder,
   type FolderSummary,
   type PipelineResult,
 } from './lib/pipeline';
@@ -117,6 +119,7 @@ export default function App() {
   const [contestMapping, setContestMapping] = useState<Record<string, string>>({});
   const [courses, setCourses] = useState<Course[]>([]);
   const [manualCutoffs, setManualCutoffs] = useState<Record<string, Record<string, string>>>({});
+  const [stationOrder, setStationOrder] = useState<string[]>([]);
 
   function loadKml(text: string, fileName: string) {
     setError(null);
@@ -171,22 +174,15 @@ export default function App() {
     [rows]
   );
 
-  function loadResults(text: string, fileName: string) {
-    setError(null);
-    setResult(null);
-    const parsed = parseResultsCsv(text);
-    if (parsed.profiles.length === 0) {
-      setError(parsed.warnings[0] ?? 'No contests found in that results file.');
-      return;
-    }
-    const mapping = autoMapContests(parsed.profiles, courses);
-    setResults({ fileName, profiles: parsed.profiles });
-    setContestMapping(mapping);
-
-    // Seed each pace band from the real distribution so the numbers on screen match the
-    // data actually driving the schedule.
+  /**
+   * Rewrites each mapped distance's pace band and field size from the real results, so
+   * the numbers on screen are the ones actually driving the schedule. Runs on every
+   * mapping change, not just on load — assigning a contest to a distance by hand is
+   * exactly when the band needs to catch up.
+   */
+  function applyProfilesToRows(profiles: ContestProfile[], mapping: Record<string, string>) {
     const profileByCourse = new Map(
-      parsed.profiles.filter((p) => mapping[p.contest]).map((p) => [mapping[p.contest], p])
+      profiles.filter((p) => mapping[p.contest]).map((p) => [mapping[p.contest], p])
     );
 
     setRows((current) =>
@@ -203,6 +199,26 @@ export default function App() {
         };
       })
     );
+  }
+
+  function changeContestMapping(mapping: Record<string, string>) {
+    setContestMapping(mapping);
+    setResult(null);
+    if (results) applyProfilesToRows(results.profiles, mapping);
+  }
+
+  function loadResults(text: string, fileName: string) {
+    setError(null);
+    setResult(null);
+    const parsed = parseResultsCsv(text);
+    if (parsed.profiles.length === 0) {
+      setError(parsed.warnings[0] ?? 'No contests found in that results file.');
+      return;
+    }
+    const mapping = autoMapContests(parsed.profiles, courses);
+    setResults({ fileName, profiles: parsed.profiles });
+    setContestMapping(mapping);
+    applyProfilesToRows(parsed.profiles, mapping);
   }
 
   function calculate() {
@@ -226,8 +242,7 @@ export default function App() {
         samples: samplesByCourse.get(r.courseName),
       }));
 
-      setResult(
-        runPipeline(kml.text, inputs, {
+      const computed = runPipeline(kml.text, inputs, {
           stationFolders: selectedFolders,
           manualCutoffs,
           renumberStationsAs: renumber ? renumberPrefix.trim() || 'Station' : undefined,
@@ -238,8 +253,9 @@ export default function App() {
             mediumRunnersPerHour: settings.mediumRunnersPerHour,
             highRunnersPerHour: settings.highRunnersPerHour,
           },
-        })
-      );
+        });
+
+      setResult({ ...computed, stations: applyStationOrder(computed.stations, stationOrder) });
     } catch (e) {
       setResult(null);
       setError(e instanceof Error ? e.message : 'Calculation failed.');
@@ -303,7 +319,7 @@ export default function App() {
               courses={courses}
               mapping={contestMapping}
               onLoad={loadResults}
-              onMappingChange={setContestMapping}
+              onMappingChange={changeContestMapping}
               onClear={() => {
                 setResults(null);
                 setContestMapping({});
@@ -372,12 +388,29 @@ export default function App() {
               the last modeled arrival plus teardown. A station shared by several distances closes on the latest
               of them.
             </p>
-            <StationScheduleTable stations={result.stations} showSourceNames={renumber} />
+            <StationScheduleTable
+              stations={result.stations}
+              showSourceNames={renumber}
+              onReorder={(order) => {
+                setStationOrder(order);
+                setResult((current) =>
+                  current ? { ...current, stations: applyStationOrder(current.stations, order) } : current
+                );
+              }}
+            />
           </section>
 
           <section className="card">
-            <span className="kicker">For the timing team</span>
-            <h2>Timing points</h2>
+            <h2>What each distance runs through</h2>
+            <p className="hint">
+              The points a runner meets in order, with the gap from the previous one — the view for spacing
+              water and aid.
+            </p>
+            <DistanceRunView result={result} />
+          </section>
+
+          <section className="card">
+            <h2>Split calculation</h2>
             <p className="hint">
               Every point each distance runs through, with the kilometre it falls at on that distance's own
               route and the hours the position is staffed.
