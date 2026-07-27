@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import type { PipelineStation } from '../lib/pipeline';
+import type { ActivityLevel } from '../lib/schedule';
+import type { RaceOverrides, StationOverride } from '../lib/overrides';
+import { EditableCell } from './EditableCell';
 
 interface Props {
   stations: PipelineStation[];
@@ -12,13 +15,29 @@ interface Props {
   /** Operator note under each name — staff assignment, decoder serial. */
   notes?: Record<string, string>;
   onNoteChange?: (mapName: string, note: string) => void;
+  /** Supplying these makes the computed columns editable. */
+  overrides?: RaceOverrides;
+  onStationEdit?: <K extends keyof StationOverride>(
+    mapName: string,
+    field: K,
+    value: StationOverride[K] | undefined
+  ) => void;
 }
 
 function formatHm(clock: string): string {
   return clock.slice(0, 5);
 }
 
-export function StationScheduleTable({ stations, showSourceNames = true, onReorder, onRemove, notes, onNoteChange }: Props) {
+export function StationScheduleTable({
+  stations,
+  showSourceNames = true,
+  onReorder,
+  onRemove,
+  notes,
+  onNoteChange,
+  overrides,
+  onStationEdit,
+}: Props) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
 
@@ -78,7 +97,17 @@ export function StationScheduleTable({ stations, showSourceNames = true, onReord
                 </td>
               )}
               <td>
-                <span className="station-name">{station.schedule.name}</span>
+                {onStationEdit ? (
+                  <EditableCell
+                    computed={station.schedule.name}
+                    override={overrides?.stations?.[station.mapName]?.name}
+                    type="text"
+                    title="Station name"
+                    onChange={(v) => onStationEdit(station.mapName, 'name', v)}
+                  />
+                ) : (
+                  <span className="station-name">{station.schedule.name}</span>
+                )}
                 {station.schedule.cutoffExceeded && (
                   <>
                     {' '}
@@ -122,11 +151,59 @@ export function StationScheduleTable({ stations, showSourceNames = true, onReord
                   </span>
                 ))}
               </td>
-              <td className="num">{formatHm(station.schedule.openClockTime)}</td>
-              <td className="num">{formatHm(station.schedule.closeClockTime)}</td>
+              <td className="num">
+                {onStationEdit ? (
+                  <EditableCell
+                    computed={formatHm(station.schedule.openClockTime)}
+                    override={overrides?.stations?.[station.mapName]?.openClockTime}
+                    type="time"
+                    align="right"
+                    title="Open time"
+                    onChange={(v) => onStationEdit(station.mapName, 'openClockTime', v)}
+                  />
+                ) : (
+                  formatHm(station.schedule.openClockTime)
+                )}
+              </td>
+              <td className="num">
+                {onStationEdit ? (
+                  <EditableCell
+                    computed={formatHm(station.schedule.closeClockTime)}
+                    override={overrides?.stations?.[station.mapName]?.closeClockTime}
+                    type="time"
+                    align="right"
+                    title="Close time"
+                    onChange={(v) => onStationEdit(station.mapName, 'closeClockTime', v)}
+                  />
+                ) : (
+                  formatHm(station.schedule.closeClockTime)
+                )}
+              </td>
               <td className="num">{Math.round(station.schedule.peakRunnersPerHour).toLocaleString()}</td>
               <td>
-                <span className={`tag ${station.schedule.activityLevel}`}>{station.schedule.activityLevel}</span>
+                {onStationEdit ? (
+                  <select
+                    className={
+                      overrides?.stations?.[station.mapName]?.activityLevel ? 'level-select edited' : 'level-select'
+                    }
+                    value={station.schedule.activityLevel}
+                    onChange={(e) =>
+                      onStationEdit(
+                        station.mapName,
+                        'activityLevel',
+                        (e.target.value || undefined) as ActivityLevel | undefined
+                      )
+                    }
+                  >
+                    {(['Low', 'Medium', 'High'] as const).map((l) => (
+                      <option key={l} value={l}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className={`tag ${station.schedule.activityLevel}`}>{station.schedule.activityLevel}</span>
+                )}
               </td>
               {onRemove && (
                 <td>

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { parseKml } from '../kml';
 import {
   applyStationOrder,
+  isEndZoneStop,
   listPlacemarkFolders,
   passKey,
   runPipeline,
@@ -421,5 +422,29 @@ describe('organizer-provided finish COT', () => {
     const startStation = bad.stations.find((s) => s.mapName.includes('Start'))!;
     const finish = startStation.crossings.find((c) => c.courseName === 'Half Marathon' && c.kmFromStart > 20)!;
     expect(finish.officialCutoffClock).toBeUndefined();
+  });
+});
+
+describe('isEndZoneStop', () => {
+  it('excludes stops within the end zone of either line', () => {
+    expect(isEndZoneStop('CP Mid', 0.3, 42)).toBe(true);
+    expect(isEndZoneStop('CP Mid', 41.7, 42)).toBe(true);
+    expect(isEndZoneStop('CP Mid', 21.0, 42)).toBe(false);
+  });
+
+  it('excludes by name even when the point sits away from the route ends', () => {
+    // A start drawn a little off the route's first metre is still the start.
+    expect(isEndZoneStop('Start 10km Phiêng Cành', 1.2, 11)).toBe(true);
+    expect(isEndZoneStop('Finish Line - Đồi Chè', 40.8, 42)).toBe(true);
+    expect(isEndZoneStop('S/F AMBULANCE', 5, 42)).toBe(true);
+  });
+
+  it('does not treat a mid-course name containing "start" as furniture', () => {
+    // Only a leading match counts — "Restart Hill CP" is a stop.
+    expect(isEndZoneStop('Restart Hill CP', 20, 42)).toBe(false);
+  });
+
+  it('survives a zero-length course without dividing by it', () => {
+    expect(isEndZoneStop('CP', 0, 0)).toBe(true); // within END_ZONE_KM of the start line
   });
 });

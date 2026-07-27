@@ -918,3 +918,70 @@ button.cta {
   color: var(--color-danger);
   background: transparent;
 }
+
+/* — editable cells — */
+
+.editable {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.editable input {
+  min-height: 28px;
+  padding: 3px 6px;
+  font-size: 0.84rem;
+  border-color: transparent;
+  background: transparent;
+  min-width: 64px;
+}
+
+.editable input:hover {
+  border-color: var(--color-divider);
+  background: var(--color-bg);
+}
+
+.editable input:focus-visible {
+  border-color: var(--color-accent);
+  background: var(--color-bg);
+}
+
+.editable.edited input {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+button.revert {
+  border: none;
+  background: transparent;
+  color: var(--color-faint);
+  padding: 0 2px;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+button.revert:hover {
+  color: var(--color-accent);
+  background: transparent;
+}
+
+.level-select {
+  min-height: 28px;
+  padding: 3px 6px;
+  font-size: 0.8rem;
+  border-color: transparent;
+  background: transparent;
+}
+
+.level-select:hover {
+  border-color: var(--color-divider);
+  background: var(--color-bg);
+}
+
+.level-select.edited {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  color: var(--color-accent);
+}

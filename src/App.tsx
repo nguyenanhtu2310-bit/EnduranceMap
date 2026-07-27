@@ -1,6 +1,16 @@
 import { useMemo, useRef, useState } from 'react';
 import { CrossingDistribution } from './components/CrossingDistribution';
 import { EnduranceMapLogo } from './components/Logo';
+import {
+  EMPTY_OVERRIDES,
+  applyRaceOverrides,
+  countOverrides,
+  setCrossingOverride,
+  setStationOverride,
+  type CrossingOverride,
+  type RaceOverrides,
+  type StationOverride,
+} from './lib/overrides';
 import { CutoffTable } from './components/CutoffTable';
 import { DistanceRunView } from './components/DistanceRunView';
 import { DEFAULT_AMENITY_RULES, migrateAmenityOverrides, type AmenitySet } from './lib/amenities';
@@ -140,6 +150,7 @@ interface RaceSnapshot {
   removedPasses: string[];
   reportSections: ReportSections;
   stationNotes: Record<string, string>;
+  raceOverrides: RaceOverrides;
 }
 
 function blankSnapshot(): RaceSnapshot {
@@ -162,6 +173,7 @@ function blankSnapshot(): RaceSnapshot {
     removedPasses: [],
     reportSections: ALL_REPORT_SECTIONS,
     stationNotes: {},
+    raceOverrides: EMPTY_OVERRIDES,
   };
 }
 
@@ -169,7 +181,7 @@ function blankSnapshot(): RaceSnapshot {
 const RACE_FILE_FIELDS = [
   'kml', 'rows', 'selectedFolders', 'settings', 'renumber', 'renumberPrefix',
   'results', 'contestMapping', 'stationOrder', 'amenityOverrides', 'raceName',
-  'removedStations', 'removedPasses', 'reportSections', 'stationNotes',
+  'removedStations', 'removedPasses', 'reportSections', 'stationNotes', 'raceOverrides',
 ] as const;
 
 export default function App() {
@@ -192,6 +204,7 @@ export default function App() {
   const [removedPasses, setRemovedPasses] = useState<string[]>([]);
   const [reportSections, setReportSections] = useState<ReportSections>(ALL_REPORT_SECTIONS);
   const [stationNotes, setStationNotes] = useState<Record<string, string>>({});
+  const [raceOverrides, setRaceOverrides] = useState<RaceOverrides>(EMPTY_OVERRIDES);
 
   const [tabs, setTabs] = useState<{ id: string; label: string }[]>([{ id: 'race-1', label: 'Race 1' }]);
   const [activeTab, setActiveTab] = useState('race-1');
@@ -213,11 +226,40 @@ export default function App() {
     });
   }
 
+  /**
+   * Edits live beside the computation, so applying one re-lays the whole override set
+   * over the current result rather than mutating it — the model's value stays available
+   * underneath and a revert costs nothing.
+   */
+  function editStation<K extends keyof StationOverride>(
+    mapName: string,
+    field: K,
+    value: StationOverride[K] | undefined
+  ) {
+    setRaceOverrides((current) => {
+      const next = setStationOverride(current, mapName, field, value);
+      setResult((r) => (r ? applyRaceOverrides(r, next) : r));
+      return next;
+    });
+  }
+
+  function editCrossing<K extends keyof CrossingOverride>(
+    key: string,
+    field: K,
+    value: CrossingOverride[K] | undefined
+  ) {
+    setRaceOverrides((current) => {
+      const next = setCrossingOverride(current, key, field, value);
+      setResult((r) => (r ? applyRaceOverrides(r, next) : r));
+      return next;
+    });
+  }
+
   function captureSnapshot(): RaceSnapshot {
     return {
       kml, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
       results, contestMapping, courses, stationOrder, amenityOverrides, raceName,
-      removedStations, removedPasses, reportSections, stationNotes,
+      removedStations, removedPasses, reportSections, stationNotes, raceOverrides,
     };
   }
 
@@ -240,6 +282,7 @@ export default function App() {
     setRemovedPasses(snap.removedPasses);
     setReportSections(snap.reportSections);
     setStationNotes(snap.stationNotes);
+    setRaceOverrides(snap.raceOverrides ?? EMPTY_OVERRIDES);
     setError(null);
   }
 
@@ -485,7 +528,8 @@ export default function App() {
           },
         });
 
-      setResult({ ...computed, stations: applyStationOrder(computed.stations, stationOrder) });
+      const ordered = { ...computed, stations: applyStationOrder(computed.stations, stationOrder) };
+      setResult(applyRaceOverrides(ordered, raceOverrides));
     } catch (e) {
       setResult(null);
       setError(e instanceof Error ? e.message : 'Calculation failed.');
@@ -730,6 +774,25 @@ export default function App() {
               the last modeled arrival plus teardown. A station shared by several distances closes on the latest
               of them.
             </p>
+            {countOverrides(raceOverrides) > 0 && (
+              <div className="actions" style={{ marginBottom: '0.85rem' }}>
+                <span className="hint" style={{ margin: 0 }}>
+                  <strong>{countOverrides(raceOverrides)}</strong> value
+                  {countOverrides(raceOverrides) === 1 ? '' : 's'} edited by hand — these survive a
+                  recalculation and are saved with the race.
+                </span>
+                <button
+                  className="secondary"
+                  onClick={() => {
+                    if (!window.confirm('Drop every hand edit and go back to the calculated plan?')) return;
+                    setRaceOverrides(EMPTY_OVERRIDES);
+                    calculate();
+                  }}
+                >
+                  Reset to calculated
+                </button>
+              </div>
+            )}
             {removedStations.length > 0 && (
               <div className="actions" style={{ marginBottom: '0.85rem' }}>
                 <span className="hint" style={{ margin: 0 }}>
@@ -762,6 +825,8 @@ export default function App() {
               }}
               notes={stationNotes}
               onNoteChange={changeStationNote}
+              overrides={raceOverrides}
+              onStationEdit={editStation}
               onRemove={(mapName) => {
                 const next = [...removedStations, mapName];
                 setRemovedStations(next);
@@ -807,6 +872,8 @@ export default function App() {
               onOverridesChange={setAmenityOverrides}
               notes={stationNotes}
               onNoteChange={changeStationNote}
+              raceOverrides={raceOverrides}
+              onCrossingEdit={editCrossing}
               onRemovePass={(key) => {
                 const next = [...removedPasses, key];
                 setRemovedPasses(next);
@@ -821,7 +888,13 @@ export default function App() {
               Every point each distance runs through, with the kilometre it falls at on that distance's own
               route and the hours the position is staffed.
             </p>
-            <TimingMatrix result={result} notes={stationNotes} onNoteChange={changeStationNote} />
+            <TimingMatrix
+              result={result}
+              notes={stationNotes}
+              onNoteChange={changeStationNote}
+              overrides={raceOverrides}
+              onCrossingEdit={editCrossing}
+            />
           </section>
 
           <section className="card">
@@ -836,7 +909,12 @@ export default function App() {
 
           <section className="card">
             <h2>Cut-off times</h2>
-            <CutoffTable result={result} graceMinutes={settings.cutoffGraceMinutes} />
+            <CutoffTable
+              result={result}
+              graceMinutes={settings.cutoffGraceMinutes}
+              overrides={raceOverrides}
+              onCrossingEdit={editCrossing}
+            />
           </section>
 
 

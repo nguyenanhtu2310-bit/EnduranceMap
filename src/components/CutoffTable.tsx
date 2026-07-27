@@ -1,9 +1,17 @@
-import type { PipelineResult } from '../lib/pipeline';
+import { passKey, type PipelineResult } from '../lib/pipeline';
+import type { CrossingOverride, RaceOverrides } from '../lib/overrides';
+import { EditableCell } from './EditableCell';
 import { parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
 
 interface Props {
   result: PipelineResult;
   graceMinutes: number;
+  overrides?: RaceOverrides;
+  onCrossingEdit?: <K extends keyof CrossingOverride>(
+    key: string,
+    field: K,
+    value: CrossingOverride[K] | undefined
+  ) => void;
 }
 
 function hm(clock: string): string {
@@ -18,7 +26,7 @@ function marginMinutes(suggested: string, modeled: string): number | null {
   return a === null || b === null ? null : Math.round((a - b) / 60);
 }
 
-export function CutoffTable({ result, graceMinutes }: Props) {
+export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }: Props) {
   const rows = result.cutoffTable;
 
   if (rows.length === 0) {
@@ -35,6 +43,18 @@ export function CutoffTable({ result, graceMinutes }: Props) {
     const seconds = parseClockTimeToSeconds(row.suggestedClockTime) ?? -1;
     if (seconds > (finalByStation.get(row.stationName) ?? -1)) finalByStation.set(row.stationName, seconds);
   }
+  /**
+   * Cut-off rows are flattened from the stations, so an edit has to be traced back to
+   * the pass it came from — matched on the distance and the kilometre it sits at.
+   */
+  const keyFor = (row: (typeof rows)[number]) => {
+    const station = result.stations.find((s) => s.schedule.name === row.stationName);
+    const pass = station?.crossings.find(
+      (c) => c.courseName === row.courseName && Math.abs(c.kmFromStart - row.kmFromStart) < 0.05
+    );
+    return station && pass ? passKey(station.mapName, row.courseName, pass.passIndex) : '';
+  };
+
   const isFinal = (row: (typeof rows)[number]) =>
     parseClockTimeToSeconds(row.suggestedClockTime) === finalByStation.get(row.stationName);
 
@@ -77,7 +97,18 @@ export function CutoffTable({ result, graceMinutes }: Props) {
                   <td className="num">{row.kmFromStart.toFixed(1)}</td>
                   <td className="num muted">{row.modeledLastArrivalClockTime.slice(0, 5)}</td>
                   <td className={isFinal(row) ? 'num cot-final' : 'num muted'}>
-                    <strong>{hm(row.suggestedClockTime)}</strong>
+                    {onCrossingEdit ? (
+                      <EditableCell
+                        computed={hm(row.suggestedClockTime)}
+                        override={overrides?.crossings?.[keyFor(row)]?.cutoffClock}
+                        type="time"
+                        align="right"
+                        title="Proposed cut-off"
+                        onChange={(v) => onCrossingEdit(keyFor(row), 'cutoffClock', v)}
+                      />
+                    ) : (
+                      <strong>{hm(row.suggestedClockTime)}</strong>
+                    )}
                     {isFinal(row) && <span className="cot-final-tag">final</span>}
                   </td>
                   <td className="num muted">{margin === null ? '—' : `+${margin} min`}</td>

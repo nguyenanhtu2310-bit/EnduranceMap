@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { passKey, type PipelineResult, type PipelineStation } from '../lib/pipeline';
+import { isEndZoneStop, passKey, type PipelineResult, type PipelineStation } from '../lib/pipeline';
+import type { CrossingOverride, RaceOverrides } from '../lib/overrides';
+import { EditableCell } from './EditableCell';
 import { parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
 import {
   AMENITIES,
@@ -20,14 +22,13 @@ interface Props {
   notes?: Record<string, string>;
   /** Supplying this makes the note editable here as well as in the schedule. */
   onNoteChange?: (mapName: string, note: string) => void;
+  raceOverrides?: RaceOverrides;
+  onCrossingEdit?: <K extends keyof CrossingOverride>(
+    key: string,
+    field: K,
+    value: CrossingOverride[K] | undefined
+  ) => void;
 }
-
-/**
- * How close to either end of the route a stop counts as start or finish furniture
- * rather than a stop on the course. Aid spacing is about what a runner meets between
- * the two, so the start and finish lines are not stops to be spaced.
- */
-const END_ZONE_KM = 0.5;
 
 function hm(clock: string): string {
   const seconds = parseClockTimeToSeconds(clock);
@@ -85,6 +86,8 @@ export function DistanceRunView({
   onRemovePass,
   notes,
   onNoteChange,
+  raceOverrides,
+  onCrossingEdit,
 }: Props) {
   const courses = [...result.courses]
     .filter((c) => result.courseOrder.includes(c.name))
@@ -99,7 +102,7 @@ export function DistanceRunView({
   const finalGap = course.totalKm - (stops[stops.length - 1]?.kmFromStart ?? 0);
   const longestGap = Math.max(0, ...stops.map((s) => s.gapKm), finalGap);
   const onCourse = (stop: Stop) =>
-    stop.kmFromStart > END_ZONE_KM && stop.kmFromStart < course.totalKm - END_ZONE_KM;
+    !isEndZoneStop(stop.station.mapName, stop.kmFromStart, course.totalKm);
   const courseStops = stops.filter(onCourse);
 
   // Totals describe the stops runners actually meet between the lines, so start and
@@ -175,7 +178,27 @@ export function DistanceRunView({
                       )
                     )}
                   </td>
-                  <td className="num">{stop.kmFromStart.toFixed(1)}</td>
+                  <td className="num">
+                    {onCrossingEdit ? (
+                      <EditableCell
+                        computed={Number(stop.kmFromStart.toFixed(1))}
+                        override={
+                          raceOverrides?.crossings?.[
+                            passKey(stop.station.mapName, course.name, stop.passIndex)
+                          ]?.kmFromStart
+                        }
+                        type="number"
+                        step={0.1}
+                        align="right"
+                        title="Kilometre on this route"
+                        onChange={(v) =>
+                          onCrossingEdit(passKey(stop.station.mapName, course.name, stop.passIndex), 'kmFromStart', v)
+                        }
+                      />
+                    ) : (
+                      stop.kmFromStart.toFixed(1)
+                    )}
+                  </td>
                   <td className="num">
                     {stop.gapKm.toFixed(1)}
                     {stop.gapKm === longestGap && stop.gapKm > 0 && (
@@ -186,7 +209,28 @@ export function DistanceRunView({
                   </td>
                   <td className="num">{hm(stop.station.schedule.openClockTime)}</td>
                   <td className="num">{hm(stop.station.schedule.closeClockTime)}</td>
-                  <td className="num">{stop.officialCutoffClock ? hm(stop.officialCutoffClock) : '–'}</td>
+                  <td className="num">
+                    {onCrossingEdit ? (
+                      <EditableCell
+                        computed={stop.officialCutoffClock ? hm(stop.officialCutoffClock) : ''}
+                        override={
+                          raceOverrides?.crossings?.[
+                            passKey(stop.station.mapName, course.name, stop.passIndex)
+                          ]?.cutoffClock
+                        }
+                        type="time"
+                        align="right"
+                        title="Cut-off at this pass"
+                        onChange={(v) =>
+                          onCrossingEdit(passKey(stop.station.mapName, course.name, stop.passIndex), 'cutoffClock', v)
+                        }
+                      />
+                    ) : stop.officialCutoffClock ? (
+                      hm(stop.officialCutoffClock)
+                    ) : (
+                      '–'
+                    )}
+                  </td>
                   <td>
                     <span className={`tag ${stop.station.schedule.activityLevel}`}>
                       {stop.station.schedule.activityLevel}

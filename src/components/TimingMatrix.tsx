@@ -1,5 +1,7 @@
 import type { Course } from '../lib/snap';
-import type { PipelineResult, PipelineStation } from '../lib/pipeline';
+import { passKey, type PipelineResult, type PipelineStation } from '../lib/pipeline';
+import type { CrossingOverride, RaceOverrides } from '../lib/overrides';
+import { EditableCell } from './EditableCell';
 import { parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
 
 interface Props {
@@ -7,6 +9,12 @@ interface Props {
   notes?: Record<string, string>;
   /** Supplying this makes the note editable here as well as in the schedule. */
   onNoteChange?: (mapName: string, note: string) => void;
+  overrides?: RaceOverrides;
+  onCrossingEdit?: <K extends keyof CrossingOverride>(
+    key: string,
+    field: K,
+    value: CrossingOverride[K] | undefined
+  ) => void;
 }
 
 function hm(clock: string): string {
@@ -37,7 +45,7 @@ function cellFor(station: PipelineStation, courseName: string): Cell {
   };
 }
 
-export function TimingMatrix({ result, notes, onNoteChange }: Props) {
+export function TimingMatrix({ result, notes, onNoteChange, overrides, onCrossingEdit }: Props) {
   const courses = orderedCourses(result);
   const startByCourse = new Map(result.distanceInputs.map((d) => [d.courseName, d.startTimeClock]));
 
@@ -106,9 +114,33 @@ export function TimingMatrix({ result, notes, onNoteChange }: Props) {
                     </td>
                   );
                 }
+                const passes = station.crossings.filter((c) => c.courseName === course.name);
                 return (
                   <td key={course.name} className="km">
-                    {cell.kms.map((km) => `${km.toFixed(1)}k`).join(' / ')}
+                    {onCrossingEdit
+                      ? passes.map((pass) => (
+                          <EditableCell
+                            key={pass.passIndex}
+                            computed={Number(pass.kmFromStart.toFixed(1))}
+                            override={
+                              overrides?.crossings?.[
+                                passKey(station.mapName, course.name, pass.passIndex)
+                              ]?.kmFromStart
+                            }
+                            type="number"
+                            step={0.1}
+                            align="right"
+                            title={`Kilometre on ${course.name}`}
+                            onChange={(v) =>
+                              onCrossingEdit(
+                                passKey(station.mapName, course.name, pass.passIndex),
+                                'kmFromStart',
+                                v
+                              )
+                            }
+                          />
+                        ))
+                      : cell.kms.map((km) => `${km.toFixed(1)}k`).join(' / ')}
                     {cell.cutoffs.map((c) => (
                       <span key={c} className="cot">
                         COT {hm(c)}

@@ -68,6 +68,29 @@ const CUTOFF_FOLDER = 'CUT-OFF TIME';
 /** Fraction of a course beyond which a crossing counts as finish-line furniture. */
 const FINISH_AREA_FRACTION = 0.97;
 
+/** How close to either end of a route a stop counts as start or finish furniture. */
+export const END_ZONE_KM = 0.5;
+
+/** Names that mark a point as the start or the finish rather than a stop on the course. */
+const END_POINT_NAME = /^(start|finish|s\/f)\b/i;
+
+/**
+ * Whether a stop is start or finish furniture rather than something a runner meets out
+ * on the course. Aid and water spacing is about what lies between the two lines, so the
+ * lines themselves are never counted.
+ *
+ * Position alone is not enough: a start can sit a little way from the route's first
+ * metre, and on a loop the finish is metres from the start. The map's own name is
+ * checked too — matched against the map name rather than the displayed one, which
+ * sequential numbering would have replaced with "Station 4".
+ */
+export function isEndZoneStop(mapName: string, kmFromStart: number, courseTotalKm: number): boolean {
+  if (END_POINT_NAME.test(mapName.trim())) return true;
+  // The start side needs no course length; only the finish side is measured from it.
+  if (kmFromStart <= END_ZONE_KM) return true;
+  return courseTotalKm > 0 && kmFromStart >= courseTotalKm - END_ZONE_KM;
+}
+
 export interface PipelineOptions extends KmlParseOptions, SnapOptions, ScheduleOptions {
   /** Folder names (case-insensitive) whose points are treated as staffed stations. */
   stationFolders?: string[];

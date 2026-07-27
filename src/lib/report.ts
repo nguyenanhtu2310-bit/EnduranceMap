@@ -1,4 +1,4 @@
-import type { PipelineResult, PipelineStation } from './pipeline';
+import { isEndZoneStop, type PipelineResult, type PipelineStation } from './pipeline';
 import { parseClockTimeToSeconds, secondsToClockTime } from './time';
 import { AMENITIES, resolveAmenities, totalAmenities, type AmenityRules, type AmenitySet } from './amenities';
 import { SPORTSTATS_LOGO_DATA_URI } from '../assets/sportstatsLogo';
@@ -200,10 +200,20 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
       const stops = buildRun(result, course.name);
       if (stops.length === 0) return '';
 
+      const onCourse = (stop: Stop) =>
+        !isEndZoneStop(stop.station.mapName, stop.kmFromStart, course.totalKm);
+      const courseStops = stops.filter(onCourse);
+
       const sets = stops.map((s) =>
         resolveAmenities(s.station.schedule.activityLevel, rules, overrides[s.station.mapName])
       );
-      const totals = totalAmenities(sets);
+      // Counts describe what a runner meets between the lines, so start and finish
+      // furniture is listed but never counted.
+      const totals = totalAmenities(
+        courseStops.map((s) =>
+          resolveAmenities(s.station.schedule.activityLevel, rules, overrides[s.station.mapName])
+        )
+      );
       const longest = Math.max(0, ...stops.map((s) => s.gapKm));
 
       const rows = stops
@@ -212,8 +222,8 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
           const cells = AMENITIES.map(
             (a) => `<td class="mid">${set[a.key] ? a.icon : ''}</td>`
           ).join('');
-          return `<tr>
-            <td class="num sub">${i + 1}</td>
+          return `<tr${onCourse(stop) ? '' : ' class="end-zone"'}>
+            <td class="num sub">${onCourse(stop) ? courseStops.indexOf(stop) + 1 : '—'}</td>
             <td>${esc(stop.station.schedule.name)}${
               stop.passCount > 1 ? `<div class="sub">pass ${stop.passIndex + 1} of ${stop.passCount}</div>` : ''
             }${notes[stop.station.mapName] ? `<div class="sub note">${esc(notes[stop.station.mapName])}</div>` : ''}</td>
@@ -230,7 +240,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
       const totalCells = AMENITIES.map((a) => `<td class="mid"><strong>${totals[a.key]}</strong></td>`).join('');
 
       return `<h2>${esc(course.name)} — ${course.totalKm.toFixed(1)} km</h2>
-        <p class="note">${stops.length} stops, longest gap ${longest.toFixed(1)} km.</p>
+        <p class="note">${courseStops.length} stops on course, longest gap ${longest.toFixed(1)} km. Start and finish furniture is greyed and not counted.</p>
         <table>
           <thead><tr>
             <th></th><th>Point</th><th class="num">At km</th><th class="num">Gap</th>
@@ -401,6 +411,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   .sub { color: var(--muted); font-size: 11px; }
   .sub.note { color: var(--accent); }
   .risk { color: var(--danger); font-weight: 600; }
+  .end-zone td { opacity: 0.55; }
   .cot-final { color: var(--accent); }
   .cot-other { color: var(--muted); }
   .final-row td { background: ${dark ? 'rgba(7, 188, 2, 0.07)' : '#f2faf5'}; }
