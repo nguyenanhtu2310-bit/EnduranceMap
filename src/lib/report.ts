@@ -251,21 +251,21 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(raceName)} — CP operations</title>
 <style>
-  /* EnduranceMap brand — dark ground on screen, per design-tokens.json. A report is
-     also a printed document, so the print rules below drop to ink-on-paper rather than
-     flooding a page with the brand ground. */
+  /* EnduranceMap brand, on paper. The app is dark-only, but a report is a document:
+     it gets printed and forwarded, so it stays ink-on-white and carries the brand
+     through the accent, the type and the Sportstats mark rather than the ground. */
   :root {
-    --bg: #16221f;
-    --surface: #223532;
-    --text: #f3f8ff;
-    --accent: #07bc02;
-    --divider: rgba(243, 248, 255, 0.16);
-    --muted: rgba(243, 248, 255, 0.58);
-    --faint: rgba(243, 248, 255, 0.40);
-    --danger: #ff8a80;
-    --warn: #f0b46a;
-    --ok: #5ed350;
-    color-scheme: dark;
+    --bg: #ffffff;
+    --surface: #f7faf9;
+    --text: #16221f;
+    --accent: #05864e;
+    --divider: #d9e0de;
+    --muted: #5c6b68;
+    --faint: #7b8a87;
+    --danger: #b42318;
+    --warn: #b54708;
+    --ok: #067647;
+    color-scheme: light;
   }
   * { box-sizing: border-box; }
   body {
@@ -275,59 +275,47 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   }
   .masthead { display: flex; align-items: center; gap: 8px; margin-bottom: 22px; }
   .masthead svg { color: var(--accent); flex: none; }
-  .wordmark { font-weight: 500; font-size: 15px; letter-spacing: -0.01em; }
-  h1 { font-size: 26px; margin: 0 0 6px; font-weight: 500; letter-spacing: -0.02em; }
+  .wordmark { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+  h1 { font-size: 26px; margin: 0 0 6px; font-weight: 600; letter-spacing: -0.02em; }
   h2 {
-    font-size: 15px; margin: 30px 0 6px; font-weight: 500; letter-spacing: -0.01em;
+    font-size: 15px; margin: 30px 0 6px; font-weight: 600; letter-spacing: -0.01em;
     padding-top: 14px; border-top: 1px solid var(--divider);
   }
   .meta, .note { color: var(--muted); font-size: 12px; margin: 0 0 4px; }
   .kicker {
     display: block; font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--accent); margin-bottom: 6px;
+    color: var(--accent); margin-bottom: 6px; font-weight: 600;
   }
   table {
     width: 100%; border-collapse: collapse; margin: 10px 0 22px; font-size: 12px;
-    background: var(--surface); border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--divider);
   }
-  th, td { border-bottom: 1px solid var(--divider); padding: 6px 8px; text-align: left; vertical-align: middle; }
+  th, td { border: 1px solid var(--divider); padding: 6px 8px; text-align: left; vertical-align: middle; }
   th {
-    font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--faint);
-    font-weight: 500; white-space: nowrap;
+    background: var(--surface); font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); font-weight: 600; white-space: nowrap;
   }
-  tbody tr:last-child td { border-bottom: none; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   td.mid, th.mid { text-align: center; }
-  .sub { color: var(--faint); font-size: 11px; }
-  .risk { color: var(--danger); font-weight: 500; }
-  .total td { background: rgba(243, 248, 255, 0.05); font-weight: 500; }
-  .tag { font-size: 11px; font-weight: 500; }
+  .sub { color: var(--muted); font-size: 11px; }
+  .risk { color: var(--danger); font-weight: 600; }
+  .total td { background: var(--surface); font-weight: 600; }
+  .tag { font-size: 11px; font-weight: 600; }
   .tag.High { color: var(--danger); } .tag.Medium { color: var(--warn); } .tag.Low { color: var(--ok); }
   footer {
     margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--divider);
-    color: var(--faint); font-size: 11px;
+    color: var(--muted); font-size: 11px;
   }
   .powered {
     display: flex; align-items: center; justify-content: center; gap: 8px;
     margin-bottom: 12px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
-  }
-  .powered .chip {
-    background: #eef4f3; border-radius: 4px; padding: 4px 10px; display: inline-flex; align-items: center;
+    color: var(--faint);
   }
   .powered img { height: 16px; display: block; }
   .disclaimer { text-align: center; }
 
   @media print {
-    :root {
-      --bg: #ffffff; --surface: #ffffff; --text: #16221f;
-      --divider: #d9e0de; --muted: #5c6b68; --faint: #5c6b68;
-      --danger: #b42318; --warn: #b54708; --ok: #067647;
-      color-scheme: light;
-    }
     body { padding: 0; }
-    table { border: 1px solid var(--divider); }
-    th, td { border: 1px solid var(--divider); }
-    .total td { background: #f2f6f5; }
     h2 { page-break-after: avoid; }
     tr { page-break-inside: avoid; }
     footer { page-break-inside: avoid; }
@@ -378,7 +366,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   <footer>
     <div class="powered">
       <span>Powered by</span>
-      <span class="chip"><img src="${SPORTSTATS_LOGO_DATA_URI}" alt="Sportstats"></span>
+      <img src="${SPORTSTATS_LOGO_DATA_URI}" alt="Sportstats">
     </div>
     <p class="disclaimer">
       Open and close times are modelled from the pace data named above; they are a plan, not a measurement.
