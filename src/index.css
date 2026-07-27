@@ -705,3 +705,45 @@ tr.drop-target td {
   height: 16px;
   display: block;
 }
+
+/* — amenity grid — */
+
+.amenity-col {
+  text-align: center;
+  white-space: nowrap;
+}
+
+th.amenity-col {
+  font-size: 9px;
+  max-width: 74px;
+  white-space: normal;
+  line-height: 1.25;
+}
+
+button.amenity {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  border-color: var(--color-divider);
+  background: transparent;
+  color: var(--color-text);
+}
+
+button.amenity:hover {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+button.amenity.on {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+tr.total-row td {
+  border-top: 1px solid var(--color-divider);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,9 +1,20 @@
 import { useState } from 'react';
 import type { PipelineResult, PipelineStation } from '../lib/pipeline';
 import { parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
+import {
+  AMENITIES,
+  resolveAmenities,
+  totalAmenities,
+  type AmenityRules,
+  type AmenitySet,
+} from '../lib/amenities';
 
 interface Props {
   result: PipelineResult;
+  rules: AmenityRules;
+  /** Per-station hand edits, keyed by the station's map name then amenity key. */
+  overrides: Record<string, Partial<AmenitySet>>;
+  onOverridesChange: (next: Record<string, Partial<AmenitySet>>) => void;
 }
 
 function hm(clock: string): string {
@@ -54,7 +65,7 @@ function buildRun(result: PipelineResult, courseName: string): Stop[] {
   return stops;
 }
 
-export function DistanceRunView({ result }: Props) {
+export function DistanceRunView({ result, rules, overrides, onOverridesChange }: Props) {
   const courses = [...result.courses]
     .filter((c) => result.courseOrder.includes(c.name))
     .sort((a, b) => b.totalKm - a.totalKm);
@@ -67,6 +78,11 @@ export function DistanceRunView({ result }: Props) {
   const stops = buildRun(result, course.name);
   const finalGap = course.totalKm - (stops[stops.length - 1]?.kmFromStart ?? 0);
   const longestGap = Math.max(0, ...stops.map((s) => s.gapKm), finalGap);
+  const totals = totalAmenities(
+    stops.map((stop) =>
+      resolveAmenities(stop.station.schedule.activityLevel, rules, overrides[stop.station.mapName])
+    )
+  );
 
   return (
     <>
@@ -97,6 +113,11 @@ export function DistanceRunView({ result }: Props) {
                 <th className="num">Close</th>
                 <th className="num">Cut-off</th>
                 <th>Activity</th>
+                {AMENITIES.map((a) => (
+                  <th key={a.key} className="amenity-col" title={a.label}>
+                    {a.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -128,6 +149,30 @@ export function DistanceRunView({ result }: Props) {
                       {stop.station.schedule.activityLevel}
                     </span>
                   </td>
+                  {AMENITIES.map((a) => {
+                    const set = resolveAmenities(
+                      stop.station.schedule.activityLevel,
+                      rules,
+                      overrides[stop.station.mapName]
+                    );
+                    const isEdited = overrides[stop.station.mapName]?.[a.key] !== undefined;
+                    return (
+                      <td key={a.key} className="amenity-col">
+                        <button
+                          type="button"
+                          className={set[a.key] ? 'amenity on' : 'amenity'}
+                          title={`${a.label} — ${set[a.key] ? 'provided' : 'not provided'}${isEdited ? ' (set by hand)' : ''}`}
+                          onClick={() => {
+                            const forStation = { ...(overrides[stop.station.mapName] ?? {}) };
+                            forStation[a.key] = !set[a.key];
+                            onOverridesChange({ ...overrides, [stop.station.mapName]: forStation });
+                          }}
+                        >
+                          {set[a.key] ? a.icon : ''}
+                        </button>
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
               <tr>
@@ -146,6 +191,24 @@ export function DistanceRunView({ result }: Props) {
                 <td className="num">—</td>
                 <td className="num">—</td>
                 <td />
+                {AMENITIES.map((a) => (
+                  <td key={a.key} />
+                ))}
+              </tr>
+              <tr className="total-row">
+                <td />
+                <td className="row-head">Total</td>
+                <td className="num">{stops.length} stops</td>
+                <td className="num" />
+                <td className="num" />
+                <td className="num" />
+                <td className="num" />
+                <td />
+                {AMENITIES.map((a) => (
+                  <td key={a.key} className="amenity-col num">
+                    {totals[a.key]}
+                  </td>
+                ))}
               </tr>
             </tbody>
           </table>

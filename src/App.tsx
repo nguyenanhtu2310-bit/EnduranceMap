@@ -3,6 +3,8 @@ import { CrossingDistribution } from './components/CrossingDistribution';
 import { CutoffEntry } from './components/CutoffEntry';
 import { CutoffTable } from './components/CutoffTable';
 import { DistanceRunView } from './components/DistanceRunView';
+import { DEFAULT_AMENITY_RULES, type AmenitySet } from './lib/amenities';
+import { buildReportHtml, downloadReport } from './lib/report';
 import { FolderPicker } from './components/FolderPicker';
 import { KmlDropzone } from './components/KmlDropzone';
 import { PaceBandForm, type DistanceFormRow } from './components/PaceBandForm';
@@ -120,6 +122,8 @@ export default function App() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [manualCutoffs, setManualCutoffs] = useState<Record<string, Record<string, string>>>({});
   const [stationOrder, setStationOrder] = useState<string[]>([]);
+  const [amenityOverrides, setAmenityOverrides] = useState<Record<string, Partial<AmenitySet>>>({});
+  const [raceName, setRaceName] = useState('');
 
   function loadKml(text: string, fileName: string) {
     setError(null);
@@ -369,6 +373,41 @@ export default function App() {
 
       {result && (
         <>
+          <section className="card">
+            <h2>Export</h2>
+            <p className="hint">
+              A single self-contained HTML file — no scripts, no external styles. The organiser can open it
+              offline, print it, or forward it without needing this tool.
+            </p>
+            <div className="actions">
+              <label className="field" style={{ margin: 0, flex: '1 1 260px' }}>
+                Race name
+                <input
+                  type="text"
+                  value={raceName}
+                  placeholder={kml?.fileName.replace(/\.kml$/i, '') ?? 'Race'}
+                  onChange={(e) => setRaceName(e.target.value)}
+                  style={{ marginTop: '0.25rem' }}
+                />
+              </label>
+              <button
+                onClick={() => {
+                  const name = raceName.trim() || kml?.fileName.replace(/\.kml$/i, '') || 'Race';
+                  const html = buildReportHtml(result, {
+                    raceName: name,
+                    rules: DEFAULT_AMENITY_RULES,
+                    overrides: amenityOverrides,
+                    sourceFileName: kml?.fileName,
+                    resultsFileName: results?.fileName,
+                  });
+                  downloadReport(html, `${name.replace(/[^\w\d -]+/g, '').trim() || 'race'} - CP operations.html`);
+                }}
+              >
+                Download report
+              </button>
+            </div>
+          </section>
+
           {result.warnings.length > 0 && (
             <div className="notice">
               <strong>{result.warnings.length} thing(s) to check in the source map</strong>
@@ -406,7 +445,12 @@ export default function App() {
               The points a runner meets in order, with the gap from the previous one — the view for spacing
               water and aid.
             </p>
-            <DistanceRunView result={result} />
+            <DistanceRunView
+              result={result}
+              rules={DEFAULT_AMENITY_RULES}
+              overrides={amenityOverrides}
+              onOverridesChange={setAmenityOverrides}
+            />
           </section>
 
           <section className="card">
