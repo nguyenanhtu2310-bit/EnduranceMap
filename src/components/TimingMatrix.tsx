@@ -117,30 +117,46 @@ export function TimingMatrix({ result, notes, onNoteChange, overrides, onCrossin
                 const passes = station.crossings.filter((c) => c.courseName === course.name);
                 return (
                   <td key={course.name} className="km">
-                    {onCrossingEdit
-                      ? passes.map((pass) => (
-                          <EditableCell
-                            key={pass.passIndex}
-                            computed={Number(pass.kmFromStart.toFixed(1))}
-                            override={
-                              overrides?.crossings?.[
-                                passKey(station.mapName, course.name, pass.passIndex)
-                              ]?.kmFromStart
-                            }
-                            type="number"
-                            step={0.1}
-                            align="right"
-                            title={`Kilometre on ${course.name}`}
-                            onChange={(v) =>
-                              onCrossingEdit(
-                                passKey(station.mapName, course.name, pass.passIndex),
-                                'kmFromStart',
-                                v
-                              )
-                            }
-                          />
-                        ))
-                      : cell.kms.map((km) => `${km.toFixed(1)}k`).join(' / ')}
+                    {onCrossingEdit ? (
+                      /*
+                       * Stacked, not side by side. A course that passes a point twice needs
+                       * two editable figures, and laying them across the cell made them read
+                       * as two separate distance columns — the second pass of the 21K looked
+                       * like a 10K value.
+                       */
+                      <div className="pass-list">
+                        {passes.map((pass) => (
+                          <span className="pass" key={pass.passIndex}>
+                            {passes.length > 1 && (
+                              <span className="pass-index" title={`Pass ${pass.passIndex + 1} of ${passes.length}`}>
+                                {pass.passIndex + 1}
+                              </span>
+                            )}
+                            <EditableCell
+                              computed={Number(pass.kmFromStart.toFixed(1))}
+                              override={
+                                overrides?.crossings?.[
+                                  passKey(station.mapName, course.name, pass.passIndex)
+                                ]?.kmFromStart
+                              }
+                              type="number"
+                              step={0.1}
+                              align="right"
+                              title={`Kilometre on ${course.name}`}
+                              onChange={(v) =>
+                                onCrossingEdit(
+                                  passKey(station.mapName, course.name, pass.passIndex),
+                                  'kmFromStart',
+                                  v
+                                )
+                              }
+                            />
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      cell.kms.map((km) => `${km.toFixed(1)}k`).join(' / ')
+                    )}
                     {cell.cutoffs.map((c) => (
                       <span key={c} className="cot">
                         COT {hm(c)}

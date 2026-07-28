@@ -1084,3 +1084,30 @@ button.row-remove:disabled {
   opacity: 0.3;
   cursor: not-allowed;
 }
+
+/* — split calculation: one row per pass —
+   A course that passes a point twice needs two editable figures in one cell. Set side
+   by side they read as two distance columns, so they stack, numbered by pass. */
+
+.pass-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.pass {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.pass-index {
+  font-size: 0.68rem;
+  color: var(--color-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.pass-list input[type='number'] {
+  width: 4.6rem;
+}
