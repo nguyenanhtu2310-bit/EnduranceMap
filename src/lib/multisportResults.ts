@@ -1,4 +1,5 @@
-import { parseCsv } from './csv';
+import { findColumn, parseCsv } from './csv';
+import { EXCLUDED_STATUSES } from './results';
 import { measureDistanceKm, tidyKm, type DistanceSource } from './distances';
 import { parseClockTimeToSeconds } from './time';
 import { parseElapsedToSeconds } from './results';
@@ -117,13 +118,11 @@ const SPLIT_COLUMN = /^(\d+(?:\.\d+)?)K_TD$/i;
  */
 const MAX_RACE_SECONDS = 86400;
 
-function findColumn(headers: string[], ...candidates: string[]): string | undefined {
-  for (const candidate of candidates) {
-    const hit = headers.find((h) => h.trim().toLowerCase() === candidate.toLowerCase());
-    if (hit) return hit;
-  }
-  return undefined;
-}
+/**
+ * How far the legs may fall from the stated finishing time before it is worth saying so.
+ * Leg times are rounded to the second, so a well-mapped export lands within a few.
+ */
+const FINISH_SUM_TOLERANCE_SECONDS = 90;
 
 /**
  * Which parser a results file needs.
@@ -145,7 +144,7 @@ export function detectResultsFormat(text: string): 'single' | 'multisport' {
 
 /** Time-of-day column marking the moment an athlete actually started. */
 function findStartColumn(headers: string[]): string | undefined {
-  return findColumn(headers, 'Start_TD', 'SwimStart TOD', 'SwimStart_TOD', 'StartTOD', 'Start');
+  return findColumn(headers, 'Start_TD', 'SwimStart TOD', 'SwimStartToD', 'StartTOD', 'Start');
 }
 
 interface Boundary {
@@ -428,8 +427,32 @@ export function parseMultisportResultsCsv(
    * directly; those that only carry durations show it by having any leg time at all,
    * which is what separates a did-not-start from a did-not-finish.
    */
+  /*
+   * A blank status is a clean race — timing software only writes a value when something
+   * went wrong — so rows are excluded by what the status says, never by its absence.
+   */
+  /*
+   * The athlete's overall time, where the file states one. It is never used to build the
+   * model — the legs are — but it is the one thing that can prove the legs were mapped
+   * correctly, so it is checked against their sum.
+   */
+  const finishColumn = findColumn(
+    headers,
+    'ChipTime',
+    'FinishChipTime',
+    'Chip Time',
+    'FinishTime',
+    'NetTime',
+    'Finish'
+  );
+
+  const statusColumn = findColumn(headers, 'Status', 'StatusText');
+  const isExcluded = (row: Record<string, string>) =>
+    !!statusColumn && EXCLUDED_STATUSES.has((row[statusColumn] ?? '').trim().toLowerCase());
+
   const entries: Entry[] = [];
   for (const row of rows) {
+    if (isExcluded(row)) continue;
     const started = startColumn
       ? parseClockTimeToSeconds(row[startColumn] ?? '') !== null
       : reachedColumns.some((c) => parseElapsedToSeconds(row[c] ?? '') !== null);
@@ -515,6 +538,31 @@ export function parseMultisportResultsCsv(
   for (const { key, label: contestLabel, depth, group } of ordered) {
     const finishers = group.filter((e) => e.times).map((e) => e.times!);
     if (finishers.length === 0) continue;
+    const legWarningsForGroup: string[] = [];
+
+    /*
+     * Legs that do not add up to the stated finishing time mean the export is mapped
+     * wrongly — most likely a leg column returning cumulative time rather than that
+     * segment's own. Nothing downstream would look broken; the run leg would simply be
+     * three times too long and every run checkpoint would open at the wrong hour.
+     */
+    if (finishColumn && shape.mode === 'elapsed') {
+      const gaps: number[] = [];
+      for (const entry of group) {
+        if (!entry.times) continue;
+        const stated = parseElapsedToSeconds(entry.row[finishColumn] ?? '');
+        if (stated === null || stated <= 0) continue;
+        gaps.push(Math.abs(entry.times.legSeconds.reduce((sum, v) => sum + v, 0) - stated));
+      }
+      const typical = median(gaps);
+      if (gaps.length >= 5 && typical > FINISH_SUM_TOLERANCE_SECONDS) {
+        legWarningsForGroup.push(
+          `Leg times do not add up to the finishing time — they are out by about ` +
+            `${Math.round(typical / 60)} min for a typical athlete. Check that each leg column ` +
+            `holds that segment's own duration rather than the running total.`
+        );
+      }
+    }
 
     const bikeIndex = legs.findIndex((l) => l.kind === 'bike');
     const runIndex = legs.findIndex((l) => l.kind === 'run');
@@ -543,7 +591,7 @@ export function parseMultisportResultsCsv(
 
     const fromName = nameIsDoubtful ? undefined : claimed;
     const standard = fromName ?? fromTimes;
-    const legWarnings: string[] = [];
+    const legWarnings: string[] = [...legWarningsForGroup];
 
     // Measured first, and only fall back to the named or inferred race for legs the file
     // says nothing about.

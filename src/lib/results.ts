@@ -1,4 +1,4 @@
-import { parseCsv } from './csv';
+import { findColumn, parseCsv } from './csv';
 import {
   PACE_COLUMN_NAMES,
   measureFromCandidates,
@@ -41,7 +41,7 @@ export interface ResultsParseResult {
 }
 
 /** Statuses that mean the runner did not produce a usable finish. */
-const EXCLUDED_STATUSES = new Set(['dns', 'dnf', 'dsq', 'ooc']);
+export const EXCLUDED_STATUSES = new Set(['dns', 'dnf', 'dsq', 'ooc']);
 
 /**
  * Official distances for the contest names timing exports normally use. Anything
@@ -94,14 +94,6 @@ function parseTodSeconds(value: string): number | null {
   const s = m[3] ? parseInt(m[3], 10) : 0;
   if (h > 23 || min > 59 || s > 59) return null;
   return h * 3600 + min * 60 + s;
-}
-
-function findColumn(headers: string[], ...candidates: string[]): string | undefined {
-  for (const candidate of candidates) {
-    const hit = headers.find((h) => h.trim().toLowerCase() === candidate.toLowerCase());
-    if (hit) return hit;
-  }
-  return undefined;
 }
 
 export interface ResultsParseOptions {

@@ -224,3 +224,22 @@ export function matchSplitsToCheckpoints(
 
   return results;
 }
+
+/**
+ * Finds a column by name, forgiving how it was punctuated.
+ *
+ * Timing software lets the operator type the heading, so the same column arrives as
+ * "SwimStart.ToD", "SwimStart TOD" or "SwimStart_TOD" depending on who set the template
+ * up. Matching on letters and digits alone means a heading that is right in substance is
+ * not rejected over a full stop. Candidates are tried in order, so a more specific name
+ * still wins over a looser one.
+ */
+export function findColumn(headers: string[], ...candidates: string[]): string | undefined {
+  const key = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  for (const candidate of candidates) {
+    const wanted = key(candidate);
+    const hit = headers.find((header) => key(header) === wanted);
+    if (hit) return hit;
+  }
+  return undefined;
+}
