@@ -4,9 +4,10 @@ import type { CrossingOverride, RaceOverrides } from '../lib/overrides';
 import { EditableCell } from './EditableCell';
 import { parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
 import {
-  AMENITIES,
+  DEFAULT_AMENITIES,
   resolveAmenities,
   totalAmenities,
+  type Amenity,
   type AmenityRules,
   type AmenitySet,
 } from '../lib/amenities';
@@ -14,6 +15,8 @@ import {
 interface Props {
   result: PipelineResult;
   rules: AmenityRules;
+  /** The columns this race provisions, which the operator names and orders. */
+  amenities?: Amenity[];
   /** Per-station hand edits, keyed by the station's map name then amenity key. */
   overrides: Record<string, Partial<AmenitySet>>;
   onOverridesChange: (next: Record<string, Partial<AmenitySet>>) => void;
@@ -81,6 +84,7 @@ function buildRun(result: PipelineResult, courseName: string): Stop[] {
 export function DistanceRunView({
   result,
   rules,
+  amenities = DEFAULT_AMENITIES,
   overrides,
   onOverridesChange,
   onRemovePass,
@@ -109,8 +113,9 @@ export function DistanceRunView({
   // finish furniture is listed but not counted.
   const totals = totalAmenities(
     courseStops.map((stop) =>
-      resolveAmenities(stop.station.schedule.activityLevel, rules, overrides[stop.station.mapName])
-    )
+      resolveAmenities(stop.station.schedule.activityLevel, rules, overrides[stop.station.mapName], amenities)
+    ),
+    amenities
   );
 
   return (
@@ -142,7 +147,7 @@ export function DistanceRunView({
                 <th className="num">Close</th>
                 <th className="num">Cut-off</th>
                 <th>Activity</th>
-                {AMENITIES.map((a) => (
+                {amenities.map((a) => (
                   <th key={a.key} className="amenity-col" title={a.label}>
                     {a.label}
                   </th>
@@ -236,11 +241,12 @@ export function DistanceRunView({
                       {stop.station.schedule.activityLevel}
                     </span>
                   </td>
-                  {AMENITIES.map((a) => {
+                  {amenities.map((a) => {
                     const set = resolveAmenities(
                       stop.station.schedule.activityLevel,
                       rules,
-                      overrides[stop.station.mapName]
+                      overrides[stop.station.mapName],
+                      amenities
                     );
                     const isEdited = overrides[stop.station.mapName]?.[a.key] !== undefined;
                     return (
@@ -292,7 +298,7 @@ export function DistanceRunView({
                 <td className="num">—</td>
                 <td className="num">—</td>
                 <td />
-                {AMENITIES.map((a) => (
+                {amenities.map((a) => (
                   <td key={a.key} />
                 ))}
                 {onRemovePass && <td />}
@@ -306,7 +312,7 @@ export function DistanceRunView({
                 <td className="num" />
                 <td className="num" />
                 <td />
-                {AMENITIES.map((a) => (
+                {amenities.map((a) => (
                   <td key={a.key} className="amenity-col num">
                     {totals[a.key]}
                   </td>

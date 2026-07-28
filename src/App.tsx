@@ -13,7 +13,14 @@ import {
 } from './lib/overrides';
 import { CutoffTable } from './components/CutoffTable';
 import { DistanceRunView } from './components/DistanceRunView';
-import { DEFAULT_AMENITY_RULES, migrateAmenityOverrides, type AmenitySet } from './lib/amenities';
+import {
+  DEFAULT_AMENITIES,
+  DEFAULT_AMENITY_RULES,
+  migrateAmenityOverrides,
+  type Amenity,
+  type AmenitySet,
+} from './lib/amenities';
+import { AmenityEditor } from './components/AmenityEditor';
 import {
   ALL_REPORT_SECTIONS,
   REPORT_SECTIONS,
@@ -145,6 +152,8 @@ interface RaceSnapshot {
   courses: Course[];
   stationOrder: string[];
   amenityOverrides: Record<string, Partial<AmenitySet>>;
+  /** The amenity columns as this race names them — every race stocks differently. */
+  amenities: Amenity[];
   raceName: string;
   removedStations: string[];
   removedPasses: string[];
@@ -168,6 +177,7 @@ function blankSnapshot(): RaceSnapshot {
     courses: [],
     stationOrder: [],
     amenityOverrides: {},
+    amenities: DEFAULT_AMENITIES,
     raceName: '',
     removedStations: [],
     removedPasses: [],
@@ -180,7 +190,7 @@ function blankSnapshot(): RaceSnapshot {
 /** Fields that go into a saved race file — the recomputable ones stay out. */
 const RACE_FILE_FIELDS = [
   'kml', 'rows', 'selectedFolders', 'settings', 'renumber', 'renumberPrefix',
-  'results', 'contestMapping', 'stationOrder', 'amenityOverrides', 'raceName',
+  'results', 'contestMapping', 'stationOrder', 'amenityOverrides', 'amenities', 'raceName',
   'removedStations', 'removedPasses', 'reportSections', 'stationNotes', 'raceOverrides',
 ] as const;
 
@@ -199,6 +209,7 @@ export default function App() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [stationOrder, setStationOrder] = useState<string[]>([]);
   const [amenityOverrides, setAmenityOverrides] = useState<Record<string, Partial<AmenitySet>>>({});
+  const [amenities, setAmenities] = useState<Amenity[]>(DEFAULT_AMENITIES);
   const [raceName, setRaceName] = useState('');
   const [removedStations, setRemovedStations] = useState<string[]>([]);
   const [removedPasses, setRemovedPasses] = useState<string[]>([]);
@@ -258,7 +269,7 @@ export default function App() {
   function captureSnapshot(): RaceSnapshot {
     return {
       kml, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
-      results, contestMapping, courses, stationOrder, amenityOverrides, raceName,
+      results, contestMapping, courses, stationOrder, amenityOverrides, amenities, raceName,
       removedStations, removedPasses, reportSections, stationNotes, raceOverrides,
     };
   }
@@ -277,6 +288,7 @@ export default function App() {
     setCourses(snap.courses);
     setStationOrder(snap.stationOrder);
     setAmenityOverrides(snap.amenityOverrides);
+    setAmenities(snap.amenities?.length ? snap.amenities : DEFAULT_AMENITIES);
     setRaceName(snap.raceName);
     setRemovedStations(snap.removedStations);
     setRemovedPasses(snap.removedPasses);
@@ -479,6 +491,7 @@ export default function App() {
       sections: reportSections,
       rules: DEFAULT_AMENITY_RULES,
       overrides: amenityOverrides,
+      amenities,
       sourceFileName: kml?.fileName,
       resultsFileName: results?.fileName,
     });
@@ -865,9 +878,15 @@ export default function App() {
                 })}
               </div>
             )}
+            <AmenityEditor
+              amenities={amenities}
+              onChange={setAmenities}
+              onReset={() => setAmenities(DEFAULT_AMENITIES)}
+            />
             <DistanceRunView
               result={result}
               rules={DEFAULT_AMENITY_RULES}
+              amenities={amenities}
               overrides={amenityOverrides}
               onOverridesChange={setAmenityOverrides}
               notes={stationNotes}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseClockTimeToSeconds, secondsToClockTime } from '../time';
+import { formatDuration, parseClockTimeToSeconds, secondsToClockTime, windowSeconds } from '../time';
 
 describe('parseClockTimeToSeconds', () => {
   it('parses 24-hour HH:MM and HH:MM:SS', () => {
@@ -52,5 +52,38 @@ describe('secondsToClockTime', () => {
   it('round-trips with the parser', () => {
     const seconds = parseClockTimeToSeconds('4:10 AM')!;
     expect(secondsToClockTime(seconds)).toBe('04:10:00');
+  });
+});
+
+describe('windowSeconds', () => {
+  it('measures a window inside one day', () => {
+    expect(windowSeconds('05:30:00', '11:05:00')).toBe(5 * 3600 + 35 * 60);
+  });
+
+  it('carries a window that closes after midnight into the next day', () => {
+    // A night stage opening at 22:00 and closing at 02:30 stands open four and a half
+    // hours, not minus nineteen and a half.
+    expect(windowSeconds('22:00:00', '02:30:00')).toBe(4 * 3600 + 30 * 60);
+  });
+
+  it('returns null when either time is unreadable', () => {
+    expect(windowSeconds('dawn', '11:00:00')).toBeNull();
+    expect(windowSeconds('05:00:00', '')).toBeNull();
+  });
+});
+
+describe('formatDuration', () => {
+  it.each([
+    [45 * 60, '45m'],
+    [3600, '1h'],
+    [6 * 3600 + 20 * 60, '6h 20m'],
+    [0, '0m'],
+  ])('formats %i seconds as %s', (seconds, expected) => {
+    expect(formatDuration(seconds)).toBe(expected);
+  });
+
+  it('rounds to the nearest minute', () => {
+    expect(formatDuration(3600 + 29)).toBe('1h');
+    expect(formatDuration(3600 + 31)).toBe('1h 1m');
   });
 });

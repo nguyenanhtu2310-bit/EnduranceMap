@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { PipelineStation } from '../lib/pipeline';
 import type { ActivityLevel } from '../lib/schedule';
 import type { RaceOverrides, StationOverride } from '../lib/overrides';
 import { EditableCell } from './EditableCell';
+import { formatDuration, windowSeconds } from '../lib/time';
 
 interface Props {
   stations: PipelineStation[];
@@ -28,6 +29,29 @@ function formatHm(clock: string): string {
   return clock.slice(0, 5);
 }
 
+/**
+ * How the table is ordered. The default is the order stations are met on course, which
+ * is also the order the operator can drag into shape; the others answer the two
+ * questions asked when planning a day's staffing — who is out first, and who is out
+ * longest. Sorting is a way of looking at the table, not a change to it, so the manual
+ * order is untouched underneath and dragging is disabled while a sort is on.
+ */
+type SortKey = 'course' | 'open' | 'close' | 'duration';
+
+const SORT_LABELS: Record<Exclude<SortKey, 'course'>, string> = {
+  open: 'Opens earliest first',
+  close: 'Closes latest first',
+  duration: 'Longest open first',
+};
+
+function openSeconds(station: PipelineStation): number {
+  return windowSeconds('00:00:00', station.schedule.openClockTime) ?? 0;
+}
+
+function stationWindowSeconds(station: PipelineStation): number {
+  return windowSeconds(station.schedule.openClockTime, station.schedule.closeClockTime) ?? 0;
+}
+
 export function StationScheduleTable({
   stations,
   showSourceNames = true,
@@ -40,6 +64,22 @@ export function StationScheduleTable({
 }: Props) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortKey>('course');
+
+  const shown = useMemo(() => {
+    if (sort === 'course') return stations;
+    const ranked = [...stations];
+    if (sort === 'open') ranked.sort((a, b) => openSeconds(a) - openSeconds(b));
+    // Latest closing and longest open are both "most exposed first", so they descend.
+    if (sort === 'close') {
+      ranked.sort((a, b) => openSeconds(b) + stationWindowSeconds(b) - (openSeconds(a) + stationWindowSeconds(a)));
+    }
+    if (sort === 'duration') ranked.sort((a, b) => stationWindowSeconds(b) - stationWindowSeconds(a));
+    return ranked;
+  }, [stations, sort]);
+
+  const sorted = sort !== 'course';
+  const canDrag = !!onReorder && !sorted;
 
   function drop(targetMapName: string) {
     if (!onReorder || !dragging || dragging === targetMapName) return;
@@ -56,6 +96,31 @@ export function StationScheduleTable({
   }
 
   return (
+    <>
+      <div className="sort-bar">
+        <span className="sort-label">Order</span>
+        <button
+          type="button"
+          className={sort === 'course' ? 'sort-chip on' : 'sort-chip'}
+          onClick={() => setSort('course')}
+          title={onReorder ? 'The order stations are met on course — drag to rearrange' : 'The order stations are met on course'}
+        >
+          On course
+        </button>
+        {(['open', 'close', 'duration'] as const).map((key) => (
+          <button
+            key={key}
+            type="button"
+            className={sort === key ? 'sort-chip on' : 'sort-chip'}
+            onClick={() => setSort(sort === key ? 'course' : key)}
+            title={SORT_LABELS[key]}
+          >
+            {SORT_LABELS[key]}
+          </button>
+        ))}
+        {sorted && onReorder && <span className="hint sort-note">Dragging is off while sorted.</span>}
+      </div>
+
     <div className="table-scroll">
       <table>
         <thead>
@@ -65,29 +130,30 @@ export function StationScheduleTable({
             <th>Crossings</th>
             <th className="num">Open</th>
             <th className="num">Close</th>
+            <th className="num">Duration</th>
             <th className="num">Peak /hr</th>
             <th>Activity</th>
             {onRemove && <th aria-label="Remove" />}
           </tr>
         </thead>
         <tbody>
-          {stations.map((station) => (
+          {shown.map((station) => (
             <tr
               key={station.mapName}
-              draggable={!!onReorder}
+              draggable={canDrag}
               onDragStart={() => setDragging(station.mapName)}
               onDragEnd={() => {
                 setDragging(null);
                 setOver(null);
               }}
               onDragOver={(e) => {
-                if (!onReorder) return;
+                if (!canDrag) return;
                 e.preventDefault();
                 setOver(station.mapName);
               }}
               onDrop={(e) => {
                 e.preventDefault();
-                drop(station.mapName);
+                if (canDrag) drop(station.mapName);
               }}
               className={over === station.mapName && dragging !== station.mapName ? 'drop-target' : undefined}
             >
@@ -179,13 +245,23 @@ export function StationScheduleTable({
                   formatHm(station.schedule.closeClockTime)
                 )}
               </td>
+              <td className="num">
+                {(() => {
+                  const seconds = stationWindowSeconds(station);
+                  return seconds > 0 ? formatDuration(seconds) : '—';
+                })()}
+              </td>
               <td className="num">{Math.round(station.schedule.peakRunnersPerHour).toLocaleString()}</td>
               <td>
                 {onStationEdit ? (
                   <select
-                    className={
-                      overrides?.stations?.[station.mapName]?.activityLevel ? 'level-select edited' : 'level-select'
-                    }
+                    className={[
+                      'level-select',
+                      station.schedule.activityLevel,
+                      overrides?.stations?.[station.mapName]?.activityLevel ? 'edited' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
                     value={station.schedule.activityLevel}
                     onChange={(e) =>
                       onStationEdit(
@@ -222,5 +298,6 @@ export function StationScheduleTable({
         </tbody>
       </table>
     </div>
+    </>
   );
 }

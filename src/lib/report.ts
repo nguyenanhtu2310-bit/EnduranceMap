@@ -1,6 +1,13 @@
 import { isEndZoneStop, type PipelineResult, type PipelineStation } from './pipeline';
 import { parseClockTimeToSeconds, secondsToClockTime } from './time';
-import { AMENITIES, resolveAmenities, totalAmenities, type AmenityRules, type AmenitySet } from './amenities';
+import {
+  DEFAULT_AMENITIES,
+  resolveAmenities,
+  totalAmenities,
+  type Amenity,
+  type AmenityRules,
+  type AmenitySet,
+} from './amenities';
 import { SPORTSTATS_LOGO_DATA_URI } from '../assets/sportstatsLogo';
 
 /** Which parts of the plan to print. An organiser rarely needs all of it at once. */
@@ -41,6 +48,8 @@ export interface ReportOptions {
   /** Defaults to every section when omitted. */
   sections?: ReportSections;
   rules: AmenityRules;
+  /** The amenity columns as the operator named them; defaults to the shipped list. */
+  amenities?: Amenity[];
   overrides: Record<string, Partial<AmenitySet>>;
   /** Name of the source map, recorded so a printed sheet can be traced back. */
   sourceFileName?: string;
@@ -164,7 +173,7 @@ function buildDistributionSvg(result: PipelineResult, series: string[], ink: { l
  * the browser it was calculated in.
  */
 export function buildReportHtml(result: PipelineResult, options: ReportOptions): string {
-  const { raceName, rules, overrides } = options;
+  const { raceName, rules, overrides, amenities = DEFAULT_AMENITIES } = options;
   const dark = options.theme === 'dark';
   const notes = options.notes ?? {};
   const sections = options.sections ?? ALL_REPORT_SECTIONS;
@@ -205,21 +214,22 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
       const courseStops = stops.filter(onCourse);
 
       const sets = stops.map((s) =>
-        resolveAmenities(s.station.schedule.activityLevel, rules, overrides[s.station.mapName])
+        resolveAmenities(s.station.schedule.activityLevel, rules, overrides[s.station.mapName], amenities)
       );
       // Counts describe what a runner meets between the lines, so start and finish
       // furniture is listed but never counted.
       const totals = totalAmenities(
         courseStops.map((s) =>
-          resolveAmenities(s.station.schedule.activityLevel, rules, overrides[s.station.mapName])
-        )
+          resolveAmenities(s.station.schedule.activityLevel, rules, overrides[s.station.mapName], amenities)
+        ),
+        amenities
       );
       const longest = Math.max(0, ...stops.map((s) => s.gapKm));
 
       const rows = stops
         .map((stop, i) => {
           const set = sets[i];
-          const cells = AMENITIES.map(
+          const cells = amenities.map(
             (a) => `<td class="mid">${set[a.key] ? a.icon : ''}</td>`
           ).join('');
           return `<tr${onCourse(stop) ? '' : ' class="end-zone"'}>
@@ -237,7 +247,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         })
         .join('');
 
-      const totalCells = AMENITIES.map((a) => `<td class="mid"><strong>${totals[a.key]}</strong></td>`).join('');
+      const totalCells = amenities.map((a) => `<td class="mid"><strong>${totals[a.key]}</strong></td>`).join('');
 
       return `<h2>${esc(course.name)} — ${course.totalKm.toFixed(1)} km</h2>
         <p class="note">${courseStops.length} stops on course, longest gap ${longest.toFixed(1)} km. Start and finish furniture is greyed and not counted.</p>
@@ -245,7 +255,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
           <thead><tr>
             <th></th><th>Point</th><th class="num">At km</th><th class="num">Gap</th>
             <th class="num">Open</th><th class="num">Close</th><th class="num">Cut-off</th>
-            ${AMENITIES.map((a) => `<th class="mid">${esc(a.label)}</th>`).join('')}
+            ${amenities.map((a) => `<th class="mid">${esc(a.label)}</th>`).join('')}
           </tr></thead>
           <tbody>${rows}
             <tr class="total"><td></td><td><strong>Total</strong></td>
