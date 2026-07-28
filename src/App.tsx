@@ -28,6 +28,8 @@ import {
   downloadReport,
   type ReportSections,
 } from './lib/report';
+import { buildReportSheets } from './lib/workbook';
+import { downloadXlsx } from './lib/xlsx';
 import { FolderPicker } from './components/FolderPicker';
 import { KmlDropzone } from './components/KmlDropzone';
 import { PaceBandForm, type DistanceFormRow } from './components/PaceBandForm';
@@ -1039,6 +1041,25 @@ export default function App() {
                 title="Ink-on-white document for printing or emailing"
               >
                 Download print report
+              </button>
+              <button
+                className="secondary"
+                onClick={() => {
+                  const name = raceName.trim() || kml?.fileName.replace(/\.kml$/i, '') || 'Race';
+                  const sheets = buildReportSheets(result, {
+                    raceName: name,
+                    rules: DEFAULT_AMENITY_RULES,
+                    overrides: amenityOverrides,
+                    amenities,
+                    notes: stationNotes,
+                    sections: reportSections,
+                  });
+                  downloadXlsx(sheets, `${name.replace(/[^\w\d -]+/g, '').trim() || 'race'} - CP operations.xlsx`);
+                }}
+                disabled={!Object.values(reportSections).some(Boolean)}
+                title="One sheet per section — opens in Excel, Numbers or Google Sheets"
+              >
+                Download spreadsheet
               </button>
               {!Object.values(reportSections).some(Boolean) && (
                 <span className="hint" style={{ margin: 0 }}>
