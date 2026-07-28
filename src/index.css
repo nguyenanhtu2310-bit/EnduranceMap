@@ -1046,6 +1046,46 @@ button.sort-chip.on {
   margin: 0 0 0 0.2rem;
 }
 
+/* — multisport legs —
+   A race block groups its legs under one header, so several races on one map read
+   as separate plans rather than one long table. */
+
+.ms-race {
+  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-md);
+  padding: 0.9rem;
+  margin-bottom: 0.9rem;
+}
+
+.ms-race-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.ms-race-head label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--color-faint);
+}
+
+.ms-race-head input {
+  min-width: 6rem;
+}
+
+.ms-race-head input[type='text'] {
+  min-width: 11rem;
+}
+
+/* A leg the plan cannot use yet — usually one with no route chosen. */
+tr.ms-leg-problem td:first-child {
+  box-shadow: inset 2px 0 0 var(--color-warn);
+}
+
 /* — amenity columns —
    The columns are the operator's to define, so the editor sits above the table it
    changes and the icon palette opens in place rather than in a dialog. */
@@ -1083,4 +1123,24 @@ button.amenity.icon-button {
 button.row-remove:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+/* — where a distance came from —
+   A measured distance is arithmetic on the file's own pace column; a guessed one is the
+   tool's inference and wants checking. Colouring the difference means the operator never
+   has to wonder which they are looking at. */
+
+.colocated.source-measured,
+.colocated.source-operator {
+  color: var(--color-ok);
+}
+
+.colocated.source-name,
+.colocated.source-splits {
+  color: var(--color-warn);
+}
+
+.colocated.source-times,
+.colocated.source-unknown {
+  color: var(--color-danger);
 }

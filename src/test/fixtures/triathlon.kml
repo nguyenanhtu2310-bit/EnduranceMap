@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A middle-distance triathlon, shaped like a real IRONMAN 70.3 export:
+
+    - routes are named "<Sport> Course (<race>)", and the race key is written
+      inconsistently — "(70.3)" on the swim, "(IM70.3)" on the other two — exactly
+      as the real map did
+    - the run is three laps of one loop, so a point on it is passed three times
+    - the bike leaves transition along the SAME stretch of road as the run loop's
+      northern edge, so "Run 1" sits on the bike line as well as the run line and
+      no amount of geometry can say which leg it belongs to
+    - a Kids point shares the TIMING folder with the real ones, so it cannot be
+      excluded by folder alone
+    - the swim is drawn, even though nothing is staffed on the water
+
+  Coordinates are synthetic. At latitude 10, one degree of latitude is ~111.2 km
+  and one degree of longitude is ~109.6 km.
+-->
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Sample Triathlon</name>
+    <Folder>
+      <name>RACE ROUTE</name>
+      <Placemark>
+        <name>Swim Course (70.3)</name>
+        <LineString>
+          <coordinates>
+            106.000000,9.900000,0 106.000000,9.917000,0
+          </coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>Bike Course (IM70.3)</name>
+        <LineString>
+          <coordinates>
+            106.000000,10.001000,0 106.032000,10.001000,0 106.032000,10.330000,0
+          </coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>Run Course (IM70.3)</name>
+        <LineString>
+          <coordinates>
+            106.000000,10.000000,0 106.032000,10.000000,0 106.032000,10.001000,0 106.000000,10.001000,0 106.000000,10.000000,0
+            106.032000,10.000000,0 106.032000,10.001000,0 106.000000,10.001000,0 106.000000,10.000000,0
+            106.032000,10.000000,0 106.032000,10.001000,0 106.000000,10.001000,0 106.000000,10.000000,0
+          </coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>TIMING</name>
+      <Placemark>
+        <name>Run 1 - 70.3 Uturn</name>
+        <Point><coordinates>106.016000,10.001000,0</coordinates></Point>
+      </Placemark>
+      <Placemark>
+        <name>Bike 1 - 70.3 Uturn</name>
+        <Point><coordinates>106.032000,10.200000,0</coordinates></Point>
+      </Placemark>
+      <Placemark>
+        <name>Kids_ Run 1 - Uturn (6 - 8yo)</name>
+        <Point><coordinates>106.024000,10.001000,0</coordinates></Point>
+      </Placemark>
+      <Placemark>
+        <name>Water point</name>
+        <Point><coordinates>106.032000,10.100000,0</coordinates></Point>
+      </Placemark>
+    </Folder>
+    <!--
+      An unticked folder whose point stands ten metres from "Run 1", close enough to be
+      merged into it. Its name announces no sport, so on its own it sits on the bike
+      route as well as the run route — and would hand those bike passes to the run
+      station it merges with, stretching that station's window across the whole day.
+    -->
+    <Folder>
+      <name>RUN CP</name>
+      <Placemark>
+        <name>TA 2/4/6 (4.2/11.2/18.3)</name>
+        <Point><coordinates>106.016090,10.001000,0</coordinates></Point>
+      </Placemark>
+    </Folder>
+  </Document>
+</kml>

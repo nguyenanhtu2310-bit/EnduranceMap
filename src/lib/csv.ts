@@ -53,14 +53,33 @@ function parseCsvRows(text: string): string[][] {
   return rows.filter((r) => !(r.length === 1 && r[0] === ''));
 }
 
+/**
+ * Recovers a file that has been quoted twice over.
+ *
+ * Some exports arrive with every line wrapped in one pair of quotes and every inner quote
+ * doubled, so the whole row parses as a single field that is itself a CSV row. Unwrapping
+ * once puts the columns back. A file that genuinely has one column is left alone, which
+ * is what the comma test distinguishes.
+ */
+function unwrapDoubleEncoded(rows: string[][]): string[][] {
+  if (rows.length === 0) return rows;
+  if (!rows.every((row) => row.length === 1)) return rows;
+  if (!rows[0][0].includes(',')) return rows;
+
+  const reparsed = parseCsvRows(rows.map((row) => row[0]).join('\n'));
+  return reparsed[0]?.length > 1 ? reparsed : rows;
+}
+
 /** Parses CSV text into an array of header-keyed row objects. */
 export function parseCsv(text: string): Record<string, string>[] {
   // Timing exports are commonly UTF-8 with a BOM; left in place it becomes part of the
   // first header name, so "Contest" silently stops matching.
-  const rows = parseCsvRows(text.replace(/^﻿/, ''));
+  const rows = unwrapDoubleEncoded(parseCsvRows(text.replace(/^﻿/, '')));
   if (rows.length === 0) return [];
 
-  const headers = rows[0].map((h) => h.trim());
+  // A stray quote survives a malformed header such as `"Contest"""`, which real
+  // exports contain; left in place the column becomes unreachable by name.
+  const headers = rows[0].map((h) => h.trim().replace(/^"+|"+$/g, '').trim());
   return rows
     .slice(1)
     .filter((row) => row.some((cell) => cell.trim() !== ''))

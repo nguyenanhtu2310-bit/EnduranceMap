@@ -1,6 +1,21 @@
 import { useRef, useState } from 'react';
 import type { Course } from '../lib/snap';
 import { summarizeProfile, type ContestProfile } from '../lib/results';
+import type { DistanceSource } from '../lib/distances';
+
+/**
+ * How the distance was arrived at, worst evidence last. Shown against every contest
+ * because a race named "Ultra 70km" that measured 66 km is the difference between a
+ * schedule that works and one that is six percent out all day.
+ */
+const DISTANCE_SOURCES: Record<DistanceSource, string> = {
+  operator: 'set by you',
+  measured: 'measured from pace',
+  name: 'from the name — check',
+  splits: 'from split labels',
+  times: 'guessed from times',
+  unknown: 'unknown — set it',
+};
 
 interface Props {
   fileName?: string;
@@ -10,6 +25,8 @@ interface Props {
   mapping: Record<string, string>;
   onLoad: (text: string, fileName: string) => void;
   onMappingChange: (mapping: Record<string, string>) => void;
+  /** Corrects how far a contest was, when the file could not say. */
+  onDistanceChange?: (contest: string, km: number) => void;
   onClear: () => void;
   onError: (message: string) => void;
 }
@@ -21,6 +38,7 @@ export function ResultsPanel({
   mapping,
   onLoad,
   onMappingChange,
+  onDistanceChange,
   onClear,
   onError,
 }: Props) {
@@ -116,7 +134,26 @@ export function ResultsPanel({
                     ))}
                   </td>
                   <td className="num">{profile.finishers.toLocaleString()}</td>
-                  <td className="num">{profile.distanceKm > 0 ? `${profile.distanceKm} km` : '—'}</td>
+                  <td className="num">
+                    {onDistanceChange ? (
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.1}
+                        value={profile.distanceKm || ''}
+                        placeholder="km"
+                        title={DISTANCE_SOURCES[profile.distanceSource]}
+                        onChange={(e) => onDistanceChange(profile.contest, Number(e.target.value))}
+                      />
+                    ) : profile.distanceKm > 0 ? (
+                      `${profile.distanceKm} km`
+                    ) : (
+                      '—'
+                    )}
+                    <span className={`colocated source-${profile.distanceSource}`}>
+                      {DISTANCE_SOURCES[profile.distanceSource]}
+                    </span>
+                  </td>
                   <td className="num">
                     {summary
                       ? `${summary.pace.p1.toFixed(2)} / ${summary.pace.p50.toFixed(2)} / ${summary.pace.p99.toFixed(2)}`
