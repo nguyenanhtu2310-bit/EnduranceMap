@@ -101,23 +101,50 @@ function scaledDurations(
   athlete: MultisportAthleteSample,
   race: MultisportRace,
   profile: MultisportProfile,
+  alignment: number[],
   courseByName: Map<string, Course>
 ): number[] {
   return race.legs.map((leg, j) => {
-    const seconds = athlete.legSeconds[j] ?? 0;
+    const source = alignment[j];
+    // A transition the timing system never recorded costs nothing rather than costing
+    // the whole field.
+    if (source < 0) return 0;
+    const seconds = athlete.legSeconds[source] ?? 0;
     if (leg.kind === 'transition') return seconds;
-    const sourceKm = profile.legs[j]?.distanceKm ?? 0;
+    const sourceKm = profile.legs[source]?.distanceKm ?? 0;
     if (!(sourceKm > 0)) return seconds;
     return seconds * (traversedKm(leg, courseByName) / sourceKm);
   });
 }
 
-/** Whether a reference field describes the same sequence of sports as the race. */
-function profileFits(race: MultisportRace, profile: MultisportProfile): boolean {
-  return (
-    profile.legs.length === race.legs.length &&
-    profile.legs.every((leg, i) => leg.kind === race.legs[i].kind)
-  );
+/**
+ * Lines a reference field's legs up with the race being planned.
+ *
+ * Returns which profile leg describes each race leg, or -1 for one the file does not
+ * cover. Some timing systems never record an aquathlon's transition, so a file of swim
+ * and run has to be usable for a race of swim, T1 and run — treating the untimed
+ * transition as costing nothing, rather than discarding a real field of athletes and
+ * falling back to a typed guess.
+ *
+ * Only transitions may be missing. A swim, ride or run the file does not describe means
+ * it is a different race, and null says so.
+ */
+function alignProfile(race: MultisportRace, profile: MultisportProfile): number[] | null {
+  const alignment: number[] = [];
+  let source = 0;
+
+  for (const leg of race.legs) {
+    if (source < profile.legs.length && profile.legs[source].kind === leg.kind) {
+      alignment.push(source++);
+    } else if (leg.kind === 'transition') {
+      alignment.push(-1);
+    } else {
+      return null;
+    }
+  }
+
+  // Everything the file describes has to have been used, or the sequences differ.
+  return source === profile.legs.length ? alignment : null;
 }
 
 export function buildLegDistanceInputs(
@@ -131,7 +158,8 @@ export function buildLegDistanceInputs(
 
   for (const race of plan.races) {
     const profile = options.profileByRaceId?.get(race.id);
-    const usable = profile && profileFits(race, profile) && profile.athletes.length > 0;
+    const alignment = profile ? alignProfile(race, profile) : null;
+    const usable = !!profile && !!alignment && profile.athletes.length > 0;
 
     if (profile && !usable) {
       warnings.push(
@@ -145,7 +173,7 @@ export function buildLegDistanceInputs(
 
     // Each athlete's leg durations for THIS race, in this race's own leg order.
     const durations = athletes.map((athlete) =>
-      usable ? scaledDurations(athlete, race, profile!, courseByName) : athlete.legSeconds
+      usable ? scaledDurations(athlete, race, profile!, alignment!, courseByName) : athlete.legSeconds
     );
 
     const lastRoutedIndex = race.legs.reduce(

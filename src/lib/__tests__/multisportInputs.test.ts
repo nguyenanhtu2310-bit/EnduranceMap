@@ -314,3 +314,117 @@ describe('autoMapMultisport', () => {
     expect(autoMapMultisport([full, half], null)).toEqual({});
   });
 });
+
+describe('a transition the timing system never recorded', () => {
+  /** A reference field of swim and run only, as an aquathlon export often arrives. */
+  function swimRunProfile(): MultisportProfile {
+    return {
+      key: 'aqua',
+      distanceSource: 'measured',
+      label: 'Sprint Aqua Warriors',
+      legs: [
+        { kind: 'swim', label: 'Swim', distanceKm: 0.75 },
+        { kind: 'run', label: 'Run', distanceKm: 5 },
+      ],
+      athletes: [{ raceOffsetSeconds: 0, legSeconds: [900, 1500] }],
+      rows: 1,
+      usable: 1,
+      attrition: [],
+      warnings: [],
+    };
+  }
+
+  function aquathlon() {
+    const race = instantiateTemplate('aquathlon', 'ms-1', 'Sprint Aqua');
+    race.startTimeClock = '06:00';
+    race.startSpreadMinutes = 0;
+    // Planned at the same distances the reference field raced, so nothing is rescaled
+    // and the offsets can be asserted to the second.
+    race.legs[0].distanceKm = 0.75;
+    race.legs[2].courseName = 'Run';
+    race.legs[2].distanceKm = 5;
+    return race;
+  }
+
+  const courses = [course('Run', 5)];
+
+  it('still uses the real field rather than falling back to a typed band', () => {
+    const { inputs, warnings } = buildLegDistanceInputs({ races: [aquathlon()] }, {
+      courses,
+      profileByRaceId: new Map([['ms-1', swimRunProfile()]]),
+    });
+
+    expect(warnings).toEqual([]);
+    // The swim alone, with the untimed transition costing nothing.
+    expect(inputs[0].samples![0].startOffsetSeconds).toBe(900);
+    expect(inputs[0].samples![0].paceMinPerKm).toBeCloseTo(1500 / 60 / 5, 10);
+  });
+
+  it('adds the transition back when the file does record one', () => {
+    const withT1: MultisportProfile = {
+      ...swimRunProfile(),
+      legs: [
+        { kind: 'swim', label: 'Swim', distanceKm: 0.75 },
+        { kind: 'transition', label: 'T1', distanceKm: 0 },
+        { kind: 'run', label: 'Run', distanceKm: 5 },
+      ],
+      athletes: [{ raceOffsetSeconds: 0, legSeconds: [900, 120, 1500] }],
+    };
+
+    const { inputs } = buildLegDistanceInputs({ races: [aquathlon()] }, {
+      courses,
+      profileByRaceId: new Map([['ms-1', withT1]]),
+    });
+    expect(inputs[0].samples![0].startOffsetSeconds).toBe(1020);
+  });
+
+  it('still refuses a field that is missing a leg anyone actually races', () => {
+    // A swim-only file cannot describe a race with a run, and guessing would be worse.
+    const swimOnly: MultisportProfile = {
+      ...swimRunProfile(),
+      legs: [{ kind: 'swim', label: 'Swim', distanceKm: 0.75 }],
+      athletes: [{ raceOffsetSeconds: 0, legSeconds: [900] }],
+    };
+
+    const { warnings } = buildLegDistanceInputs({ races: [aquathlon()] }, {
+      courses,
+      profileByRaceId: new Map([['ms-1', swimOnly]]),
+      bandSampleSize: 4,
+    });
+    expect(warnings.join(' ')).toContain('does not match the legs');
+  });
+});
+
+describe('a swim planned at a different distance from the reference', () => {
+  it('scales the swim, and with it everything that follows', () => {
+    // The reference swam 0.75 km; this race swims 1 km, so the swim takes a third longer
+    // and the run starts that much later.
+    const profile: MultisportProfile = {
+      key: 'aqua',
+      distanceSource: 'measured',
+      label: 'Sprint Aqua Warriors',
+      legs: [
+        { kind: 'swim', label: 'Swim', distanceKm: 0.75 },
+        { kind: 'run', label: 'Run', distanceKm: 5 },
+      ],
+      athletes: [{ raceOffsetSeconds: 0, legSeconds: [900, 1500] }],
+      rows: 1,
+      usable: 1,
+      attrition: [],
+      warnings: [],
+    };
+
+    const race = instantiateTemplate('aquathlon', 'ms-1', 'Longer swim');
+    race.startTimeClock = '06:00';
+    race.startSpreadMinutes = 0;
+    race.legs[0].distanceKm = 1;
+    race.legs[2].courseName = 'Run';
+    race.legs[2].distanceKm = 5;
+
+    const { inputs } = buildLegDistanceInputs({ races: [race] }, {
+      courses: [course('Run', 5)],
+      profileByRaceId: new Map([['ms-1', profile]]),
+    });
+    expect(inputs[0].samples![0].startOffsetSeconds).toBe(1200);
+  });
+});
