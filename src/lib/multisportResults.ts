@@ -229,8 +229,15 @@ function readElapsedShape(headers: string[], rows: Record<string, string>[]): Sh
   if (t2) legs.push({ kind: 'transition', label: 'T2', column: t2 });
   legs.push({ kind: 'run', label: 'Run', column: run });
 
+  /*
+   * Only the raced legs have to be readable. A transition is often written as a bare "0"
+   * or left blank when the timing system did not record one, and requiring it made the
+   * whole file unreadable — the columns were there, so nothing else was tried, and the
+   * parser reported that it could find no legs at all.
+   */
+  const raced = legs.filter((leg) => leg.kind !== 'transition');
   const anyComplete = rows.some((row) =>
-    legs.every((leg) => parseElapsedToSeconds(row[leg.column] ?? '') !== null)
+    raced.every((leg) => parseElapsedToSeconds(row[leg.column] ?? '') !== null)
   );
   if (!anyComplete) return null;
 
@@ -376,6 +383,21 @@ export function parseMultisportResultsCsv(
       ? shape.legs.map((l) => ({ kind: l.kind, label: l.label }))
       : shape.boundaries.slice(1).map((b) => b.leg!);
 
+  /**
+   * The athlete's overall time, where the file states one. Never used to build the model
+   * — the legs are — but it proves they were mapped right, and supplies a transition the
+   * timing system did not record.
+   */
+  const finishColumn = findColumn(
+    headers,
+    'ChipTime',
+    'FinishChipTime',
+    'Chip Time',
+    'FinishTime',
+    'NetTime',
+    'Finish'
+  );
+
   /** Columns whose presence marks how far an athlete got, for the attrition ladder. */
   const reachedColumns =
     shape.mode === 'elapsed'
@@ -412,8 +434,33 @@ export function parseMultisportResultsCsv(
         }
         legSeconds.push(seconds);
       }
+      /*
+       * A transition nobody timed still happened, and it shows up as the gap between the
+       * legs and the stated finishing time. One aquathlon writes T1 as a flat zero while
+       * its athletes spent a median of eight minutes there, varying from two to
+       * twenty-two — real time between getting out of the water and starting to run.
+       * Attributing it to the untimed transition is better than dropping it, which would
+       * open every run position eight minutes early.
+       *
+       * Only ever added, never subtracted: a leg column holding a running total makes the
+       * sum too large, and that stays a fault to report rather than something to absorb.
+       */
       const total = legSeconds.reduce((sum, v) => sum + v, 0);
-      return total > 0 && total <= MAX_RACE_SECONDS ? { legSeconds, startSeconds } : null;
+      if (finishColumn && total > 0) {
+        const stated = parseElapsedToSeconds(row[finishColumn] ?? '');
+        const untimed = shape!.legs
+          .map((leg, i) => ({ leg, i }))
+          .filter((e) => e.leg.kind === 'transition' && legSeconds[e.i] === 0);
+
+        if (stated !== null && stated > total && untimed.length === 1) {
+          const missing = stated - total;
+          // A gap larger than the racing itself is a mapping fault, not a transition.
+          if (missing < total) legSeconds[untimed[0].i] = missing;
+        }
+      }
+
+      const settled = legSeconds.reduce((sum, v) => sum + v, 0);
+      return settled > 0 && settled <= MAX_RACE_SECONDS ? { legSeconds, startSeconds } : null;
     }
 
     const times: number[] = [];
@@ -467,21 +514,6 @@ export function parseMultisportResultsCsv(
    * A blank status is a clean race — timing software only writes a value when something
    * went wrong — so rows are excluded by what the status says, never by its absence.
    */
-  /*
-   * The athlete's overall time, where the file states one. It is never used to build the
-   * model — the legs are — but it is the one thing that can prove the legs were mapped
-   * correctly, so it is checked against their sum.
-   */
-  const finishColumn = findColumn(
-    headers,
-    'ChipTime',
-    'FinishChipTime',
-    'Chip Time',
-    'FinishTime',
-    'NetTime',
-    'Finish'
-  );
-
   const statusColumn = findColumn(headers, 'Status', 'StatusText');
   const isExcluded = (row: Record<string, string>) =>
     !!statusColumn && EXCLUDED_STATUSES.has((row[statusColumn] ?? '').trim().toLowerCase());

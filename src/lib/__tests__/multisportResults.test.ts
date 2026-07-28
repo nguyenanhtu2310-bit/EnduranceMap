@@ -363,3 +363,38 @@ describe('the Aqua Warriors series', () => {
     expect(detectRaceFromName('IM140.6')?.label).toBe('Full distance');
   });
 });
+
+describe('a transition the timing system wrote as zero', () => {
+  const head = 'Contest,SwimStart Tod,Swim,T1,Run,Swim Pace,Run Pace,Chip Time,Status';
+  /** Swim 15:00, run 25:00, and a finishing time that says eight minutes went somewhere. */
+  const rows = (chip: string) =>
+    Array.from({ length: 8 }, (_, i) =>
+      `Sprint Aqua Warriors,05:3${i}:00,15:00,0,25:00,20:00min/km,5:00min/km,${chip},`);
+
+  it('recovers it from the gap to the finishing time', () => {
+    const { profiles } = parseMultisportResultsCsv([head, ...rows('48:00')].join('\n'));
+    const p = profiles[0];
+    // 48:00 stated, 40:00 raced — the eight minutes are the transition.
+    expect(p.athletes[0].legSeconds).toEqual([900, 480, 1500]);
+    expect(p.warnings.some((w) => /add up/.test(w))).toBe(false);
+  });
+
+  it('leaves it at zero when the legs already account for the time', () => {
+    const { profiles } = parseMultisportResultsCsv([head, ...rows('40:00')].join('\n'));
+    expect(profiles[0].athletes[0].legSeconds).toEqual([900, 0, 1500]);
+  });
+
+  it('still reports a leg holding a running total rather than absorbing it', () => {
+    // Run made cumulative makes the sum too large, which no transition can explain.
+    const broken = Array.from({ length: 8 }, (_, i) =>
+      `Sprint Aqua Warriors,05:3${i}:00,15:00,0,40:00,20:00min/km,5:00min/km,40:00,`);
+    const { profiles } = parseMultisportResultsCsv([head, ...broken].join('\n'));
+    expect(profiles[0].warnings.some((w) => /add up/.test(w))).toBe(true);
+  });
+
+  it('refuses a gap larger than the racing itself', () => {
+    // Nothing plausible explains a transition longer than the whole race.
+    const { profiles } = parseMultisportResultsCsv([head, ...rows('2:00:00')].join('\n'));
+    expect(profiles[0].athletes[0].legSeconds[1]).toBe(0);
+  });
+});
