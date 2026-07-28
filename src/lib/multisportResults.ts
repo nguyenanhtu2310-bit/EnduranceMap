@@ -88,10 +88,16 @@ interface StandardRace {
  * 155 km of 180 — so mats alone can only rule out races too short to hold them.
  */
 const STANDARD_RACES: StandardRace[] = [
-  // The distance is bounded against digits rather than word characters: a word boundary
-  // would not match "IM140.6", where the brand runs straight into the number.
-  { label: 'Full distance', swimKm: 3.8, bikeKm: 180.2, runKm: 42.2, namedBy: /(?<!\d)140\.?6(?!\d)|\bfull\b/i },
-  { label: 'Half distance', swimKm: 1.9, bikeKm: 90.1, runKm: 21.1, namedBy: /(?<!\d)70\.?3(?!\d)|\bhalf\b/i },
+  /*
+   * The distance is bounded against digits rather than word characters: a word boundary
+   * would not match "IM140.6", where the brand runs straight into the number.
+   *
+   * "Full" and "half" have to be qualified. An aquathlon series calls its longest race
+   * "Full Aqua Warriors" and means 3 km of swimming and 15 km of running; reading that
+   * as an Ironman gave it a 42 km run, which is the sort of wrong that looks right.
+   */
+  { label: 'Full distance', swimKm: 3.8, bikeKm: 180.2, runKm: 42.2, namedBy: /(?<!\d)140\.?6(?!\d)|\bfull\s+(?:distance|iron\s?man)\b/i },
+  { label: 'Half distance', swimKm: 1.9, bikeKm: 90.1, runKm: 21.1, namedBy: /(?<!\d)70\.?3(?!\d)|\bhalf\s+(?:distance|iron\s?man)\b/i },
   // "5150" is the brand name for the Olympic distance: 51.50 km of racing all told.
   { label: 'Olympic', swimKm: 1.5, bikeKm: 40, runKm: 10, namedBy: /\bolympic\b|\b5150\b/i },
   { label: 'Sprint', swimKm: 0.75, bikeKm: 20, runKm: 5, namedBy: /\bsprint\b/i },

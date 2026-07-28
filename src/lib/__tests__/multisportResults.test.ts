@@ -321,3 +321,32 @@ describe('when a name and the times disagree', () => {
     expect(sprint.warnings.join(' ')).toContain('from the name');
   });
 });
+
+describe('a race named Full is not always an Ironman', () => {
+  it.each([
+    'Full Aqua Warriors',
+    'Half Aqua Warriors',
+    'Ultra Aqua Warriors',
+    'Junior Aqua Warriors',
+    'Kids Aqua Warriors',
+  ])('leaves %s to be measured rather than assumed', (name) => {
+    // An aquathlon series calls its longest race "Full" and means 3 km and 15 km.
+    expect(detectRaceFromName(name)).toBeUndefined();
+  });
+
+  it.each([
+    ['Full distance', 'Full distance'],
+    ['Full Ironman', 'Full distance'],
+    ['IM140.6', 'Full distance'],
+    ['Half distance', 'Half distance'],
+    ['IM70.3', 'Half distance'],
+  ])('still reads %s as %s', (name, label) => {
+    expect(detectRaceFromName(name)?.label).toBe(label);
+  });
+
+  it('keeps reading the names an aquathlon shares with a triathlon', () => {
+    // Sprint and Olympic aquathlon distances match the swim and run of the triathlon.
+    expect(detectRaceFromName('Sprint Aqua Warriors')?.label).toBe('Sprint');
+    expect(detectRaceFromName('Olympic Aqua Warriors')?.label).toBe('Olympic');
+  });
+});
