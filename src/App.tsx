@@ -24,11 +24,31 @@ import {
 import { FolderPicker } from './components/FolderPicker';
 import { KmlDropzone } from './components/KmlDropzone';
 import { PaceBandForm, type DistanceFormRow } from './components/PaceBandForm';
+import { MultisportPaceBandForm } from './components/MultisportPaceBandForm';
+import { RaceFormatPicker } from './components/RaceFormatPicker';
+import {
+  autoBindCourses,
+  detectPlacemarkLeg,
+  instantiateTemplate,
+  skipsNamingOwnRace,
+  validatePlan,
+  type MultisportLeg,
+  type MultisportPlan,
+  type MultisportTemplateKey,
+} from './lib/multisport';
+import { autoMapMultisport, buildCourseRestriction, buildLegDistanceInputs } from './lib/multisportInputs';
 import { SettingsPanel, type Settings } from './components/SettingsPanel';
 import { ResultsPanel } from './components/ResultsPanel';
+import { MultisportResultsPanel } from './components/MultisportResultsPanel';
 import { StationScheduleTable } from './components/StationScheduleTable';
 import { TimingMatrix } from './components/TimingMatrix';
 import { parseResultsCsv, summarizeProfile, type ContestProfile } from './lib/results';
+import {
+  detectResultsFormat,
+  parseMultisportResultsCsv,
+  summarizeMultisportProfile,
+  type MultisportProfile,
+} from './lib/multisportResults';
 import type { Course } from './lib/snap';
 import { parseKml } from './lib/kml';
 import { buildCourses } from './lib/snap';
@@ -127,6 +147,15 @@ function autoMapContests(profiles: ContestProfile[], courses: Course[]): Record<
 }
 
 /**
+ * A loaded results file. Multisport exports have no contest column and a time per leg,
+ * so they cannot be described as `ContestProfile[]` and are kept apart rather than
+ * squeezed into the same shape.
+ */
+type LoadedResults =
+  | { kind: 'single'; fileName: string; profiles: ContestProfile[] }
+  | { kind: 'multisport'; fileName: string; profiles: MultisportProfile[] };
+
+/**
  * Everything one race's planning session holds. Tabs swap these wholesale, and the
  * saved .race.json is this minus what can be recomputed (the result) or re-derived
  * from the KML text (courses, folders).
@@ -140,7 +169,7 @@ interface RaceSnapshot {
   renumber: boolean;
   renumberPrefix: string;
   result: PipelineResult | null;
-  results: { fileName: string; profiles: ContestProfile[] } | null;
+  results: LoadedResults | null;
   contestMapping: Record<string, string>;
   courses: Course[];
   stationOrder: string[];
@@ -151,6 +180,13 @@ interface RaceSnapshot {
   reportSections: ReportSections;
   stationNotes: Record<string, string>;
   raceOverrides: RaceOverrides;
+  /**
+   * Set only for a multisport race. Null is what makes a race single-sport — there is no
+   * separate format flag that could disagree with the legs it holds.
+   */
+  multisport: MultisportPlan | null;
+  /** Comma-separated name fragments whose placemarks are left out of the schedule. */
+  skipNames: string;
 }
 
 function blankSnapshot(): RaceSnapshot {
@@ -174,6 +210,8 @@ function blankSnapshot(): RaceSnapshot {
     reportSections: ALL_REPORT_SECTIONS,
     stationNotes: {},
     raceOverrides: EMPTY_OVERRIDES,
+    multisport: null,
+    skipNames: '',
   };
 }
 
@@ -182,7 +220,15 @@ const RACE_FILE_FIELDS = [
   'kml', 'rows', 'selectedFolders', 'settings', 'renumber', 'renumberPrefix',
   'results', 'contestMapping', 'stationOrder', 'amenityOverrides', 'raceName',
   'removedStations', 'removedPasses', 'reportSections', 'stationNotes', 'raceOverrides',
+  'multisport', 'skipNames',
 ] as const;
+
+/**
+ * Bumped when the shape of a saved race changes. Older files still open — every field
+ * is spread over a blank snapshot, so anything they lack comes out at its default — but
+ * a file from a newer build is refused rather than silently half-read.
+ */
+const RACE_FILE_VERSION = 2;
 
 export default function App() {
   const [kml, setKml] = useState<LoadedKml | null>(null);
@@ -194,7 +240,7 @@ export default function App() {
   const [renumberPrefix, setRenumberPrefix] = useState('Station');
   const [result, setResult] = useState<PipelineResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [results, setResults] = useState<{ fileName: string; profiles: ContestProfile[] } | null>(null);
+  const [results, setResults] = useState<LoadedResults | null>(null);
   const [contestMapping, setContestMapping] = useState<Record<string, string>>({});
   const [courses, setCourses] = useState<Course[]>([]);
   const [stationOrder, setStationOrder] = useState<string[]>([]);
@@ -205,6 +251,8 @@ export default function App() {
   const [reportSections, setReportSections] = useState<ReportSections>(ALL_REPORT_SECTIONS);
   const [stationNotes, setStationNotes] = useState<Record<string, string>>({});
   const [raceOverrides, setRaceOverrides] = useState<RaceOverrides>(EMPTY_OVERRIDES);
+  const [multisport, setMultisport] = useState<MultisportPlan | null>(null);
+  const [skipNames, setSkipNames] = useState('');
 
   const [tabs, setTabs] = useState<{ id: string; label: string }[]>([{ id: 'race-1', label: 'Race 1' }]);
   const [activeTab, setActiveTab] = useState('race-1');
@@ -260,6 +308,7 @@ export default function App() {
       kml, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
       results, contestMapping, courses, stationOrder, amenityOverrides, raceName,
       removedStations, removedPasses, reportSections, stationNotes, raceOverrides,
+      multisport, skipNames,
     };
   }
 
@@ -283,6 +332,8 @@ export default function App() {
     setReportSections(snap.reportSections);
     setStationNotes(snap.stationNotes);
     setRaceOverrides(snap.raceOverrides ?? EMPTY_OVERRIDES);
+    setMultisport(snap.multisport ?? null);
+    setSkipNames(snap.skipNames ?? '');
     setError(null);
   }
 
@@ -329,7 +380,7 @@ export default function App() {
     const file = {
       app: 'EnduranceMap',
       kind: 'race',
-      version: 1,
+      version: RACE_FILE_VERSION,
       savedAt: new Date().toISOString(),
       label: liveLabel,
       snapshot: body,
@@ -353,15 +404,26 @@ export default function App() {
         setError(`"${file.name}" is not an EnduranceMap race file.`);
         return;
       }
+      if (typeof data.version === 'number' && data.version > RACE_FILE_VERSION) {
+        setError(`"${file.name}" was saved by a newer version of EnduranceMap.`);
+        return;
+      }
       const saved = data.snapshot as Partial<RaceSnapshot>;
       const snap: RaceSnapshot = { ...blankSnapshot(), ...saved, result: null, courses: [], folders: [] };
       snap.amenityOverrides = migrateAmenityOverrides(snap.amenityOverrides);
+      // Files written before multisport support have no discriminator on their results.
+      if (snap.results && !('kind' in snap.results)) {
+        const legacy = snap.results as { fileName: string; profiles: ContestProfile[] };
+        snap.results = { kind: 'single', fileName: legacy.fileName, profiles: legacy.profiles };
+      }
       // Courses and folders are re-derived from the saved KML text rather than trusted
       // from the file, so a hand-edited file cannot desync the two.
       if (snap.kml) {
         const parsed = parseKml(snap.kml.text);
         snap.courses = buildCourses(parsed.courses);
         snap.folders = listPlacemarkFolders(parsed.placemarks);
+        // Leg bindings are re-checked against those courses for the same reason.
+        if (snap.multisport) snap.multisport = autoBindCourses(snap.multisport, snap.courses);
       }
       newTab(data.label || file.name.replace(/\.race\.json$/i, ''), snap);
     } catch {
@@ -391,7 +453,8 @@ export default function App() {
       setCourses(courses);
       setFolders(detected);
       setSelectedFolders(defaultSelection(detected));
-      if (results) setContestMapping(autoMapContests(results.profiles, courses));
+      if (multisport) setMultisport(autoBindCourses(multisport, courses));
+      if (results?.kind === 'single') setContestMapping(autoMapContests(results.profiles, courses));
     } catch (e) {
       setKml(null);
       setRows([]);
@@ -403,9 +466,11 @@ export default function App() {
   /** Courses whose arrivals come from the results file rather than the pace band. */
   const mappedCourses = useMemo(() => {
     const names = new Set<string>();
-    for (const profile of results?.profiles ?? []) {
-      const courseName = contestMapping[profile.contest];
-      if (courseName && profile.samples.length > 0) names.add(courseName);
+    if (results?.kind === 'single') {
+      for (const profile of results.profiles) {
+        const courseName = contestMapping[profile.contest];
+        if (courseName && profile.samples.length > 0) names.add(courseName);
+      }
     }
     return names;
   }, [results, contestMapping]);
@@ -421,6 +486,17 @@ export default function App() {
       ),
     [rows]
   );
+
+  /** What stops a multisport plan being calculable, named leg by leg. */
+  const planProblems = useMemo(
+    () => (multisport ? validatePlan(multisport, courses) : []),
+    [multisport, courses]
+  );
+
+  /** Anything that would keep the calculate button disabled, in either mode. */
+  const blockers = multisport ? planProblems.map((p) => p.message) : [];
+  const cannotCalculate =
+    !kml || selectedFolders.length === 0 || (multisport ? blockers.length > 0 : invalidRows.length > 0);
 
   /**
    * Rewrites each mapped distance's pace band and field size from the real results, so
@@ -452,19 +528,80 @@ export default function App() {
   function changeContestMapping(mapping: Record<string, string>) {
     setContestMapping(mapping);
     setResult(null);
-    if (results) applyProfilesToRows(results.profiles, mapping);
+    if (results?.kind === 'single') applyProfilesToRows(results.profiles, mapping);
+    if (results?.kind === 'multisport') applyMultisportProfiles(results.profiles, mapping);
+  }
+
+  /** Rewrites a race's leg bands from the reference field now driving it. */
+  function applyMultisportProfiles(profiles: MultisportProfile[], mapping: Record<string, string>) {
+    setMultisport((plan) => {
+      if (!plan) return plan;
+      const byRace = new Map(profiles.map((p) => [mapping[p.key], p]));
+
+      return {
+        races: plan.races.map((race) => {
+          const profile = byRace.get(race.id);
+          if (!profile || profile.legs.length !== race.legs.length) return race;
+          const summary = summarizeMultisportProfile(profile);
+
+          return {
+            ...race,
+            runnerCountText: String(profile.usable),
+            legs: race.legs.map((leg, i) => {
+              const { p1Seconds, p50Seconds, p99Seconds } = summary[i];
+              const km = profile.legs[i].distanceKm;
+              const band: MultisportLeg['band'] =
+                leg.band.mode === 'pace' && km > 0
+                  ? {
+                      mode: 'pace',
+                      fastestMinPerKm: Number((p1Seconds / 60 / km).toFixed(3)),
+                      typicalMinPerKm: Number((p50Seconds / 60 / km).toFixed(3)),
+                      slowestMinPerKm: Number((p99Seconds / 60 / km).toFixed(3)),
+                    }
+                  : {
+                      mode: 'duration',
+                      fastestMinutes: Number((p1Seconds / 60).toFixed(2)),
+                      typicalMinutes: Number((p50Seconds / 60).toFixed(2)),
+                      slowestMinutes: Number((p99Seconds / 60).toFixed(2)),
+                    };
+              return { ...leg, band };
+            }),
+          };
+        }),
+      };
+    });
+  }
+
+  function clearResults() {
+    setResults(null);
+    setContestMapping({});
+    setResult(null);
   }
 
   function loadResults(text: string, fileName: string) {
     setError(null);
     setResult(null);
+
+    if (detectResultsFormat(text) === 'multisport') {
+      const parsed = parseMultisportResultsCsv(text, { fileName });
+      if (parsed.profiles.length === 0) {
+        setError(parsed.warnings[0] ?? 'No usable races found in that results file.');
+        return;
+      }
+      const mapping = autoMapMultisport(parsed.profiles, multisport);
+      setResults({ kind: 'multisport', fileName, profiles: parsed.profiles });
+      setContestMapping(mapping);
+      applyMultisportProfiles(parsed.profiles, mapping);
+      return;
+    }
+
     const parsed = parseResultsCsv(text);
     if (parsed.profiles.length === 0) {
       setError(parsed.warnings[0] ?? 'No contests found in that results file.');
       return;
     }
     const mapping = autoMapContests(parsed.profiles, courses);
-    setResults({ fileName, profiles: parsed.profiles });
+    setResults({ kind: 'single', fileName, profiles: parsed.profiles });
     setContestMapping(mapping);
     applyProfilesToRows(parsed.profiles, mapping);
   }
@@ -489,6 +626,54 @@ export default function App() {
     };
   }
 
+  /**
+   * Switches between a single-sport race and a multisport one, starting the legs off
+   * bound to whatever the map already holds.
+   *
+   * Multisport maps are usually festival maps — a 70.3 drawn alongside a sprint and a
+   * kids race — and those events' turnarounds sit on the same roads, in the same
+   * folders, close enough to merge into the stations being planned. The skip list is
+   * therefore seeded with the events most often carried along, left visible and editable
+   * rather than applied quietly. Planning one of those events instead is caught below.
+   */
+  function chooseFormat(template: MultisportTemplateKey | null) {
+    if (!template) {
+      setMultisport(null);
+      return;
+    }
+    setMultisport(autoBindCourses({ races: [instantiateTemplate(template, 'ms-1')] }, courses));
+    if (!skipNames.trim()) setSkipNames('Kids, Sprint');
+    setResult(null);
+  }
+
+  /**
+   * Catches a skip fragment that names the race being planned — seeding "Sprint" is
+   * right on a 70.3 map and disastrous on a sprint one, and the difference is only
+   * visible once a race has been named.
+   */
+  const selfSkips = useMemo(() => skipsNamingOwnRace(skipNames, multisport), [skipNames, multisport]);
+
+  /**
+   * Adds a second race to the same map — a 70.3 and a 140.6 usually share most of their
+   * route. Only the new race is auto-bound, so adding one cannot reshuffle the legs of
+   * a race the operator has already set up.
+   */
+  function addRace() {
+    if (!multisport) return;
+    const template = multisport.races[0]?.template ?? 'triathlon';
+    const fresh = autoBindCourses(
+      { races: [instantiateTemplate(template, `ms-${Date.now()}`)] },
+      courses
+    );
+    setMultisport({ races: [...multisport.races, ...fresh.races] });
+  }
+
+  function removeRace(raceId: string) {
+    if (!multisport) return;
+    const races = multisport.races.filter((r) => r.id !== raceId);
+    setMultisport(races.length > 0 ? { races } : null);
+  }
+
   function calculate(overrides?: { stations?: string[]; passes?: string[] }) {
     if (!kml) return;
     const excludeStations = overrides?.stations ?? removedStations;
@@ -496,27 +681,51 @@ export default function App() {
     setError(null);
     try {
       const samplesByCourse = new Map<string, ContestProfile['samples']>();
-      for (const profile of results?.profiles ?? []) {
-        const courseName = contestMapping[profile.contest];
-        if (courseName && profile.samples.length > 0) samplesByCourse.set(courseName, profile.samples);
+      if (results?.kind === 'single') {
+        for (const profile of results.profiles) {
+          const courseName = contestMapping[profile.contest];
+          if (courseName && profile.samples.length > 0) samplesByCourse.set(courseName, profile.samples);
+        }
       }
 
-      const inputs: DistanceInput[] = rows.map((r) => ({
-        courseName: r.courseName,
-        startTimeClock: r.startTimeClock,
-        startSpreadMinutes: r.startSpreadMinutes,
-        runnerCount: Number(r.runnerCountText),
-        fastestMinPerKm: r.fastestMinPerKm,
-        typicalMinPerKm: r.typicalMinPerKm,
-        slowestMinPerKm: r.slowestMinPerKm,
-        organizerCutoffClock: r.organizerCutoffClock?.trim() || undefined,
-        samples: samplesByCourse.get(r.courseName),
-      }));
+      // A multisport profile drives a whole race; which routes its legs follow is
+      // already settled by the plan, so the mapping stays one profile to one race.
+      const profileByRaceId = new Map<string, MultisportProfile>();
+      if (results?.kind === 'multisport') {
+        for (const profile of results.profiles) {
+          const raceId = contestMapping[profile.key];
+          if (raceId && profile.athletes.length > 0) profileByRaceId.set(raceId, profile);
+        }
+      }
+
+      // A multisport race is a sequence of legs rather than a set of distances, so its
+      // inputs are built from the plan; everything downstream is the same either way.
+      const built = multisport
+        ? buildLegDistanceInputs(multisport, { courses, profileByRaceId })
+        : { inputs: null, warnings: [] as string[] };
+
+      const inputs: DistanceInput[] =
+        built.inputs ??
+        rows.map((r) => ({
+          courseName: r.courseName,
+          startTimeClock: r.startTimeClock,
+          startSpreadMinutes: r.startSpreadMinutes,
+          runnerCount: Number(r.runnerCountText),
+          fastestMinPerKm: r.fastestMinPerKm,
+          typicalMinPerKm: r.typicalMinPerKm,
+          slowestMinPerKm: r.slowestMinPerKm,
+          organizerCutoffClock: r.organizerCutoffClock?.trim() || undefined,
+          samples: samplesByCourse.get(r.courseName),
+        }));
 
       const computed = runPipeline(kml.text, inputs, {
           stationFolders: selectedFolders,
           excludeStations,
           excludePasses,
+          excludePlacemarkContaining: skipNames.split(',').map((f) => f.trim()).filter(Boolean),
+          restrictCoursesFor: multisport
+            ? buildCourseRestriction(multisport, detectPlacemarkLeg)
+            : undefined,
           renumberStationsAs: renumber ? renumberPrefix.trim() || 'Station' : undefined,
           setupBufferMinutes: settings.setupBufferMinutes,
           teardownBufferMinutes: settings.teardownBufferMinutes,
@@ -528,7 +737,19 @@ export default function App() {
           },
         });
 
-      const ordered = { ...computed, stations: applyStationOrder(computed.stations, stationOrder) };
+      const ordered = {
+        ...computed,
+        warnings: [
+          ...selfSkips.map(
+            (fragment) =>
+              `"${fragment}" is in the skip list and also names the race being planned — ` +
+              `its own points are being left out. Clear it from step 2 if that is not what you want.`
+          ),
+          ...built.warnings,
+          ...computed.warnings,
+        ],
+        stations: applyStationOrder(computed.stations, stationOrder),
+      };
       setResult(applyRaceOverrides(ordered, raceOverrides));
     } catch (e) {
       setResult(null);
@@ -618,6 +839,8 @@ export default function App() {
               renumberPrefix={renumberPrefix}
               onRenumberChange={setRenumber}
               onRenumberPrefixChange={setRenumberPrefix}
+              skipNames={skipNames}
+              onSkipNamesChange={setSkipNames}
             />
           </section>
 
@@ -630,19 +853,26 @@ export default function App() {
               band with the real field — every runner's own pace and start offset.
             </p>
             <ResultsPanel
-              fileName={results?.fileName}
-              profiles={results?.profiles ?? []}
+              fileName={results?.kind === 'single' ? results.fileName : undefined}
+              profiles={results?.kind === 'single' ? results.profiles : []}
               courses={courses}
               mapping={contestMapping}
               onLoad={loadResults}
               onMappingChange={changeContestMapping}
-              onClear={() => {
-                setResults(null);
-                setContestMapping({});
-                setResult(null);
-              }}
+              onClear={clearResults}
               onError={setError}
             />
+
+            {results?.kind === 'multisport' && (
+              <MultisportResultsPanel
+                fileName={results.fileName}
+                profiles={results.profiles}
+                races={multisport?.races ?? []}
+                mapping={contestMapping}
+                onMappingChange={changeContestMapping}
+                onClear={clearResults}
+              />
+            )}
           </section>
 
           <section className="card">
@@ -650,11 +880,30 @@ export default function App() {
               <span className="step">4</span>Race details and pace band
             </h2>
             <p className="hint">
-              {mappedCourses.size > 0
-                ? `Start time and field size apply to every distance. Pace is taken from the results file for ${[...mappedCourses].join(', ')} — the band shown there is for reference only.`
-                : 'One row per distance found in the map. These stand in for a results CSV until you have one.'}
+              {multisport
+                ? 'One row per leg. Set how long each takes and which drawn route it follows; the legs before a checkpoint decide how late it opens.'
+                : mappedCourses.size > 0
+                  ? `Start time and field size apply to every distance. Pace is taken from the results file for ${[...mappedCourses].join(', ')} — the band shown there is for reference only.`
+                  : 'One row per distance found in the map. These stand in for a results CSV until you have one.'}
             </p>
-            <PaceBandForm rows={rows} onChange={setRows} drivenByResults={mappedCourses} />
+
+            <RaceFormatPicker
+              value={multisport?.races[0]?.template ?? null}
+              onChange={chooseFormat}
+            />
+
+            {multisport ? (
+              <MultisportPaceBandForm
+                plan={multisport}
+                courses={courses}
+                onChange={setMultisport}
+                problems={planProblems}
+                onAddRace={addRace}
+                onRemoveRace={removeRace}
+              />
+            ) : (
+              <PaceBandForm rows={rows} onChange={setRows} drivenByResults={mappedCourses} />
+            )}
           </section>
 
           <section className="card">
@@ -665,11 +914,7 @@ export default function App() {
           </section>
 
           <div className="actions" style={{ marginBottom: '1.75rem', justifyContent: 'center' }}>
-            <button
-              className="cta"
-              onClick={() => calculate()}
-              disabled={invalidRows.length > 0 || selectedFolders.length === 0}
-            >
+            <button className="cta" onClick={() => calculate()} disabled={cannotCalculate}>
               CALCULATE
             </button>
             {selectedFolders.length === 0 && (
@@ -677,12 +922,18 @@ export default function App() {
                 Tick at least one folder to schedule.
               </span>
             )}
-            {invalidRows.length > 0 && (
-              <span className="hint" style={{ margin: 0 }}>
-                Check {invalidRows.map((r) => r.courseName).join(', ')}: needs a start time, a runner count above
-                zero, and fastest ≤ typical ≤ slowest.
-              </span>
-            )}
+            {multisport
+              ? blockers.length > 0 && (
+                  <span className="hint" style={{ margin: 0 }}>
+                    {blockers.join(' ')}
+                  </span>
+                )
+              : invalidRows.length > 0 && (
+                  <span className="hint" style={{ margin: 0 }}>
+                    Check {invalidRows.map((r) => r.courseName).join(', ')}: needs a start time, a runner count
+                    above zero, and fastest ≤ typical ≤ slowest.
+                  </span>
+                )}
           </div>
         </>
       )}

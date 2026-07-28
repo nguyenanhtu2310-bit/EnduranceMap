@@ -91,7 +91,12 @@ export function DistanceRunView({
 }: Props) {
   const courses = [...result.courses]
     .filter((c) => result.courseOrder.includes(c.name))
-    .sort((a, b) => b.totalKm - a.totalKm);
+    // Legs are raced in order; separate distances read best longest first.
+    .sort((a, b) =>
+      result.legOrdered
+        ? result.courseOrder.indexOf(a.name) - result.courseOrder.indexOf(b.name)
+        : b.totalKm - a.totalKm
+    );
 
   const [selected, setSelected] = useState(courses[0]?.name ?? '');
   const course = courses.find((c) => c.name === selected) ?? courses[0];

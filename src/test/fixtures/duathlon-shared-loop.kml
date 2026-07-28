@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A duathlon that runs one drawn loop twice — the case a single course name cannot
+  represent, because each lap needs its own crossings, cut-offs and removals.
+
+  "Run Loop" is drawn once. Both run legs follow it, so the pipeline has to give
+  each leg its own course rather than letting the second overwrite the first.
+
+  Coordinates are synthetic, on the same grid as triathlon.kml.
+-->
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Sample Duathlon</name>
+    <Folder>
+      <name>RACE ROUTE</name>
+      <Placemark>
+        <name>Run Loop</name>
+        <LineString>
+          <coordinates>
+            106.000000,10.000000,0 106.045000,10.000000,0 106.045000,10.001000,0 106.000000,10.001000,0 106.000000,10.000000,0
+          </coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>Bike Course</name>
+        <LineString>
+          <coordinates>
+            106.000000,10.001000,0 106.000000,10.180000,0
+          </coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>TIMING</name>
+      <Placemark>
+        <name>Run 1 - Uturn</name>
+        <Point><coordinates>106.022000,10.000000,0</coordinates></Point>
+      </Placemark>
+      <Placemark>
+        <name>Bike 1 - Uturn</name>
+        <Point><coordinates>106.000000,10.090000,0</coordinates></Point>
+      </Placemark>
+    </Folder>
+  </Document>
+</kml>

@@ -51,6 +51,19 @@ export interface DistanceInput extends PaceBand, StartField {
    * and the samples are the actual distribution.
    */
   samples?: RunnerSample[];
+  /**
+   * The drawn LineString this input runs on, when it differs from `courseName`. A
+   * duathlon runs its two run legs over one loop, and each leg needs its own crossings,
+   * cut-offs and removals; naming them separately and pointing both at the same drawn
+   * route keeps them independent. Defaults to `courseName`.
+   */
+  sourceCourseName?: string;
+  /**
+   * Position in a multisport sequence — 0 for the first leg, and 0 for every
+   * single-sport race. Stations are ordered by leg first, so a point half way round a
+   * 90 km bike leg still ranks ahead of the first kilometre of the run.
+   */
+  legIndex?: number;
 }
 
 /** Folders whose point placemarks represent positions that have to be staffed. */
@@ -97,6 +110,12 @@ export interface PipelineOptions extends KmlParseOptions, SnapOptions, ScheduleO
   /** Placemark names to exclude from the operational output entirely. */
   excludePlacemarkNames?: string[];
   /**
+   * Placemarks to leave out when their name contains any of these fragments. One map
+   * often carries several events — a kids race, a sprint — whose points share folders
+   * with the race being planned, so ticking folders cannot separate them.
+   */
+  excludePlacemarkContaining?: string[];
+  /**
    * Stations to leave out, by map name. Distinct from `excludePlacemarkNames`: this
    * drops a position after grouping, so removing a merged station takes all of its
    * placemarks with it. Applied before numbering, so the remaining stations number
@@ -126,6 +145,14 @@ export interface PipelineOptions extends KmlParseOptions, SnapOptions, ScheduleO
    * the original names stay on `sourceNames` so the mapping remains checkable.
    */
   renumberStationsAs?: string;
+  /**
+   * Restricts which courses a placemark is allowed to sit on, by name. On a multisport
+   * map the bike and run routes share tarmac around transition — a run turnaround can
+   * sit a metre from the bike line and a metre from the run line — so proximity cannot
+   * say which leg a point belongs to. Returning a leg's course names for a placemark
+   * confines it to that leg; returning undefined leaves the decision to the geometry.
+   */
+  restrictCoursesFor?: (placemarkName: string) => string[] | undefined;
 }
 
 export interface StationCrossingDetail {
@@ -172,6 +199,12 @@ export interface PipelineResult {
    * distribution stacks the same distance in the same slot.
    */
   courseOrder: string[];
+  /**
+   * True when the courses are legs of a sequence rather than separate distances, so
+   * `courseOrder` is the order they are raced in. Sorting legs by length would put a
+   * duathlon's short second run ahead of the bike it follows.
+   */
+  legOrdered: boolean;
   /** Shared arrival-time window across every station, for a common chart axis. */
   timeRangeSeconds: { start: number; end: number };
   binMinutes: number;
@@ -266,6 +299,38 @@ function findCutoffForCrossing(
 }
 
 /**
+ * Gives every leg its own course, even when several legs are drawn as one line.
+ *
+ * A duathlon runs out, cycles, and runs the same loop again. Keyed by the drawn name
+ * alone the second run would overwrite the first, taking its crossings, its cut-offs and
+ * its removals with it. Naming the legs separately and pointing them at the same
+ * geometry keeps them independent, at the cost of snapping that route twice.
+ *
+ * The drawn route is dropped once something aliases it: it is scenery at that point, and
+ * leaving it in would snap every placemark a third time and warn about a course nobody
+ * entered a pace band for. Returns the input untouched when no aliasing is in play.
+ */
+function expandLegCourses(drawn: Course[], inputs: DistanceInput[]): Course[] {
+  const byName = new Map(drawn.map((c) => [c.name, c]));
+  const aliases: Course[] = [];
+  const consumed = new Set<string>();
+
+  for (const input of inputs) {
+    const source = input.sourceCourseName;
+    if (!source || source === input.courseName) continue;
+    // An input naming a course that really was drawn wins over its own alias.
+    if (byName.has(input.courseName)) continue;
+    const base = byName.get(source);
+    if (!base) continue;
+    aliases.push({ name: input.courseName, vertices: base.vertices, totalKm: base.totalKm });
+    consumed.add(source);
+  }
+
+  if (aliases.length === 0) return drawn;
+  return [...drawn.filter((c) => !consumed.has(c.name)), ...aliases];
+}
+
+/**
  * Runs a parsed race map and a set of per-distance pace bands through to station
  * operating schedules and a cut-off table.
  *
@@ -288,7 +353,7 @@ export function runPipeline(
 
   const parsed = parseKml(kmlText, options);
   const warnings = [...parsed.warnings];
-  const courses = buildCourses(parsed.courses);
+  const courses = expandLegCourses(buildCourses(parsed.courses), distanceInputs);
 
   const inputByCourse = new Map(distanceInputs.map((d) => [d.courseName, d]));
   for (const course of courses) {
@@ -302,9 +367,41 @@ export function runPipeline(
   // Every placemark is snapped and grouped, not just those in the selected folders. A
   // station's official cut-off often lives on a placemark from a different folder that
   // sits at the same spot, and dropping those early would silently lose the cut-off.
-  const considered = parsed.placemarks.filter((p) => !excluded.includes(normalize(p.name)));
-  const snapped = snapPlacemarks(considered, courses, options);
-  const groups = groupCoincidentPlacemarks(snapped, options.coincidentToleranceKm);
+  const excludedFragments = (options.excludePlacemarkContaining ?? [])
+    .map((fragment) => fragment.trim().toLowerCase())
+    .filter(Boolean);
+  const considered = parsed.placemarks.filter(
+    (p) =>
+      !excluded.includes(normalize(p.name)) &&
+      !excludedFragments.some((fragment) => p.name.toLowerCase().includes(fragment))
+  );
+  const snapped = snapPlacemarks(considered, courses, options).map((placemark) => {
+    const allowed = options.restrictCoursesFor?.(placemark.name);
+    if (!allowed) return placemark;
+    const permitted = new Set(allowed);
+    const snaps = placemark.snaps.filter((s) => permitted.has(s.courseName));
+    return snaps.length === placemark.snaps.length ? placemark : { ...placemark, snaps };
+  });
+  // A station takes its leg from any of the placemarks standing at it. Merging happens
+  // within metres, and around transition a bike route and a run route are within metres
+  // of each other, so an unnamed neighbour would otherwise hand a run position the bike
+  // passes as well — and a window stretching from the first rider to the last runner.
+  const groups = groupCoincidentPlacemarks(snapped, options.coincidentToleranceKm).map((group) => {
+    if (!options.restrictCoursesFor) return group;
+
+    const allowed = new Set<string>();
+    let restricted = false;
+    for (const member of group.members) {
+      const names = options.restrictCoursesFor(member.name);
+      if (!names) continue;
+      restricted = true;
+      for (const name of names) allowed.add(name);
+    }
+
+    if (!restricted) return group;
+    const snaps = group.snaps.filter((s) => allowed.has(s.courseName));
+    return snaps.length === group.snaps.length ? group : { ...group, snaps };
+  });
 
   const stations: PipelineStation[] = [];
   const skipped: PipelineResult['skipped'] = [];
@@ -433,12 +530,25 @@ export function runPipeline(
    * Points are therefore ranked by where runners FIRST meet them, which keeps an
    * out-and-back reading in the order it is run, except for points whose last crossing
    * is essentially at the course end — those are finish-line furniture and belong last.
+   *
+   * On a multisport race the fraction is not comparable across legs either: half way
+   * round a 90 km bike leg is 45, while nine tenths of the way through a 21 km run is
+   * only 19, which would file the run ahead of the bike. The leg a station is met on
+   * therefore outranks its position within that leg. With one leg this is the same
+   * ordering as before.
    */
+  const legByCourse = new Map(distanceInputs.map((d) => [d.courseName, d.legIndex ?? 0]));
+  const legOf = (courseName: string) => legByCourse.get(courseName) ?? 0;
   const byLength = [...courses].sort((a, b) => b.totalKm - a.totalKm);
   const longestKm = byLength[0]?.totalKm ?? 1;
 
   const orderKey = (station: PipelineStation): number => {
+    if (station.crossings.length === 0) return Infinity;
+    // Where a station is met on more than one leg, the earliest one places it.
+    const earliestLeg = Math.min(...station.crossings.map((c) => legOf(c.courseName)));
+
     for (const course of byLength) {
+      if (legOf(course.name) !== earliestLeg) continue;
       const passes = station.crossings.filter((c) => c.courseName === course.name);
       if (passes.length === 0 || course.totalKm <= 0) continue;
 
@@ -446,7 +556,7 @@ export function runPipeline(
       const lastFraction = Math.max(...passes.map((p) => p.kmFromStart)) / course.totalKm;
       const fraction = lastFraction >= FINISH_AREA_FRACTION ? lastFraction : firstFraction;
 
-      return fraction * longestKm;
+      return (earliestLeg + fraction) * longestKm;
     }
     return Infinity;
   };
@@ -506,6 +616,7 @@ export function runPipeline(
     }),
     distanceInputs,
     courseOrder,
+    legOrdered: distanceInputs.some((d) => (d.legIndex ?? 0) > 0),
     timeRangeSeconds,
     binMinutes,
     skipped,
