@@ -147,6 +147,117 @@ export function instantiateTemplate(
   };
 }
 
+
+/* ----------------------------------------------------------- known races ---- */
+
+export interface KnownContest {
+  label: string;
+  /** How the contest is written in a results file or on a drawn route. */
+  namedBy: RegExp;
+  template: MultisportTemplateKey;
+  legs: TemplateLeg[];
+}
+
+/**
+ * Contests a client runs year after year, with what their athletes actually did.
+ *
+ * Every band here was measured from a real 1,076-athlete field rather than guessed, so a
+ * race planned before any results exist still opens its positions at roughly the right
+ * hour. The transitions matter most: this event's timing system records no transition
+ * point at all, and its athletes spend a median of eight minutes there — long enough that
+ * assuming a token two minutes would open every run position too early.
+ *
+ * A results file still wins. These are what to plan from when there is nothing better.
+ */
+export const KNOWN_CONTESTS: KnownContest[] = [
+  {
+    label: 'Ultra Aqua Warriors',
+    namedBy: /\bultra\s+aqua\b/i,
+    template: 'aquathlon',
+    legs: [
+      { kind: 'swim', label: 'Swim', distanceKm: 5, band: MINUTES(89, 148, 185) },
+      { kind: 'transition', label: 'T1', distanceKm: 0, band: MINUTES(2.9, 8.7, 18.2) },
+      { kind: 'run', label: 'Run', distanceKm: 21, band: PACE(4.08, 6.28, 10.17) },
+    ],
+  },
+  {
+    label: 'Full Aqua Warriors',
+    namedBy: /\bfull\s+aqua\b/i,
+    template: 'aquathlon',
+    legs: [
+      { kind: 'swim', label: 'Swim', distanceKm: 3, band: MINUTES(52, 93, 111) },
+      { kind: 'transition', label: 'T1', distanceKm: 0, band: MINUTES(3.3, 7.9, 16.6) },
+      { kind: 'run', label: 'Run', distanceKm: 15, band: PACE(4.27, 6.43, 9.41) },
+    ],
+  },
+  {
+    label: 'Olympic Aqua Warriors',
+    namedBy: /\bolympic\s+aqua\b/i,
+    template: 'aquathlon',
+    legs: [
+      { kind: 'swim', label: 'Swim', distanceKm: 1.5, band: MINUTES(28, 41.6, 60.3) },
+      { kind: 'transition', label: 'T1', distanceKm: 0, band: MINUTES(4.3, 8.3, 17.1) },
+      { kind: 'run', label: 'Run', distanceKm: 10, band: PACE(4.26, 6.32, 9.59) },
+    ],
+  },
+  {
+    label: 'Sprint Aqua Warriors',
+    namedBy: /\bsprint\s+aqua\b/i,
+    template: 'aquathlon',
+    legs: [
+      { kind: 'swim', label: 'Swim', distanceKm: 0.75, band: MINUTES(12.3, 22, 36.1) },
+      { kind: 'transition', label: 'T1', distanceKm: 0, band: MINUTES(1.1, 7.8, 18.2) },
+      { kind: 'run', label: 'Run', distanceKm: 5, band: PACE(3.99, 7.07, 11.22) },
+    ],
+  },
+  {
+    /*
+     * The only one of the six with no measured field — it did not run at Van Don. Its
+     * distances come from the organizer; its bands sit between the Kids and the Sprint,
+     * which is a guess and should be replaced the first time results exist.
+     */
+    label: 'Junior Aqua Warriors',
+    namedBy: /\bjunior\s+aqua\b/i,
+    template: 'aquathlon',
+    legs: [
+      { kind: 'swim', label: 'Swim', distanceKm: 0.3, band: MINUTES(4, 8, 14) },
+      { kind: 'transition', label: 'T1', distanceKm: 0, band: MINUTES(1.1, 4, 8) },
+      { kind: 'run', label: 'Run', distanceKm: 2, band: PACE(5, 7.5, 12) },
+    ],
+  },
+  {
+    label: 'Kids Aqua Warriors',
+    namedBy: /\bkids?\s+aqua\b/i,
+    template: 'aquathlon',
+    legs: [
+      { kind: 'swim', label: 'Swim', distanceKm: 0.15, band: MINUTES(1.8, 3.5, 4.8) },
+      { kind: 'transition', label: 'T1', distanceKm: 0, band: MINUTES(1.1, 2.8, 4.8) },
+      { kind: 'run', label: 'Run', distanceKm: 1, band: PACE(5.77, 8.1, 13.25) },
+    ],
+  },
+];
+
+/** The contest a name announces, if it is one the tool has been taught. */
+export function findKnownContest(name: string | undefined): KnownContest | undefined {
+  if (!name) return undefined;
+  return KNOWN_CONTESTS.find((contest) => contest.namedBy.test(name));
+}
+
+/** Builds a race from a contest already known, distances and bands and all. */
+export function instantiateKnownContest(contest: KnownContest, raceId: string): MultisportRace {
+  const race = instantiateTemplate(contest.template, raceId, contest.label);
+  return {
+    ...race,
+    legs: contest.legs.map((leg, i) => ({
+      id: `${raceId}-leg-${i}`,
+      kind: leg.kind,
+      label: leg.label,
+      distanceKm: leg.distanceKm,
+      band: { ...leg.band },
+    })),
+  };
+}
+
 /* ---------------------------------------------------------------- detection ---- */
 
 const SPORT_WORDS: { kind: Exclude<LegKind, 'transition'>; re: RegExp }[] = [
@@ -437,7 +548,12 @@ export function planFromCourses(
       races: keys.map((key, i) => {
         const mine = detected.filter((d) => d.binding.raceKey === key);
         const label = mine.find((d) => d.binding.raceLabel)?.binding.raceLabel;
-        const race = instantiateTemplate(template, `ms-${i + 1}`, label);
+        // A contest already known brings its own distances and its athletes' own times,
+        // measured from a previous running rather than assumed from the template.
+        const known = findKnownContest(label);
+        const race = known
+          ? instantiateKnownContest(known, `ms-${i + 1}`)
+          : instantiateTemplate(template, `ms-${i + 1}`, label);
         return autoBindCourses({ races: [race] }, mine.map((d) => d.course)).races[0];
       }),
     };
@@ -449,7 +565,10 @@ export function planFromCourses(
   if (courses.length > 1 && routed.length === 1) {
     return {
       races: courses.map((course, i) => {
-        const race = instantiateTemplate(template, `ms-${i + 1}`, course.name);
+        const known = findKnownContest(course.name);
+        const race = known
+          ? instantiateKnownContest(known, `ms-${i + 1}`)
+          : instantiateTemplate(template, `ms-${i + 1}`, course.name);
         // Bound here rather than by detection, which has no sport word to work from.
         return {
           ...race,

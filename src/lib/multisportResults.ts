@@ -9,7 +9,7 @@ import {
 } from './distances';
 import { parseClockTimeToSeconds } from './time';
 import { parseElapsedToSeconds } from './results';
-import type { LegKind } from './multisport';
+import { KNOWN_CONTESTS, type LegKind } from './multisport';
 
 /**
  * Reads a multisport timing export into per-leg reference fields.
@@ -103,24 +103,20 @@ const STANDARD_RACES: StandardRace[] = [
   { label: 'Sprint', swimKm: 0.75, bikeKm: 20, runKm: 5, namedBy: /\bsprint\b/i },
 ];
 
-/*
- * Series whose names mean whatever the organizer decided.
+/**
+ * Contests already known, as the distance table sees them.
  *
- * A recurring aquathlon client runs Kids, Junior, Sprint, Olympic, Full and Ultra, and
- * by "Full" means 3 km of swimming and 15 km of running. Only Sprint and Olympic happen
- * to match the triathlon distances of the same name; the rest mean nothing standard, and
- * two of them read as an Ironman if taken at face value. Checked before the standard
- * distances, so a series that has said what it means is believed over a convention it
- * never followed.
+ * Derived from the single declaration in `multisport` rather than repeated, so a client
+ * whose distances change is corrected in one place and the planner and the parser cannot
+ * come to disagree about what its races are.
  */
-const NAMED_SERIES: StandardRace[] = [
-  { label: 'Ultra Aqua', swimKm: 5, bikeKm: 0, runKm: 21, namedBy: /\bultra\s+aqua\b/i },
-  { label: 'Full Aqua', swimKm: 3, bikeKm: 0, runKm: 15, namedBy: /\bfull\s+aqua\b/i },
-  { label: 'Olympic Aqua', swimKm: 1.5, bikeKm: 0, runKm: 10, namedBy: /\bolympic\s+aqua\b/i },
-  { label: 'Sprint Aqua', swimKm: 0.75, bikeKm: 0, runKm: 5, namedBy: /\bsprint\s+aqua\b/i },
-  { label: 'Junior Aqua', swimKm: 0.3, bikeKm: 0, runKm: 2, namedBy: /\bjunior\s+aqua\b/i },
-  { label: 'Kids Aqua', swimKm: 0.15, bikeKm: 0, runKm: 1, namedBy: /\bkids?\s+aqua\b/i },
-];
+const NAMED_SERIES: StandardRace[] = KNOWN_CONTESTS.map((contest) => ({
+  label: contest.label,
+  namedBy: contest.namedBy,
+  swimKm: contest.legs.find((l) => l.kind === 'swim')?.distanceKm ?? 0,
+  bikeKm: contest.legs.find((l) => l.kind === 'bike')?.distanceKm ?? 0,
+  runKm: contest.legs.find((l) => l.kind === 'run')?.distanceKm ?? 0,
+}));
 
 /**
  * The race a piece of text announces, if it names exactly one.

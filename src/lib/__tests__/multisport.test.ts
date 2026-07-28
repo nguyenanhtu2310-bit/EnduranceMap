@@ -3,6 +3,8 @@ import {
   autoBindCourses,
   detectLegBinding,
   detectPlacemarkLeg,
+  findKnownContest,
+  instantiateKnownContest,
   instantiateTemplate,
   planFromCourses,
   skipsNamingOwnRace,
@@ -329,5 +331,66 @@ describe('a bracketed race name is not a distance', () => {
   it('drops a bracketed distance, which has one', () => {
     expect(detectLegBinding('Run Olympic (10km)')!.raceKey).toBe('olympic');
     expect(detectLegBinding('Swim Kids (150m)')!.raceKey).toBe('kids');
+  });
+});
+
+describe('contests the tool has been taught', () => {
+  it.each([
+    ['Ultra Aqua Warriors', 5, 21],
+    ['Full Aqua Warriors', 3, 15],
+    ['Olympic Aqua Warriors', 1.5, 10],
+    ['Sprint Aqua Warriors', 0.75, 5],
+    ['Junior Aqua Warriors', 0.3, 2],
+    ['Kids Aqua Warriors', 0.15, 1],
+  ])('builds %s at %s km swim and %s km run', (name, swimKm, runKm) => {
+    const contest = findKnownContest(name)!;
+    const race = instantiateKnownContest(contest, 'ms-1');
+    expect(race.name).toBe(name);
+    expect(race.legs.find((l) => l.kind === 'swim')!.distanceKm).toBe(swimKm);
+    expect(race.legs.find((l) => l.kind === 'run')!.distanceKm).toBe(runKm);
+  });
+
+  it('carries the transition its athletes actually took', () => {
+    // The timing system records no transition, so a token two minutes would open every
+    // run position six minutes early. These came from a real field.
+    const sprint = instantiateKnownContest(findKnownContest('Sprint Aqua Warriors')!, 'ms-1');
+    const band = sprint.legs.find((l) => l.kind === 'transition')!.band;
+
+    expect(band.mode).toBe('duration');
+    if (band.mode === 'duration') {
+      expect(band.typicalMinutes).toBeGreaterThan(5);
+      expect(band.slowestMinutes).toBeGreaterThan(band.typicalMinutes);
+      expect(band.fastestMinutes).toBeLessThan(band.typicalMinutes);
+    }
+  });
+
+  it('gives the children a shorter transition than the adults', () => {
+    const typical = (name: string) => {
+      const band = instantiateKnownContest(findKnownContest(name)!, 'x').legs.find(
+        (l) => l.kind === 'transition'
+      )!.band;
+      return band.mode === 'duration' ? band.typicalMinutes : NaN;
+    };
+    expect(typical('Kids Aqua Warriors')).toBeLessThan(typical('Ultra Aqua Warriors'));
+  });
+
+  it('recognises nothing it has not been taught', () => {
+    expect(findKnownContest('Sprint')).toBeUndefined();
+    expect(findKnownContest('IRONMAN 70.3')).toBeUndefined();
+  });
+
+  it('builds a plan from a map drawn per contest', () => {
+    const plan = planFromCourses('aquathlon', [
+      course('Swim Sprint Aqua Warriors', 0.75),
+      course('Run Sprint Aqua Warriors', 5),
+      course('Swim Kids Aqua Warriors', 0.15),
+      course('Run Kids Aqua Warriors', 1),
+    ]);
+
+    expect(plan.races.map((r) => r.name)).toEqual(['Sprint Aqua Warriors', 'Kids Aqua Warriors']);
+    // Bound to the drawn routes, and carrying the taught bands rather than the template's.
+    expect(plan.races[0].legs.find((l) => l.kind === 'run')!.courseName).toBe('Run Sprint Aqua Warriors');
+    const t1 = plan.races[0].legs.find((l) => l.kind === 'transition')!.band;
+    expect(t1.mode === 'duration' && t1.typicalMinutes).toBeGreaterThan(5);
   });
 });
