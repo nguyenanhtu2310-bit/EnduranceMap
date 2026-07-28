@@ -103,6 +103,25 @@ const STANDARD_RACES: StandardRace[] = [
   { label: 'Sprint', swimKm: 0.75, bikeKm: 20, runKm: 5, namedBy: /\bsprint\b/i },
 ];
 
+/*
+ * Series whose names mean whatever the organizer decided.
+ *
+ * A recurring aquathlon client runs Kids, Junior, Sprint, Olympic, Full and Ultra, and
+ * by "Full" means 3 km of swimming and 15 km of running. Only Sprint and Olympic happen
+ * to match the triathlon distances of the same name; the rest mean nothing standard, and
+ * two of them read as an Ironman if taken at face value. Checked before the standard
+ * distances, so a series that has said what it means is believed over a convention it
+ * never followed.
+ */
+const NAMED_SERIES: StandardRace[] = [
+  { label: 'Ultra Aqua', swimKm: 5, bikeKm: 0, runKm: 21, namedBy: /\bultra\s+aqua\b/i },
+  { label: 'Full Aqua', swimKm: 3, bikeKm: 0, runKm: 15, namedBy: /\bfull\s+aqua\b/i },
+  { label: 'Olympic Aqua', swimKm: 1.5, bikeKm: 0, runKm: 10, namedBy: /\bolympic\s+aqua\b/i },
+  { label: 'Sprint Aqua', swimKm: 0.75, bikeKm: 0, runKm: 5, namedBy: /\bsprint\s+aqua\b/i },
+  { label: 'Junior Aqua', swimKm: 0.3, bikeKm: 0, runKm: 2, namedBy: /\bjunior\s+aqua\b/i },
+  { label: 'Kids Aqua', swimKm: 0.15, bikeKm: 0, runKm: 1, namedBy: /\bkids?\s+aqua\b/i },
+];
+
 /**
  * The race a piece of text announces, if it names exactly one.
  *
@@ -112,6 +131,11 @@ const STANDARD_RACES: StandardRace[] = [
  */
 export function detectRaceFromName(text: string | undefined): StandardRace | undefined {
   if (!text) return undefined;
+
+  // A series that states its own distances outranks any convention.
+  const series = NAMED_SERIES.find((race) => race.namedBy.test(text));
+  if (series) return series;
+
   const named = STANDARD_RACES.filter((race) => race.namedBy.test(text));
   return named.length === 1 ? named[0] : undefined;
 }

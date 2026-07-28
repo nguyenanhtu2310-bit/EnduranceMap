@@ -323,16 +323,14 @@ describe('when a name and the times disagree', () => {
 });
 
 describe('a race named Full is not always an Ironman', () => {
-  it.each([
-    'Full Aqua Warriors',
-    'Half Aqua Warriors',
-    'Ultra Aqua Warriors',
-    'Junior Aqua Warriors',
-    'Kids Aqua Warriors',
-  ])('leaves %s to be measured rather than assumed', (name) => {
-    // An aquathlon series calls its longest race "Full" and means 3 km and 15 km.
-    expect(detectRaceFromName(name)).toBeUndefined();
-  });
+  it.each(['Half Aqua Warriors', 'Full Marathon Relay', 'Full Send Challenge'])(
+    'leaves %s to be measured rather than assumed',
+    (name) => {
+      // "Full" on its own is a word an organizer uses freely; only a qualified name
+      // means the Ironman distance.
+      expect(detectRaceFromName(name)).toBeUndefined();
+    }
+  );
 
   it.each([
     ['Full distance', 'Full distance'],
@@ -343,10 +341,25 @@ describe('a race named Full is not always an Ironman', () => {
   ])('still reads %s as %s', (name, label) => {
     expect(detectRaceFromName(name)?.label).toBe(label);
   });
+});
 
-  it('keeps reading the names an aquathlon shares with a triathlon', () => {
-    // Sprint and Olympic aquathlon distances match the swim and run of the triathlon.
-    expect(detectRaceFromName('Sprint Aqua Warriors')?.label).toBe('Sprint');
-    expect(detectRaceFromName('Olympic Aqua Warriors')?.label).toBe('Olympic');
+describe('the Aqua Warriors series', () => {
+  // A recurring client whose names mean distances of its own choosing.
+  it.each([
+    ['Ultra Aqua Warriors', 5, 21],
+    ['Full Aqua Warriors', 3, 15],
+    ['Olympic Aqua Warriors', 1.5, 10],
+    ['Sprint Aqua Warriors', 0.75, 5],
+    ['Junior Aqua Warriors', 0.3, 2],
+    ['Kids Aqua Warriors', 0.15, 1],
+  ])('reads %s as %s km swim and %s km run', (name, swimKm, runKm) => {
+    const race = detectRaceFromName(name)!;
+    expect(race.swimKm).toBe(swimKm);
+    expect(race.runKm).toBe(runKm);
+  });
+
+  it('does not let the series steal a name it has no claim on', () => {
+    expect(detectRaceFromName('Sprint')?.label).toBe('Sprint');
+    expect(detectRaceFromName('IM140.6')?.label).toBe('Full distance');
   });
 });
