@@ -1,6 +1,12 @@
 import { findColumn, parseCsv } from './csv';
 import { EXCLUDED_STATUSES } from './results';
-import { measureDistanceKm, tidyKm, type DistanceSource } from './distances';
+import {
+  isPlausibleLegDistance,
+  measureDistanceKm,
+  tidyKm,
+  type BareUnit,
+  type DistanceSource,
+} from './distances';
 import { parseClockTimeToSeconds } from './time';
 import { parseElapsedToSeconds } from './results';
 import type { LegKind } from './multisport';
@@ -598,10 +604,19 @@ export function parseMultisportResultsCsv(
     const measured = legs.map((leg, i) => {
       const column = rateColumns[leg.kind];
       if (!column || leg.kind === 'transition') return null;
+      // A column headed "Speed" that states a bare number means km/h; a pace column
+      // means minutes per kilometre. The heading is the only thing that says which.
+      const bareUnit: BareUnit = /speed/i.test(column) ? 'kmh' : 'perKm';
       const result = measureDistanceKm(
-        group.map((e) => ({ seconds: e.times?.legSeconds[i] ?? 0, rate: e.row[column] }))
+        group.map((e) => ({ seconds: e.times?.legSeconds[i] ?? 0, rate: e.row[column] })),
+        5,
+        bareUnit
       );
-      return result?.consistent ? tidyKm(result.km) : null;
+      if (!result?.consistent) return null;
+      const km = tidyKm(result.km);
+      // Consistent but absurd means the rate was read in the wrong unit, which every
+      // athlete would agree on — so the spread cannot catch it and the bounds must.
+      return isPlausibleLegDistance(leg.kind, km) ? km : null;
     });
 
     const distances = legs.map((leg, i) =>

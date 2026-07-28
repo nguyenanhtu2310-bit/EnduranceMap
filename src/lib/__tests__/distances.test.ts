@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MIXED_DISTANCE_SPREAD,
+  isPlausibleLegDistance,
   measureDistanceKm,
   measureFromCandidates,
   parseRate,
@@ -101,5 +102,45 @@ describe('tidyKm', () => {
     [0.7531, 0.75],
   ])('rounds %f to %f', (raw, expected) => {
     expect(tidyKm(raw)).toBe(expected);
+  });
+});
+
+describe('a bare value takes its unit from the column', () => {
+  it('reads a bare number in a speed column as km/h', () => {
+    // A real export writes "39.7" and leaves the km/h to the heading.
+    expect(parseRate('39.7', 'kmh')?.secondsPerKm).toBeCloseTo(3600 / 39.7, 6);
+  });
+
+  it('still reads a bare mm:ss as minutes per kilometre', () => {
+    expect(parseRate('4:39')?.secondsPerKm).toBe(279);
+    expect(parseRate('13:45')?.secondsPerKm).toBe(825);
+  });
+
+  it('does not read a bare number as a pace, which would be meaningless', () => {
+    expect(parseRate('39.7')).toBeNull();
+  });
+
+  it('lets a stated unit win over the column it came from', () => {
+    expect(parseRate('1:35/100m', 'kmh')?.secondsPerKm).toBe(950);
+  });
+});
+
+describe('isPlausibleLegDistance', () => {
+  it('accepts every standard leg', () => {
+    for (const [kind, km] of [['swim', 0.75], ['swim', 3.8], ['bike', 20], ['bike', 180.2], ['run', 5], ['run', 42.2]] as const) {
+      expect(isPlausibleLegDistance(kind, km)).toBe(true);
+    }
+  });
+
+  it('rejects what a misread unit produces', () => {
+    // A swim pace stated per 100 m but read per kilometre gives every athlete the same
+    // absurd answer, so agreement between them proves nothing.
+    expect(isPlausibleLegDistance('swim', 33)).toBe(false);
+    expect(isPlausibleLegDistance('bike', 1080)).toBe(false);
+    expect(isPlausibleLegDistance('run', 0.05)).toBe(false);
+  });
+
+  it('says nothing about a leg it has no bounds for', () => {
+    expect(isPlausibleLegDistance('transition', 999)).toBe(true);
   });
 });

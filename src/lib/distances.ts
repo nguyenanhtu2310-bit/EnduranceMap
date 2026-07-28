@@ -12,6 +12,12 @@
  * sells, not for what was run.
  */
 
+/**
+ * What an unlabelled value means. A pace column writes "4:39" and means minutes per
+ * kilometre; a speed column writes "39.7" and means km/h.
+ */
+export type BareUnit = 'perKm' | 'kmh';
+
 /** A rate as a results file writes it, normalized to seconds per kilometre. */
 export interface Rate {
   secondsPerKm: number;
@@ -30,7 +36,7 @@ const MPH = /^\s*([\d.]+)\s*mph\s*$/i;
  * A bare mm:ss is treated as minutes per kilometre, which is what a running export means
  * by an unlabelled pace; a swim column always labels its 100 m.
  */
-export function parseRate(text: string | undefined): Rate | null {
+export function parseRate(text: string | undefined, bareUnit: BareUnit = 'perKm'): Rate | null {
   const written = (text ?? '').trim();
   if (!written) return null;
 
@@ -53,6 +59,16 @@ export function parseRate(text: string | undefined): Rate | null {
   if (perKm) {
     const seconds = Number(perKm[1]) * 60 + Number(perKm[2]);
     return seconds > 0 ? { secondsPerKm: seconds, written } : null;
+  }
+
+  /*
+   * A bare number carries no unit, so the column it came from decides. Real exports
+   * write a bike speed as "39.7" and leave the km/h to the heading — reading that as
+   * anything else loses the one column that measures the longest leg.
+   */
+  if (bareUnit === 'kmh' && /^[\d.]+$/.test(written)) {
+    const speed = Number(written);
+    return speed > 0 ? { secondsPerKm: 3600 / speed, written } : null;
   }
 
   return null;
@@ -89,11 +105,12 @@ function quantile(sorted: number[], q: number): number {
  */
 export function measureDistanceKm(
   pairs: { seconds: number; rate: string | undefined }[],
-  minimumAthletes = 5
+  minimumAthletes = 5,
+  bareUnit: BareUnit = 'perKm'
 ): Measurement | null {
   const implied: number[] = [];
   for (const { seconds, rate } of pairs) {
-    const parsed = parseRate(rate);
+    const parsed = parseRate(rate, bareUnit);
     if (!parsed || !(seconds > 0)) continue;
     implied.push(seconds / parsed.secondsPerKm);
   }
@@ -154,3 +171,22 @@ export const PACE_COLUMN_NAMES = [
   'FinishPace',
   'Pace',
 ];
+
+/**
+ * What a leg of each kind can plausibly measure.
+ *
+ * A rate read in the wrong unit still produces a consistent answer across the whole
+ * field, so agreement alone cannot catch it — a swim pace stated per 100 m but read per
+ * kilometre gives every athlete the same absurd thirty-odd kilometre swim. These are
+ * wide enough to admit any real race and narrow enough to catch an order of magnitude.
+ */
+export const PLAUSIBLE_LEG_KM: Record<string, { min: number; max: number }> = {
+  swim: { min: 0.1, max: 12 },
+  bike: { min: 3, max: 320 },
+  run: { min: 0.5, max: 110 },
+};
+
+export function isPlausibleLegDistance(kind: string, km: number): boolean {
+  const bounds = PLAUSIBLE_LEG_KM[kind];
+  return !bounds || (km >= bounds.min && km <= bounds.max);
+}
