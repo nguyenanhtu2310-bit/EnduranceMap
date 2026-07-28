@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDuration, parseClockTimeToSeconds, secondsToClockTime, windowSeconds } from '../time';
+import { formatDuration, maskClockInput, normalizeClockTime, parseClockTimeToSeconds, secondsToClockTime, windowSeconds } from '../time';
 
 describe('parseClockTimeToSeconds', () => {
   it('parses 24-hour HH:MM and HH:MM:SS', () => {
@@ -85,5 +85,41 @@ describe('formatDuration', () => {
   it('rounds to the nearest minute', () => {
     expect(formatDuration(3600 + 29)).toBe('1h');
     expect(formatDuration(3600 + 31)).toBe('1h 1m');
+  });
+});
+
+describe('maskClockInput', () => {
+  it.each([
+    ['0', '0'],
+    ['07', '07'],
+    ['073', '07:3'],
+    ['0730', '07:30'],
+    ['07:30', '07:30'],
+    ['073055', '07:30'],
+    ['abc', ''],
+  ])('shapes %s as %s', (raw, expected) => {
+    expect(maskClockInput(raw)).toBe(expected);
+  });
+});
+
+describe('normalizeClockTime', () => {
+  it.each([
+    ['7:5', '07:05'],
+    ['0705', '07:05'],
+    ['07:05', '07:05'],
+    ['7.05', '07:05'],
+    ['23:59', '23:59'],
+    ['000', '00:00'],
+  ])('settles %s as %s', (raw, expected) => {
+    expect(normalizeClockTime(raw)).toBe(expected);
+  });
+
+  it.each(['', '  ', '7', '24:00', '12:60', 'noon', '99:99'])('rejects %s', (raw) => {
+    expect(normalizeClockTime(raw)).toBeNull();
+  });
+
+  it('never stores a half-typed entry as though it were a time', () => {
+    // "07" alone is two digits — an hour with no minutes, not 07:00.
+    expect(normalizeClockTime('07')).toBeNull();
   });
 });

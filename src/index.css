@@ -1143,6 +1143,7 @@ button.row-remove:disabled {
 .colocated.source-times,
 .colocated.source-unknown {
   color: var(--color-danger);
+}
 
 /* — split calculation: one row per pass —
    A course that passes a point twice needs two editable figures in one cell. Set side

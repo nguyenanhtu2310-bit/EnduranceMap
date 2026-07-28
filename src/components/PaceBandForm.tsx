@@ -1,4 +1,5 @@
 import type { DistanceInput } from '../lib/pipeline';
+import { TimeInput } from './TimeInput';
 
 export interface DistanceFormRow extends Omit<DistanceInput, 'runnerCount'> {
   /** Kept as a string so the field can be cleared while typing. */
@@ -57,10 +58,10 @@ export function PaceBandForm({ rows, onChange, drivenByResults }: Props) {
               </td>
               <td className="num muted">{row.measuredKm.toFixed(2)} km</td>
               <td style={{ minWidth: 110 }}>
-                <input
-                  type="time"
+                <TimeInput
                   value={row.startTimeClock}
-                  onChange={(e) => update(i, { startTimeClock: e.target.value })}
+                  onChange={(v) => update(i, { startTimeClock: v })}
+                  title="Gun time for this distance"
                 />
               </td>
               <td className="num" style={{ minWidth: 80 }}>
@@ -93,10 +94,11 @@ export function PaceBandForm({ rows, onChange, drivenByResults }: Props) {
                 </td>
               ))}
               <td className="num" style={{ minWidth: 104 }}>
-                <input
-                  type="time"
+                <TimeInput
                   value={row.organizerCutoffClock ?? ''}
-                  onChange={(e) => update(i, { organizerCutoffClock: e.target.value })}
+                  onChange={(v) => update(i, { organizerCutoffClock: v })}
+                  align="right"
+                  title="Official finish cut-off"
                 />
               </td>
             </tr>

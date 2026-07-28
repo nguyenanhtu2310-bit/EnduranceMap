@@ -1,3 +1,5 @@
+import { TimeInput } from './TimeInput';
+
 interface Props<T extends string | number> {
   /** What the model computed — shown when nothing has been edited. */
   computed: T;
@@ -34,6 +36,16 @@ export function EditableCell<T extends string | number>({
 
   return (
     <span className={edited ? 'editable edited' : 'editable'}>
+      {type === 'time' ? (
+        // 24-hour, because the native time input follows the browser's locale and shows
+        // AM and PM to operators who work in 24-hour time.
+        <TimeInput
+          value={display}
+          align={align}
+          title={edited ? `${title ?? 'Edited'} — model says ${format ? format(computed) : computed}` : title}
+          onChange={(v) => onChange((v === '' ? undefined : v) as T | undefined)}
+        />
+      ) : (
       <input
         type={type}
         value={display}
@@ -49,6 +61,7 @@ export function EditableCell<T extends string | number>({
           onChange((type === 'number' ? Number(raw) : raw) as T);
         }}
       />
+      )}
       {edited && (
         <button
           type="button"

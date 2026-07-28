@@ -7,6 +7,7 @@ import {
   type PlanProblem,
 } from '../lib/multisport';
 import type { Course } from '../lib/snap';
+import { TimeInput } from './TimeInput';
 
 interface Props {
   plan: MultisportPlan;
@@ -110,10 +111,10 @@ export function MultisportPaceBandForm({
             </label>
             <label>
               Start
-              <input
-                type="time"
+              <TimeInput
                 value={race.startTimeClock}
-                onChange={(e) => updateRace(race.id, { startTimeClock: e.target.value })}
+                onChange={(v) => updateRace(race.id, { startTimeClock: v })}
+                title="Gun time — the swim start"
               />
             </label>
             <label>
@@ -138,10 +139,10 @@ export function MultisportPaceBandForm({
             </label>
             <label>
               Finish COT
-              <input
-                type="time"
+              <TimeInput
                 value={race.organizerCutoffClock ?? ''}
-                onChange={(e) => updateRace(race.id, { organizerCutoffClock: e.target.value })}
+                onChange={(v) => updateRace(race.id, { organizerCutoffClock: v })}
+                title="Official finish cut-off"
               />
             </label>
             {onRemoveRace && plan.races.length > 1 && (
