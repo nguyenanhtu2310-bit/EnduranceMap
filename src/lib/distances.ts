@@ -26,7 +26,7 @@ export interface Rate {
 }
 
 const PER_KM = /^\s*(\d{1,3}):(\d{2})\s*(?:\/\s*km|min\s*\/\s*km)?\s*$/i;
-const PER_100M = /^\s*(\d{1,3}):(\d{2})\s*\/\s*100\s*m\s*$/i;
+const PER_100M = /^\s*(\d{1,3}):(\d{2})\s*(?:min)?\s*\/\s*100\s*m\s*$/i;
 const KMH = /^\s*([\d.]+)\s*(?:km\/h|kph|kmh)\s*$/i;
 const MPH = /^\s*([\d.]+)\s*mph\s*$/i;
 

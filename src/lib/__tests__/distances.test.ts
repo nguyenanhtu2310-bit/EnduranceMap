@@ -144,3 +144,28 @@ describe('isPlausibleLegDistance', () => {
     expect(isPlausibleLegDistance('transition', 999)).toBe(true);
   });
 });
+
+describe('units written out in full', () => {
+  it.each([
+    ['13:45min/km', 825],
+    ['13:45 min/km', 825],
+    ['4:39min/km', 279],
+    ['2:12min/100m', 1320],
+    ['1:35/100m', 950],
+  ])('reads %s', (text, seconds) => {
+    expect(parseRate(text)?.secondsPerKm).toBeCloseTo(seconds, 6);
+  });
+
+  it.each([
+    ['39.7km/h', 39.7],
+    ['39.7 km/h', 39.7],
+    ['28 kph', 28],
+  ])('reads %s as a speed', (text, kmh) => {
+    expect(parseRate(text)?.secondsPerKm).toBeCloseTo(3600 / kmh, 6);
+  });
+
+  it('needs no help from the column heading once the unit is stated', () => {
+    // The point of attaching units: the value stands on its own.
+    expect(parseRate('39.7km/h', 'perKm')?.secondsPerKm).toBeCloseTo(3600 / 39.7, 6);
+  });
+});
