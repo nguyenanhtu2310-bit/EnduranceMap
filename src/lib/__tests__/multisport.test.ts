@@ -4,6 +4,7 @@ import {
   detectLegBinding,
   detectPlacemarkLeg,
   instantiateTemplate,
+  planFromCourses,
   skipsNamingOwnRace,
   unboundCourses,
   validatePlan,
@@ -240,5 +241,93 @@ describe('skipsNamingOwnRace', () => {
 
   it('has nothing to say about a single-sport race', () => {
     expect(skipsNamingOwnRace('Kids, Sprint', null)).toEqual([]);
+  });
+});
+
+describe('a bracketed distance belongs to the leg, not the race', () => {
+  it('pairs a swim and a run that each state their own distance', () => {
+    // Real map: "Swim Olympic (1,5km)" and "Run Olympic (10km)" are one race. Keeping the
+    // brackets in the key filed them as two races that never paired up.
+    const swim = detectLegBinding('Swim Olympic (1,5km)')!;
+    const run = detectLegBinding('Run Olympic (10km)')!;
+
+    expect(swim.raceKey).toBe(run.raceKey);
+    expect(swim.raceLabel).toBe('Olympic');
+    expect(swim.kind).toBe('swim');
+    expect(run.kind).toBe('run');
+  });
+
+  it.each([
+    ['Swim Kids (150m)', 'Run Kids (1km)'],
+    ['Swim Junior (300m)', 'Run Junior (2km)'],
+    ['Swim Sprint (750m)', 'Run Sprint (5km)'],
+  ])('pairs %s with %s', (a, b) => {
+    expect(detectLegBinding(a)!.raceKey).toBe(detectLegBinding(b)!.raceKey);
+  });
+
+  it('still keeps races apart when the brackets name the race', () => {
+    expect(detectLegBinding('Bike Course (IM70.3)')!.raceKey).not.toBe(
+      detectLegBinding('Bike Course (IM140.6)')!.raceKey
+    );
+  });
+});
+
+describe('planFromCourses', () => {
+  const aquathlon = [
+    course('Swim Olympic (1,5km)', 1.49),
+    course('Run Olympic (10km)', 10.03),
+    course('Swim Sprint (750m)', 0.75),
+    course('Run Sprint (5km)', 5.03),
+  ];
+
+  it('makes one race per race the map describes', () => {
+    const plan = planFromCourses('aquathlon', aquathlon);
+    expect(plan.races.map((r) => r.name)).toEqual(['Olympic', 'Sprint']);
+    expect(plan.races[0].legs[0].courseName).toBe('Swim Olympic (1,5km)');
+    expect(plan.races[0].legs[2].courseName).toBe('Run Olympic (10km)');
+    expect(plan.races[1].legs[2].distanceKm).toBe(5.03);
+  });
+
+  it('treats each route as its own race when none names a sport', () => {
+    // A map holding only run courses is not proof the event has no swim — it is proof
+    // nobody drew the swim.
+    const plan = planFromCourses('aquathlon', [course('10km', 10.03), course('5km', 5.03)]);
+
+    expect(plan.races).toHaveLength(2);
+    expect(plan.races.map((r) => r.name)).toEqual(['10km', '5km']);
+    expect(plan.races[0].legs[2].courseName).toBe('10km');
+    // The swim is still there, waiting for a distance the map cannot supply.
+    expect(plan.races[0].legs[0].kind).toBe('swim');
+    expect(plan.races[0].legs[0].courseName).toBeUndefined();
+  });
+
+  it('does not split sport-less routes across a template with two routed legs', () => {
+    // A triathlon cannot be assembled by guessing which unnamed line is the bike.
+    const plan = planFromCourses('triathlon', [course('Long', 90), course('Short', 21)]);
+    expect(plan.races).toHaveLength(1);
+  });
+
+  it('groups a triathlon map into one race per distance', () => {
+    const plan = planFromCourses('triathlon', [
+      course('Bike Course (IM70.3)', 90.1),
+      course('Run Course (IM70.3)', 21.2),
+      course('Bike Course (IM140.6)', 180.2),
+      course('Run Course (IM140.6)', 42.2),
+    ]);
+    expect(plan.races).toHaveLength(2);
+    expect(plan.races[0].legs[2].courseName).toBe('Bike Course (IM70.3)');
+    expect(plan.races[1].legs[4].courseName).toBe('Run Course (IM140.6)');
+  });
+});
+
+describe('a bracketed race name is not a distance', () => {
+  it('keeps a bracketed race designation, which has no unit', () => {
+    expect(detectLegBinding('Swim Course (70.3)')!.raceKey).toBe('70.3');
+    expect(detectLegBinding('Run Course (140.6)')!.raceKey).toBe('140.6');
+  });
+
+  it('drops a bracketed distance, which has one', () => {
+    expect(detectLegBinding('Run Olympic (10km)')!.raceKey).toBe('olympic');
+    expect(detectLegBinding('Swim Kids (150m)')!.raceKey).toBe('kids');
   });
 });

@@ -1,5 +1,19 @@
 import { summarizeMultisportProfile, type MultisportProfile } from '../lib/multisportResults';
 import type { MultisportRace } from '../lib/multisport';
+import type { DistanceSource } from '../lib/distances';
+
+/**
+ * How the leg distances were arrived at. A multisport file rarely states them outright,
+ * so the operator is told which are measured and which are inference they should check.
+ */
+const DISTANCE_SOURCES: Record<DistanceSource, string> = {
+  operator: 'set by you',
+  measured: 'measured from pace',
+  name: 'from the name — check',
+  splits: 'from split labels',
+  times: 'guessed from times — check',
+  unknown: 'unknown — set it',
+};
 
 interface Props {
   fileName: string;
@@ -9,6 +23,8 @@ interface Props {
   mapping: Record<string, string>;
   onMappingChange: (mapping: Record<string, string>) => void;
   onClear: () => void;
+  /** Corrects the leg distances when the file could not state them. */
+  onDistanceChange?: (key: string, distancesKm: number[]) => void;
 }
 
 function hm(seconds: number): string {
@@ -37,6 +53,7 @@ export function MultisportResultsPanel({
   mapping,
   onMappingChange,
   onClear,
+  onDistanceChange,
 }: Props) {
   return (
     <>
@@ -93,11 +110,15 @@ export function MultisportResultsPanel({
                           .filter((l) => l.kind !== 'transition')
                           .map((l) => `${l.label} ${l.distanceKm} km`)
                           .join(' · ')}
+                        <span className={`colocated source-${profile.distanceSource}`}>
+                          {DISTANCE_SOURCES[profile.distanceSource]}
+                        </span>
                       </summary>
                       <table className="inner">
                         <thead>
                           <tr>
                             <th>Leg</th>
+                            <th className="num">Distance</th>
                             <th className="num">P1</th>
                             <th className="num">P50</th>
                             <th className="num">P99</th>
@@ -105,9 +126,32 @@ export function MultisportResultsPanel({
                           </tr>
                         </thead>
                         <tbody>
-                          {summary.map((s) => (
+                          {summary.map((s, i) => (
                             <tr key={s.leg.label}>
                               <td>{s.leg.label}</td>
+                              <td className="num">
+                                {s.leg.kind === 'transition' ? (
+                                  <span className="muted">—</span>
+                                ) : onDistanceChange ? (
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step={0.05}
+                                    value={s.leg.distanceKm || ''}
+                                    title={DISTANCE_SOURCES[profile.distanceSource]}
+                                    onChange={(e) =>
+                                      onDistanceChange(
+                                        profile.key,
+                                        profile.legs.map((leg, j) =>
+                                          j === i ? Number(e.target.value) : leg.distanceKm
+                                        )
+                                      )
+                                    }
+                                  />
+                                ) : (
+                                  `${s.leg.distanceKm} km`
+                                )}
+                              </td>
                               <td className="num">{hm(s.p1Seconds)}</td>
                               <td className="num">{hm(s.p50Seconds)}</td>
                               <td className="num">{hm(s.p99Seconds)}</td>

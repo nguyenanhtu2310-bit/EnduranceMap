@@ -980,10 +980,70 @@ button.revert:hover {
   background: var(--color-bg);
 }
 
+/* Traffic level reads as a state at a glance — red busiest, green quietest — the same
+   way the read-only tag does. The hand-edited ring is drawn separately so a station set
+   by hand still shows its level rather than trading one signal for the other. */
+.level-select.High {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.level-select.Medium {
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+}
+
+.level-select.Low {
+  background: var(--color-ok-bg);
+  color: var(--color-ok);
+}
+
 .level-select.edited {
-  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
-  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+
+/* — schedule ordering —
+   Sorting answers "who is out first" and "who is out longest" without disturbing the
+   order the operator dragged the stations into. */
+
+.sort-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.7rem;
+}
+
+.sort-label {
+  color: var(--color-faint);
+  font-size: 0.78rem;
+  margin-right: 0.15rem;
+}
+
+button.sort-chip {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.76rem;
+  font-weight: 400;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  color: var(--color-muted);
+  min-height: 0;
+}
+
+button.sort-chip:hover {
+  color: var(--color-text);
+  border-color: var(--color-muted);
+}
+
+button.sort-chip.on {
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
   color: var(--color-accent);
+}
+
+.sort-note {
+  margin: 0 0 0 0.2rem;
 }
 
 /* — multisport legs —
@@ -1024,4 +1084,63 @@ button.revert:hover {
 /* A leg the plan cannot use yet — usually one with no route chosen. */
 tr.ms-leg-problem td:first-child {
   box-shadow: inset 2px 0 0 var(--color-warn);
+}
+
+/* — amenity columns —
+   The columns are the operator's to define, so the editor sits above the table it
+   changes and the icon palette opens in place rather than in a dialog. */
+
+.amenity-editor {
+  margin-bottom: 1rem;
+  padding: 0.9rem;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+button.amenity.icon-button {
+  font-size: 1rem;
+}
+
+.icon-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+  margin-top: 0.4rem;
+  padding: 0.5rem;
+  max-width: 21rem;
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.icon-palette input[type='text'] {
+  width: 4.5rem;
+  text-align: center;
+}
+
+/* Reused as a compact move control, where a full button would dwarf the row. */
+button.row-remove:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* — where a distance came from —
+   A measured distance is arithmetic on the file's own pace column; a guessed one is the
+   tool's inference and wants checking. Colouring the difference means the operator never
+   has to wonder which they are looking at. */
+
+.colocated.source-measured,
+.colocated.source-operator {
+  color: var(--color-ok);
+}
+
+.colocated.source-name,
+.colocated.source-splits {
+  color: var(--color-warn);
+}
+
+.colocated.source-times,
+.colocated.source-unknown {
+  color: var(--color-danger);
 }

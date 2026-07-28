@@ -150,9 +150,9 @@ export function instantiateTemplate(
 /* ---------------------------------------------------------------- detection ---- */
 
 const SPORT_WORDS: { kind: Exclude<LegKind, 'transition'>; re: RegExp }[] = [
-  { kind: 'swim', re: /\bswim(?:ming)?\b/ },
-  { kind: 'bike', re: /\b(?:bike|biking|cycle|cycling|ride|velo|vélo)\b/ },
-  { kind: 'run', re: /\brun(?:ning)?\b/ },
+  { kind: 'swim', re: /\bswim(?:ming)?\b/i },
+  { kind: 'bike', re: /\b(?:bike|biking|cycle|cycling|ride|velo|vélo)\b/i },
+  { kind: 'run', re: /\brun(?:ning)?\b/i },
 ];
 
 /** The sport a name announces, or undefined when it names none. */
@@ -167,6 +167,8 @@ function sportIn(text: string): Exclude<LegKind, 'transition'> | undefined {
 export interface LegBinding {
   /** Which race the route belongs to, normalized so "(70.3)" and "(IM70.3)" agree. */
   raceKey: string;
+  /** The race as the map writes it — "Olympic", "70.3" — for naming the race. */
+  raceLabel: string;
   kind: Exclude<LegKind, 'transition'>;
   /** 1 or 2 when the name distinguishes a duathlon's two run legs. */
   ordinal?: number;
@@ -194,16 +196,26 @@ export function detectLegBinding(courseName: string): LegBinding | null {
         : Number(ordinalMatch[1])
     : undefined;
 
-  const raceKey = lower
+  const withoutSport = courseName
     .replace(SPORT_WORDS.find((s) => s.kind === kind)!.re, ' ')
-    .replace(/\b(?:course|route|leg)\b/g, ' ')
-    .replace(/\bironman\b/g, ' ')
+    .replace(/\b(?:course|route|leg)\b/gi, ' ')
+    // A bracketed distance describes THIS leg, not the race: "Swim Olympic (1,5km)" and
+    // "Run Olympic (10km)" are two legs of one race, and keeping the brackets in the key
+    // would file them as two races that never pair up. The unit is what distinguishes
+    // them from a bracketed race name — "(70.3)" is which race, "(750m)" is how far.
+    .replace(/\(\s*\d+[.,]?\d*\s*(?:km|m|mi|miles?|k)\s*\)/gi, ' ')
+    .replace(/\bironman\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const raceKey = withoutSport
+    .toLowerCase()
     // "IM70.3" is the brand plus the distance; the brand is noise for grouping.
     .replace(/\bim(?=[\s\d.])/g, ' ')
     .replace(/\b[12]\b/g, ' ')
     .replace(/[^a-z0-9.]/g, '');
 
-  return { raceKey, kind, ordinal };
+  return { raceKey, raceLabel: withoutSport.replace(/^[-–—\s]+|[-–—\s]+$/g, ''), kind, ordinal };
 }
 
 /**
@@ -396,4 +408,60 @@ export function unboundCourses(plan: MultisportPlan, courses: Course[]): string[
     plan.races.flatMap((r) => r.legs.map((l) => l.courseName).filter((n): n is string => !!n))
   );
   return courses.map((c) => c.name).filter((name) => !bound.has(name));
+}
+
+/**
+ * Builds a plan from what the map holds, one race per race the map describes.
+ *
+ * A map is usually a whole event, not one race: an aquathlon morning draws an Olympic,
+ * a Sprint, a Junior and a Kids course side by side. Creating a single race and leaving
+ * the operator to add three more by hand — rebinding each one — is the wrong default.
+ *
+ * Where the routes name no sport at all, each is treated as its own race, which is the
+ * case that matters most: a map holding only run courses is not proof the event has no
+ * swim, it is proof nobody drew the swim.
+ */
+export function planFromCourses(
+  template: MultisportTemplateKey,
+  courses: Course[]
+): MultisportPlan {
+  const detected = courses
+    .map((course) => ({ course, binding: detectLegBinding(course.name) }))
+    .filter((d): d is { course: Course; binding: LegBinding } => d.binding !== null);
+
+  if (detected.length > 0) {
+    const keys: string[] = [];
+    for (const { binding } of detected) if (!keys.includes(binding.raceKey)) keys.push(binding.raceKey);
+
+    return {
+      races: keys.map((key, i) => {
+        const mine = detected.filter((d) => d.binding.raceKey === key);
+        const label = mine.find((d) => d.binding.raceLabel)?.binding.raceLabel;
+        const race = instantiateTemplate(template, `ms-${i + 1}`, label);
+        return autoBindCourses({ races: [race] }, mine.map((d) => d.course)).races[0];
+      }),
+    };
+  }
+
+  // Nothing names a sport. One routed leg means each course is a race of its own — four
+  // run courses are four aquathlons — while two routed legs cannot be split that way.
+  const routed = MULTISPORT_TEMPLATES[template].legs.filter((l) => isRoutedLeg(l.kind));
+  if (courses.length > 1 && routed.length === 1) {
+    return {
+      races: courses.map((course, i) => {
+        const race = instantiateTemplate(template, `ms-${i + 1}`, course.name);
+        // Bound here rather than by detection, which has no sport word to work from.
+        return {
+          ...race,
+          legs: race.legs.map((leg) =>
+            isRoutedLeg(leg.kind)
+              ? { ...leg, courseName: course.name, distanceKm: Number(course.totalKm.toFixed(2)) }
+              : leg
+          ),
+        };
+      }),
+    };
+  }
+
+  return autoBindCourses({ races: [instantiateTemplate(template, 'ms-1')] }, courses);
 }

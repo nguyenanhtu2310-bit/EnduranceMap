@@ -1,4 +1,10 @@
 import { parseCsv } from './csv';
+import {
+  PACE_COLUMN_NAMES,
+  measureFromCandidates,
+  tidyKm,
+  type DistanceSource,
+} from './distances';
 
 /**
  * One finisher, reduced to the two things that decide when they reach a checkpoint:
@@ -11,8 +17,16 @@ export interface RunnerSample {
 
 export interface ContestProfile {
   contest: string;
-  /** Distance the pace was measured over — the reference race's official distance. */
+  /**
+   * How far this contest actually was. Measured from the file's own pace column where it
+   * has one, because the name is not evidence — a trail race sold as "Ultra 70km"
+   * measured 66.02 km and its "5KM" measured 5.58.
+   */
   distanceKm: number;
+  /** Where that distance came from, so the operator can judge whether to trust it. */
+  distanceSource: DistanceSource;
+  /** One line explaining the source, shown beside the contest. */
+  distanceNote: string;
   entrants: number;
   finishers: number;
   /** Finishers whose start time was also recorded, so their offset is real. */
@@ -103,6 +117,79 @@ export interface ResultsParseOptions {
  * contest, so the observed corral spread carries over to a future race with a different
  * gun time.
  */
+/**
+ * How far a contest was, best evidence first.
+ *
+ * Measuring beats naming because names are wrong in a systematic direction: a race is
+ * sold on a round number, so "Ultra 70km" is 66 km and "5KM" is 5.58. Where the file
+ * states a pace the distance is arithmetic; where it does not, the name is all there is
+ * and the operator is told so rather than left to assume the number was checked.
+ */
+function resolveContestDistance(
+  contest: string,
+  rows: Record<string, string>[],
+  columns: { paceCol?: string; chipCol?: string; gunCol?: string; override?: number }
+): { km: number | undefined; source: DistanceSource; note: string } {
+  const { paceCol, chipCol, gunCol, override } = columns;
+
+  if (override && override > 0) {
+    return { km: override, source: 'operator', note: '' };
+  }
+
+  if (paceCol) {
+    const candidates = [
+      { label: 'chip time', column: chipCol },
+      { label: 'gun time', column: gunCol },
+    ]
+      .filter((c): c is { label: string; column: string } => !!c.column)
+      .map((c) => ({
+        label: c.label,
+        pairs: rows.map((row) => ({
+          seconds: parseElapsedToSeconds(row[c.column] ?? '') ?? 0,
+          rate: row[paceCol],
+        })),
+      }));
+
+    const best = measureFromCandidates(candidates);
+    if (best?.measurement.consistent) {
+      const km = tidyKm(best.measurement.km);
+      const named = inferContestDistanceKm(contest);
+      // Worth saying out loud when the name and the ground disagree, since the schedule
+      // will not match the number on the race entry page.
+      const disagrees = named && Math.abs(named - km) / km > 0.02;
+      return {
+        km,
+        source: 'measured',
+        note: disagrees
+          ? `"${contest}" measures ${km} km from its own pace column, not the ${named} km its name suggests.`
+          : '',
+      };
+    }
+    if (best && !best.measurement.consistent) {
+      return {
+        km: inferContestDistanceKm(contest),
+        source: 'name',
+        note:
+          `"${contest}" holds more than one distance — its athletes' paces imply anywhere from ` +
+          `${tidyKm(best.measurement.km * (1 - best.measurement.spread / 2))} to ` +
+          `${tidyKm(best.measurement.km * (1 + best.measurement.spread / 2))} km. ` +
+          `Split it by category, or set the distance by hand.`,
+      };
+    }
+  }
+
+  const named = inferContestDistanceKm(contest);
+  if (named && named > 0) {
+    return {
+      km: named,
+      source: 'name',
+      note: `"${contest}" has no pace column, so its distance is read from its name — check it.`,
+    };
+  }
+
+  return { km: undefined, source: 'unknown', note: '' };
+}
+
 export function parseResultsCsv(text: string, options: ResultsParseOptions = {}): ResultsParseResult {
   const rows = parseCsv(text);
   const warnings: string[] = [];
@@ -147,13 +234,22 @@ export function parseResultsCsv(text: string, options: ResultsParseOptions = {})
 
   const profiles: ContestProfile[] = [];
 
+  const paceCol = findColumn(headers, ...PACE_COLUMN_NAMES);
+
   for (const [contest, contestRows] of byContest) {
     const profileWarnings: string[] = [];
-    const distanceKm = options.distanceOverrides?.[contest] ?? inferContestDistanceKm(contest);
+    const resolved = resolveContestDistance(contest, contestRows, {
+      paceCol,
+      chipCol,
+      gunCol,
+      override: options.distanceOverrides?.[contest],
+    });
+    const distanceKm = resolved.km;
 
+    if (resolved.note) profileWarnings.push(resolved.note);
     if (!distanceKm || distanceKm <= 0) {
       profileWarnings.push(
-        `Could not work out the distance of "${contest}" from its name — set it manually before using this contest.`
+        `Could not work out how far "${contest}" was — set the distance before using this contest.`
       );
     }
 
@@ -201,6 +297,8 @@ export function parseResultsCsv(text: string, options: ResultsParseOptions = {})
     profiles.push({
       contest,
       distanceKm: distanceKm ?? 0,
+      distanceSource: resolved.source,
+      distanceNote: resolved.note,
       entrants: contestRows.length,
       finishers,
       withStartTime,
@@ -241,5 +339,27 @@ export function summarizeProfile(profile: ContestProfile): {
       p99: percentileOf(offsets, 99),
       max: offsets[offsets.length - 1],
     },
+  };
+}
+
+/**
+ * Restates a contest at a distance the operator has corrected.
+ *
+ * Pace was worked out by dividing each finishing time by the distance, so it scales
+ * inversely with it — no re-reading of the file is needed, and the result is identical
+ * to what parsing with that distance would have produced.
+ */
+export function withContestDistance(profile: ContestProfile, km: number): ContestProfile {
+  if (!(km > 0) || !(profile.distanceKm > 0)) return profile;
+  const scale = profile.distanceKm / km;
+  return {
+    ...profile,
+    distanceKm: km,
+    distanceSource: 'operator',
+    distanceNote: '',
+    samples: profile.samples.map((sample) => ({
+      ...sample,
+      paceMinPerKm: sample.paceMinPerKm * scale,
+    })),
   };
 }

@@ -13,7 +13,14 @@ import {
 } from './lib/overrides';
 import { CutoffTable } from './components/CutoffTable';
 import { DistanceRunView } from './components/DistanceRunView';
-import { DEFAULT_AMENITY_RULES, migrateAmenityOverrides, type AmenitySet } from './lib/amenities';
+import {
+  DEFAULT_AMENITIES,
+  DEFAULT_AMENITY_RULES,
+  migrateAmenityOverrides,
+  type Amenity,
+  type AmenitySet,
+} from './lib/amenities';
+import { AmenityEditor } from './components/AmenityEditor';
 import {
   ALL_REPORT_SECTIONS,
   REPORT_SECTIONS,
@@ -30,6 +37,7 @@ import {
   autoBindCourses,
   detectPlacemarkLeg,
   instantiateTemplate,
+  planFromCourses,
   skipsNamingOwnRace,
   validatePlan,
   type MultisportLeg,
@@ -42,11 +50,12 @@ import { ResultsPanel } from './components/ResultsPanel';
 import { MultisportResultsPanel } from './components/MultisportResultsPanel';
 import { StationScheduleTable } from './components/StationScheduleTable';
 import { TimingMatrix } from './components/TimingMatrix';
-import { parseResultsCsv, summarizeProfile, type ContestProfile } from './lib/results';
+import { parseResultsCsv, summarizeProfile, withContestDistance, type ContestProfile } from './lib/results';
 import {
   detectResultsFormat,
   parseMultisportResultsCsv,
   summarizeMultisportProfile,
+  withLegDistances,
   type MultisportProfile,
 } from './lib/multisportResults';
 import type { Course } from './lib/snap';
@@ -174,6 +183,8 @@ interface RaceSnapshot {
   courses: Course[];
   stationOrder: string[];
   amenityOverrides: Record<string, Partial<AmenitySet>>;
+  /** The amenity columns as this race names them — every race stocks differently. */
+  amenities: Amenity[];
   raceName: string;
   removedStations: string[];
   removedPasses: string[];
@@ -204,6 +215,7 @@ function blankSnapshot(): RaceSnapshot {
     courses: [],
     stationOrder: [],
     amenityOverrides: {},
+    amenities: DEFAULT_AMENITIES,
     raceName: '',
     removedStations: [],
     removedPasses: [],
@@ -218,7 +230,7 @@ function blankSnapshot(): RaceSnapshot {
 /** Fields that go into a saved race file — the recomputable ones stay out. */
 const RACE_FILE_FIELDS = [
   'kml', 'rows', 'selectedFolders', 'settings', 'renumber', 'renumberPrefix',
-  'results', 'contestMapping', 'stationOrder', 'amenityOverrides', 'raceName',
+  'results', 'contestMapping', 'stationOrder', 'amenityOverrides', 'amenities', 'raceName',
   'removedStations', 'removedPasses', 'reportSections', 'stationNotes', 'raceOverrides',
   'multisport', 'skipNames',
 ] as const;
@@ -245,6 +257,7 @@ export default function App() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [stationOrder, setStationOrder] = useState<string[]>([]);
   const [amenityOverrides, setAmenityOverrides] = useState<Record<string, Partial<AmenitySet>>>({});
+  const [amenities, setAmenities] = useState<Amenity[]>(DEFAULT_AMENITIES);
   const [raceName, setRaceName] = useState('');
   const [removedStations, setRemovedStations] = useState<string[]>([]);
   const [removedPasses, setRemovedPasses] = useState<string[]>([]);
@@ -306,7 +319,7 @@ export default function App() {
   function captureSnapshot(): RaceSnapshot {
     return {
       kml, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
-      results, contestMapping, courses, stationOrder, amenityOverrides, raceName,
+      results, contestMapping, courses, stationOrder, amenityOverrides, amenities, raceName,
       removedStations, removedPasses, reportSections, stationNotes, raceOverrides,
       multisport, skipNames,
     };
@@ -326,6 +339,7 @@ export default function App() {
     setCourses(snap.courses);
     setStationOrder(snap.stationOrder);
     setAmenityOverrides(snap.amenityOverrides);
+    setAmenities(snap.amenities?.length ? snap.amenities : DEFAULT_AMENITIES);
     setRaceName(snap.raceName);
     setRemovedStations(snap.removedStations);
     setRemovedPasses(snap.removedPasses);
@@ -616,6 +630,7 @@ export default function App() {
       sections: reportSections,
       rules: DEFAULT_AMENITY_RULES,
       overrides: amenityOverrides,
+      amenities,
       sourceFileName: kml?.fileName,
       resultsFileName: results?.fileName,
     });
@@ -641,7 +656,7 @@ export default function App() {
       setMultisport(null);
       return;
     }
-    setMultisport(autoBindCourses({ races: [instantiateTemplate(template, 'ms-1')] }, courses));
+    setMultisport(planFromCourses(template, courses));
     if (!skipNames.trim()) setSkipNames('Kids, Sprint');
     setResult(null);
   }
@@ -672,6 +687,31 @@ export default function App() {
     if (!multisport) return;
     const races = multisport.races.filter((r) => r.id !== raceId);
     setMultisport(races.length > 0 ? { races } : null);
+  }
+
+  /**
+   * Corrects how far a contest was.
+   *
+   * Pace was worked out by dividing finishing times by the distance, so restating it is
+   * arithmetic rather than a reason to read the file again — and the result invalidates
+   * the schedule, which is recalculated from the corrected numbers.
+   */
+  function changeContestDistance(contest: string, km: number) {
+    if (!results || results.kind !== 'single') return;
+    setResults({
+      ...results,
+      profiles: results.profiles.map((p) => (p.contest === contest ? withContestDistance(p, km) : p)),
+    });
+    setResult(null);
+  }
+
+  function changeLegDistances(key: string, distancesKm: number[]) {
+    if (!results || results.kind !== 'multisport') return;
+    setResults({
+      ...results,
+      profiles: results.profiles.map((p) => (p.key === key ? withLegDistances(p, distancesKm) : p)),
+    });
+    setResult(null);
   }
 
   function calculate(overrides?: { stations?: string[]; passes?: string[] }) {
@@ -859,6 +899,7 @@ export default function App() {
               mapping={contestMapping}
               onLoad={loadResults}
               onMappingChange={changeContestMapping}
+                onDistanceChange={changeContestDistance}
               onClear={clearResults}
               onError={setError}
             />
@@ -867,6 +908,7 @@ export default function App() {
               <MultisportResultsPanel
                 fileName={results.fileName}
                 profiles={results.profiles}
+                onDistanceChange={changeLegDistances}
                 races={multisport?.races ?? []}
                 mapping={contestMapping}
                 onMappingChange={changeContestMapping}
@@ -1116,9 +1158,15 @@ export default function App() {
                 })}
               </div>
             )}
+            <AmenityEditor
+              amenities={amenities}
+              onChange={setAmenities}
+              onReset={() => setAmenities(DEFAULT_AMENITIES)}
+            />
             <DistanceRunView
               result={result}
               rules={DEFAULT_AMENITY_RULES}
+              amenities={amenities}
               overrides={amenityOverrides}
               onOverridesChange={setAmenityOverrides}
               notes={stationNotes}

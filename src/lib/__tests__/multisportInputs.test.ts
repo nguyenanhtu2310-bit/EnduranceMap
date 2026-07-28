@@ -52,6 +52,7 @@ const COURSES = [course('Bike', 90), course('Run', 21)];
 function oneAthleteProfile(): MultisportProfile {
   return {
     key: 'full',
+    distanceSource: 'measured' as const,
     label: 'Reference',
     legs: [
       { kind: 'swim', label: 'Swim', distanceKm: 1.9 },
@@ -260,6 +261,7 @@ describe('autoMapMultisport', () => {
   function profile(key: string, swim: number, bike: number, run: number): MultisportProfile {
     return {
       key,
+      distanceSource: 'measured',
       label: key,
       legs: [
         { kind: 'swim', label: 'Swim', distanceKm: swim },

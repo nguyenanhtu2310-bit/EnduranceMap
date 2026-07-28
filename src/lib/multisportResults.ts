@@ -1,4 +1,5 @@
 import { parseCsv } from './csv';
+import { measureDistanceKm, tidyKm, type DistanceSource } from './distances';
 import { parseClockTimeToSeconds } from './time';
 import { parseElapsedToSeconds } from './results';
 import type { LegKind } from './multisport';
@@ -35,6 +36,8 @@ export interface ProfileLeg {
 export interface MultisportProfile {
   /** Identifies the race within the file, and keys the mapping onto a planned race. */
   key: string;
+  /** Where the leg distances came from, so the operator can judge whether to trust them. */
+  distanceSource: DistanceSource;
   label: string;
   legs: ProfileLeg[];
   athletes: MultisportAthleteSample[];
@@ -131,8 +134,11 @@ function findColumn(headers: string[], ...candidates: string[]): string | undefi
  * trying to work out a pace per kilometre for "Sprint".
  */
 export function detectResultsFormat(text: string): 'single' | 'multisport' {
-  const firstLine = text.replace(/^﻿/, '').split(/\r?\n/, 1)[0] ?? '';
-  const headers = firstLine.split(',').map((h) => h.replace(/^"|"$/g, '').trim());
+  // Parsed rather than split by hand: a file may be double-quote-encoded, in which case
+  // splitting the raw header line on commas leaves every name wrapped in quotes and a
+  // transition column stops being recognisable.
+  const head = parseCsv(text.split(/\r?\n/).slice(0, 3).join('\n'));
+  const headers = head.length > 0 ? Object.keys(head[0]) : [];
 
   return findColumn(headers, 'T1', 'T1_TD', 'Transition 1') ? 'multisport' : 'single';
 }
@@ -359,7 +365,16 @@ export function parseMultisportResultsCsv(
       const legSeconds: number[] = [];
       for (const leg of shape!.legs) {
         const seconds = parseElapsedToSeconds(row[leg.column] ?? '');
-        if (seconds === null || seconds < 0) return null;
+        if (seconds === null || seconds < 0) {
+          // A transition nobody timed is worth a couple of minutes; a swim, ride or run
+          // nobody timed is the athlete. One race in a real file left T1 blank for all
+          // 213 of its entrants, and requiring it discarded the entire contest.
+          if (leg.kind === 'transition') {
+            legSeconds.push(0);
+            continue;
+          }
+          return null;
+        }
         legSeconds.push(seconds);
       }
       const total = legSeconds.reduce((sum, v) => sum + v, 0);
@@ -458,6 +473,17 @@ export function parseMultisportResultsCsv(
    * apart: it is the organizer saying so, rather than an inference from which mats an
    * athlete happened to trip. Split depth is the fallback for files that carry none.
    */
+  /*
+   * Where a file states a pace or a speed for a leg, the distance stops being a guess:
+   * duration multiplied by rate is arithmetic on the organiser's own numbers, and across
+   * a real export of 182 athletes the answers agreed to within a quarter of a percent.
+   */
+  const rateColumns: Partial<Record<LegKind, string>> = {
+    swim: findColumn(headers, 'Swim pace', 'Swim Pace', 'SwimPace'),
+    bike: findColumn(headers, 'Bike Speed', 'Bike speed', 'BikeSpeed', 'Bike Pace', 'Bike pace'),
+    run: findColumn(headers, 'Run Pace', 'Run pace', 'RunPace'),
+  };
+
   const contestColumn = findColumn(headers, 'Contest', 'Race', 'Event', 'Category', 'Division');
   const named: { key: string; label: string; depth: number; group: Entry[] }[] = [];
 
@@ -519,20 +545,38 @@ export function parseMultisportResultsCsv(
     const standard = fromName ?? fromTimes;
     const legWarnings: string[] = [];
 
-    const distances = legs.map((leg) =>
-      leg.kind === 'swim'
+    // Measured first, and only fall back to the named or inferred race for legs the file
+    // says nothing about.
+    const measured = legs.map((leg, i) => {
+      const column = rateColumns[leg.kind];
+      if (!column || leg.kind === 'transition') return null;
+      const result = measureDistanceKm(
+        group.map((e) => ({ seconds: e.times?.legSeconds[i] ?? 0, rate: e.row[column] }))
+      );
+      return result?.consistent ? tidyKm(result.km) : null;
+    });
+
+    const distances = legs.map((leg, i) =>
+      measured[i] ??
+      (leg.kind === 'swim'
         ? standard.swimKm
         : leg.kind === 'bike'
           ? standard.bikeKm
           : leg.kind === 'run'
             ? standard.runKm
-            : 0
+            : 0)
     );
     const override = options.legDistanceOverrides?.[key];
     const legDistances = override && override.length === legs.length ? override : distances;
+    const anyMeasured = measured.some((km) => km !== null);
     if (!override) {
       legWarnings.push(
-        fromName
+        anyMeasured
+          ? `Leg distances measured from this file's own pace columns: ${legs
+              .map((leg, i) => (measured[i] !== null ? `${leg.label} ${measured[i]} km` : null))
+              .filter(Boolean)
+              .join(', ')}.`
+          : fromName
           ? `Leg distances taken as ${standard.label} from the name.`
           : nameIsDoubtful
             ? `Named as ${claimed!.label}, but the times fit ${standard.label} — using ${standard.label}. ` +
@@ -563,6 +607,7 @@ export function parseMultisportResultsCsv(
 
     profiles.push({
       key,
+      distanceSource: override ? 'operator' : anyMeasured ? 'measured' : fromName ? 'name' : 'times',
       label: contestLabel || standard.label,
       legs: legs.map((leg, i) => ({ kind: leg.kind, label: leg.label, distanceKm: legDistances[i] })),
       athletes,
@@ -595,4 +640,21 @@ export function summarizeMultisportProfile(profile: MultisportProfile) {
       p99Seconds: at(0.99),
     };
   });
+}
+
+/**
+ * Restates a race's leg distances after the operator corrects them.
+ *
+ * Nothing in an athlete's record depends on the distance — the legs are durations — so
+ * only the stated distances change, and the pace falls out of them later.
+ */
+export function withLegDistances(profile: MultisportProfile, distancesKm: number[]): MultisportProfile {
+  return {
+    ...profile,
+    distanceSource: 'operator',
+    legs: profile.legs.map((leg, i) => {
+      const km = distancesKm[i];
+      return km !== undefined && km >= 0 ? { ...leg, distanceKm: km } : leg;
+    }),
+  };
 }

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AMENITIES,
+  DEFAULT_AMENITIES,
   DEFAULT_AMENITY_RULES,
+  nextAmenityKey,
   resolveAmenities,
   totalAmenities,
 } from '../amenities';
@@ -42,7 +43,7 @@ describe('resolveAmenities', () => {
 
   it('reports every known amenity so a row never has holes', () => {
     const set = resolveAmenities('Low', DEFAULT_AMENITY_RULES, undefined);
-    expect(Object.keys(set).sort()).toEqual(AMENITIES.map((a) => a.key).sort());
+    expect(Object.keys(set).sort()).toEqual(DEFAULT_AMENITIES.map((a) => a.key).sort());
   });
 });
 
@@ -59,7 +60,7 @@ describe('totalAmenities', () => {
   it('returns zeroes rather than nothing for an empty course', () => {
     const totals = totalAmenities([]);
     expect(totals.water).toBe(0);
-    expect(Object.keys(totals)).toHaveLength(AMENITIES.length);
+    expect(Object.keys(totals)).toHaveLength(DEFAULT_AMENITIES.length);
   });
 });
 
@@ -245,5 +246,38 @@ describe('cut-off highlighting in the report', () => {
     const rows = result.cutoffTable.filter((r) => r.stationName === shared);
     const latest = rows.map((r) => r.suggestedClockTime).sort().at(-1);
     expect(rows.some((r) => r.suggestedClockTime === latest)).toBe(true);
+  });
+});
+
+describe('renaming a column', () => {
+  it('keeps what each station already had ticked', () => {
+    // Labels are the operator's; keys are the app's. Renaming "Watermelon" to "Orange
+    // slices" must not quietly untick every station that already carried it.
+    const renamed = DEFAULT_AMENITIES.map((a) =>
+      a.key === 'watermelon' ? { ...a, label: 'Orange slices', icon: '🍊' } : a
+    );
+    const overrides = { watermelon: true };
+
+    const before = resolveAmenities('Low', DEFAULT_AMENITY_RULES, overrides, DEFAULT_AMENITIES);
+    const after = resolveAmenities('Low', DEFAULT_AMENITY_RULES, overrides, renamed);
+
+    expect(after.watermelon).toBe(true);
+    expect(after).toEqual(before);
+  });
+
+  it('gives a column added by the operator a key of its own', () => {
+    const added = [...DEFAULT_AMENITIES, { key: nextAmenityKey(DEFAULT_AMENITIES), label: 'Gels', icon: '🍫', group: 'station' as const }];
+    const keys = added.map((a) => a.key);
+    expect(new Set(keys).size).toBe(keys.length);
+
+    // It starts unticked everywhere, since no rule mentions it.
+    const set = resolveAmenities('High', DEFAULT_AMENITY_RULES, undefined, added);
+    expect(set[added[added.length - 1].key]).toBe(false);
+  });
+
+  it('drops a removed column from the totals rather than counting a ghost', () => {
+    const fewer = DEFAULT_AMENITIES.filter((a) => a.key !== 'ambulance');
+    const sets = [resolveAmenities('High', DEFAULT_AMENITY_RULES, undefined, DEFAULT_AMENITIES)];
+    expect(totalAmenities(sets, fewer)).not.toHaveProperty('ambulance');
   });
 });

@@ -12,7 +12,13 @@ export interface Amenity {
   group: 'station' | 'medical';
 }
 
-export const AMENITIES: Amenity[] = [
+/**
+ * What a station hands out by default. Every race provisions differently — one hands out
+ * gels and sponges, another salt tablets — so this is only the starting list, and the
+ * operator renames, re-icons, adds and removes from it. Keys stay fixed while labels
+ * change, so a rename never loses the per-station decisions stored against them.
+ */
+export const DEFAULT_AMENITIES: Amenity[] = [
   { key: 'water', label: 'Water', icon: '💧', group: 'station' },
   { key: 'electrolyte', label: 'Electrolyte', icon: '⚡', group: 'station' },
   { key: 'banana', label: 'Banana', icon: '🍌', group: 'station' },
@@ -50,11 +56,12 @@ export const DEFAULT_AMENITY_RULES: AmenityRules = {
 export function resolveAmenities(
   level: ActivityLevel,
   rules: AmenityRules,
-  overrides: Partial<AmenitySet> | undefined
+  overrides: Partial<AmenitySet> | undefined,
+  amenities: Amenity[] = DEFAULT_AMENITIES
 ): AmenitySet {
   const base = rules[level] ?? {};
   const resolved: AmenitySet = {};
-  for (const amenity of AMENITIES) {
+  for (const amenity of amenities) {
     const override = overrides?.[amenity.key];
     resolved[amenity.key] = override !== undefined ? override : base[amenity.key] === true;
   }
@@ -88,10 +95,29 @@ export function migrateAmenityOverrides(
 }
 
 /** Column totals for the footer row of the operations sheet. */
-export function totalAmenities(sets: AmenitySet[]): Record<string, number> {
+export function totalAmenities(
+  sets: AmenitySet[],
+  amenities: Amenity[] = DEFAULT_AMENITIES
+): Record<string, number> {
   const totals: Record<string, number> = {};
-  for (const amenity of AMENITIES) {
+  for (const amenity of amenities) {
     totals[amenity.key] = sets.reduce((sum, set) => sum + (set[amenity.key] ? 1 : 0), 0);
   }
   return totals;
+}
+
+/** Emoji offered in the icon picker, grouped roughly as a station is stocked. */
+export const AMENITY_ICONS = [
+  '💧', '🥤', '🧃', '⚡', '🧂', '🍌', '🍉', '🍊', '🍇', '🥨',
+  '🍫', '🧊', '🧽', '🚻', '🩹', '➕', '🚑', '🏥', '📻', '🔦',
+  '⛑️', '🧴', '☂️', '🪑', '🗑️', '🎽', '🚴', '🏊', '🏃', '⏱️',
+];
+
+/** A distinct key for a newly added amenity, so it never collides with an existing one. */
+export function nextAmenityKey(amenities: Amenity[]): string {
+  const taken = new Set(amenities.map((a) => a.key));
+  for (let i = 1; ; i++) {
+    const key = `custom${i}`;
+    if (!taken.has(key)) return key;
+  }
 }
