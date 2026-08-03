@@ -48,6 +48,7 @@ import {
 } from './lib/multisport';
 import { autoMapMultisport, buildCourseRestriction, buildLegDistanceInputs } from './lib/multisportInputs';
 import { SettingsPanel, type Settings } from './components/SettingsPanel';
+import { ResultSection } from './components/ResultSection';
 import { ResultsPanel } from './components/ResultsPanel';
 import { MultisportResultsPanel } from './components/MultisportResultsPanel';
 import { StationScheduleTable } from './components/StationScheduleTable';
@@ -79,6 +80,9 @@ import {
   DEFAULT_TEARDOWN_BUFFER_MINUTES,
 } from './lib/config';
 import { DEFAULT_START_SPREAD_MINUTES } from './lib/paceModel';
+
+/** The five sections of the RESULT part, in the order they are produced. */
+type ResultSectionKey = 'schedule' | 'amenities' | 'splits' | 'distribution' | 'cutoffs';
 
 interface LoadedKml {
   text: string;
@@ -247,6 +251,35 @@ const RACE_FILE_VERSION = 2;
 export default function App() {
   const [kml, setKml] = useState<LoadedKml | null>(null);
   const [rows, setRows] = useState<DistanceFormRow[]>([]);
+
+  /**
+   * Which RESULT sections are open. All of them to begin with — a plan that opened
+   * folded would hide the answer the operator just pressed Calculate for — and shut one
+   * at a time as they work through it.
+   */
+  const [openSections, setOpenSections] = useState<Record<ResultSectionKey, boolean>>({
+    schedule: true,
+    amenities: true,
+    splits: true,
+    distribution: true,
+    cutoffs: true,
+  });
+
+  function toggleSection(key: ResultSectionKey) {
+    setOpenSections((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  const allOpen = Object.values(openSections).every(Boolean);
+
+  function setAllSections(open: boolean) {
+    setOpenSections({
+      schedule: open,
+      amenities: open,
+      splits: open,
+      distribution: open,
+      cutoffs: open,
+    });
+  }
   const [folders, setFolders] = useState<FolderSummary[]>([]);
   const [selectedFolders, setSelectedFolders] = useState<string[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -1092,8 +1125,20 @@ export default function App() {
             </div>
           )}
 
-          <section className="card">
-            <h2>Station operating schedule</h2>
+          {/* One control for the whole of RESULT: five sections is a long scroll, and an
+              organiser usually arrives wanting one of them. */}
+          <div className="actions result-actions">
+            <button className="secondary" onClick={() => setAllSections(!allOpen)}>
+              {allOpen ? 'Collapse all sections' : 'Expand all sections'}
+            </button>
+          </div>
+
+          <ResultSection
+            title="Station operating schedule"
+            summary={`${result.stations.length} stations`}
+            open={openSections.schedule}
+            onToggle={() => toggleSection('schedule')}
+          >
             <p className="hint">
               {result.stations.length} stations across {result.courses.length} distances. Open is the first
               modeled arrival minus the setup buffer; close is the official cut-off where one exists, otherwise
@@ -1160,10 +1205,14 @@ export default function App() {
                 calculate({ stations: next });
               }}
             />
-          </section>
+          </ResultSection>
 
-          <section className="card">
-            <h2>Course amenities</h2>
+          <ResultSection
+            title="Course amenities"
+            summary={`${result.courses.length} distances`}
+            open={openSections.amenities}
+            onToggle={() => toggleSection('amenities')}
+          >
             <p className="hint">
               The points a runner meets in order, with the gap from the previous one and what each one stocks
               — the view for spacing water and aid.
@@ -1213,10 +1262,14 @@ export default function App() {
                 calculate({ passes: next });
               }}
             />
-          </section>
+          </ResultSection>
 
-          <section className="card">
-            <h2>Split calculation</h2>
+          <ResultSection
+            title="Split calculation"
+            summary="Every point, by distance"
+            open={openSections.splits}
+            onToggle={() => toggleSection('splits')}
+          >
             <p className="hint">
               Every point each distance runs through, with the kilometre it falls at on that distance's own
               route and the hours the position is staffed.
@@ -1228,27 +1281,35 @@ export default function App() {
               overrides={raceOverrides}
               onCrossingEdit={editCrossing}
             />
-          </section>
+          </ResultSection>
 
-          <section className="card">
-            <h2>Crossing time distribution</h2>
+          <ResultSection
+            title="Crossing time distribution"
+            summary="The race day on one clock"
+            open={openSections.distribution}
+            onToggle={() => toggleSection('distribution')}
+          >
             <p className="hint">
               Runner arrivals per {result.binMinutes} minutes, stacked by distance, on one shared clock. Rows
               run in course order, so the field can be seen moving down the route. The cap marks each station’s
               busiest window.
             </p>
             <CrossingDistribution result={result} />
-          </section>
+          </ResultSection>
 
-          <section className="card">
-            <h2>Cut-off times</h2>
+          <ResultSection
+            title="Cut-off times"
+            summary={`${result.cutoffTable.length} proposals`}
+            open={openSections.cutoffs}
+            onToggle={() => toggleSection('cutoffs')}
+          >
             <CutoffTable
               result={result}
               graceMinutes={settings.cutoffGraceMinutes}
               overrides={raceOverrides}
               onCrossingEdit={editCrossing}
             />
-          </section>
+          </ResultSection>
 
 
           {result.skipped.length > 0 && (

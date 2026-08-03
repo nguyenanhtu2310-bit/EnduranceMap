@@ -28,8 +28,15 @@ function formatHm(seconds: number): string {
   return secondsToClockTime(seconds).slice(0, 5);
 }
 
-/** Everything in a row below the marker band: the bars, the baseline and its padding. */
-const ROW_BODY = 38;
+/**
+ * The row at 1.0x — deliberately the compact one.
+ *
+ * A hundred-point timing map at the old comfortable height ran past nine thousand
+ * pixels, and the whole day on one screen is the view a race director, course director
+ * and medical director plan resources from. So the overview is what the chart opens at,
+ * and the slider adds height rather than taking it away.
+ */
+const ROW_BODY = 16;
 const AXIS_HEIGHT = 26;
 const RIGHT_PAD = 12;
 const LABEL_GUTTER = 24;
@@ -37,14 +44,14 @@ const MIN_LABEL_WIDTH = 96;
 const MAX_LABEL_WIDTH = 280;
 /** Approximate advance of the 12px label face; SVG text cannot wrap or ellipsize itself. */
 const LABEL_CHAR_PX = 6.2;
-/** Glyph face at full height, and the floor below which ♂/♀ stops being a shape. */
-const GLYPH_PX = 11;
-const MIN_GLYPH_PX = 7;
-/** Vertical spacing between stacked glyph lanes, and its floor. */
-const LANE_STEP = 11;
-const MIN_LANE_STEP = 8;
+/** Glyph face at 1.0x — the smallest at which ♂ and ♀ are still distinct shapes. */
+const GLYPH_PX = 7;
+/** Vertical spacing between stacked glyph lanes at 1.0x. */
+const LANE_STEP = 8;
 /** Clearance above the first lane and below the last, so nothing touches a bar. */
-const BAND_PADDING = 8;
+const BAND_PADDING = 4;
+/** Gap under the baseline at 1.0x. */
+const BASELINE_PAD = 3;
 
 /**
  * How far the timeline is stretched. 1 fits the card; the upper end gives roughly a
@@ -54,13 +61,12 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 10;
 
 /**
- * How tall each row is drawn, as a multiple of its natural height. A timing map with a
- * hundred points makes a chart taller than any screen, and the whole of it is what goes
- * into a briefing — so the rows compress. Glyphs and lanes shrink with the rows but stop
- * at a floor, past which the marks stop being readable and the saving is not worth it.
+ * Row height as a multiple of the overview. 1.0 is the whole race day on a laptop
+ * screen — the view a briefing is built from, and so the one the chart opens at. Above
+ * it every vertical measure grows together, for reading one station closely.
  */
-const MIN_HEIGHT = 0.4;
-const MAX_HEIGHT = 1.5;
+const MIN_HEIGHT = 1;
+const MAX_HEIGHT = 3;
 
 function truncateToWidth(text: string, widthPx: number): string {
   const maxChars = Math.max(4, Math.floor(widthPx / LABEL_CHAR_PX));
@@ -92,7 +98,7 @@ export function CrossingDistribution({ result }: Props) {
   const [showTable, setShowTable] = useState(false);
   const [sharedScale, setSharedScale] = useState(true);
   const [zoom, setZoom] = useState(MIN_ZOOM);
-  const [height, setHeight] = useState(1);
+  const [height, setHeight] = useState(MIN_HEIGHT);
 
   /**
    * Tooltips are positioned against this box rather than against the scrolling strip
@@ -153,14 +159,13 @@ export function CrossingDistribution({ result }: Props) {
   const xForSeconds = (seconds: number) =>
     labelWidth + ((seconds - timeRangeSeconds.start) / spanSeconds) * plotWidth;
 
-  // Everything vertical scales together, so compressing the rows never leaves a glyph
-  // sitting on a bar. Each has a floor: past it the marks stop being legible and the
-  // height saved is not worth what it costs to read.
-  const glyphPx = Math.max(MIN_GLYPH_PX, Math.round(GLYPH_PX * height));
-  const laneStep = Math.max(MIN_LANE_STEP, Math.round(LANE_STEP * height));
-  const bandPadding = Math.max(4, Math.round(BAND_PADDING * height));
-  const rowBody = Math.max(16, Math.round(ROW_BODY * height));
-  const baselinePad = Math.max(3, Math.round(6 * height));
+  // Everything vertical grows together from the overview, so a taller row never leaves
+  // a glyph sitting on a bar and the shape of the chart is the same at every setting.
+  const glyphPx = Math.round(GLYPH_PX * height);
+  const laneStep = Math.round(LANE_STEP * height);
+  const bandPadding = Math.round(BAND_PADDING * height);
+  const rowBody = Math.round(ROW_BODY * height);
+  const baselinePad = Math.round(BASELINE_PAD * height);
 
   // Rows are only as tall as the busiest one needs. Stretching the timeline pulls
   // markers apart, so the band shrinks back as lanes empty and the bars regain the room.
@@ -187,22 +192,6 @@ export function CrossingDistribution({ result }: Props) {
   return (
     <div className="viz-root" ref={boxRef}>
       <div className="chart-legend">
-        {courseOrder.map((courseName, i) => (
-          <span key={courseName} className="legend-item">
-            <span className="legend-swatch" style={{ background: slotVar(i) }} />
-            {courseName}
-          </span>
-        ))}
-        <span className="legend-item">
-          <span className="legend-swatch peak-swatch" />
-          Peak {binMinutes}-min window
-        </span>
-        {hasLeads && (
-          <span className="legend-item" title="The fastest finisher of each sex, on each distance">
-            <span className="legend-lead">♂♀</span>
-            First Male / Female, coloured by distance
-          </span>
-        )}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: '0.6rem', alignItems: 'center' }}>
           {!showTable && (
             <button
@@ -251,12 +240,12 @@ export function CrossingDistribution({ result }: Props) {
             />
             <span className="muted small tabular">{height.toFixed(1)}×</span>
           </label>
-          {(zoom !== MIN_ZOOM || height !== 1) && (
+          {(zoom !== MIN_ZOOM || height !== MIN_HEIGHT) && (
             <button
               className="secondary"
               onClick={() => {
                 setZoom(MIN_ZOOM);
-                setHeight(1);
+                setHeight(MIN_HEIGHT);
               }}
             >
               Fit
@@ -275,6 +264,30 @@ export function CrossingDistribution({ result }: Props) {
             ? 'All rows share one height scale, so bar heights are comparable between stations. Quiet stations look flat because they genuinely see fewer runners.'
             : 'Each row is scaled to its own busiest window — the shape of each station’s load is readable, but heights are no longer comparable between stations.'}
         </p>
+      )}
+
+      {/* The key sits directly above the plot, under the sliders, because a screenshot
+          of the chart has to carry the distances it is coloured by — cropping to the
+          bars alone leaves four unexplained colours. */}
+      {!showTable && (
+        <div className="chart-legend chart-key">
+          {courseOrder.map((courseName, i) => (
+            <span key={courseName} className="legend-item">
+              <span className="legend-swatch" style={{ background: slotVar(i) }} />
+              {courseName}
+            </span>
+          ))}
+          <span className="legend-item">
+            <span className="legend-swatch peak-swatch" />
+            Peak {binMinutes}-min window
+          </span>
+          {hasLeads && (
+            <span className="legend-item" title="The fastest finisher of each sex, on each distance">
+              <span className="legend-lead">♂♀</span>
+              First Male / Female, coloured by distance
+            </span>
+          )}
+        </div>
       )}
 
       {showTable ? (
@@ -537,6 +550,7 @@ function DistributionTable({ result }: { result: PipelineResult }) {
             <th>Peak window</th>
             <th className="num">Through in {result.binMinutes} min</th>
             <th>Busiest distance</th>
+            <th>Activity</th>
             {hasLeads && <th className="num">First Male</th>}
             {hasLeads && <th className="num">First Female</th>}
           </tr>
@@ -550,6 +564,11 @@ function DistributionTable({ result }: { result: PipelineResult }) {
               <td>{peakWindowLabel(station)}</td>
               <td className="num">{peakBin(station)?.total.toLocaleString() ?? '—'}</td>
               <td>{busiestCourse(station, result.courseOrder)}</td>
+              <td>
+                <span className={`tag ${station.schedule.activityLevel}`}>
+                  {station.schedule.activityLevel}
+                </span>
+              </td>
               {hasLeads && <td className="num">{firstLeadLabel(station, 'M')}</td>}
               {hasLeads && <td className="num">{firstLeadLabel(station, 'F')}</td>}
             </tr>

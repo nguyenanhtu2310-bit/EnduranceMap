@@ -606,6 +606,64 @@ tr.drop-target td {
   margin: 0 0 0.6rem;
 }
 
+/* Sits between the sliders and the plot, so a crop of the chart keeps its key. */
+.chart-key {
+  margin-bottom: 0.5rem;
+}
+
+/* — collapsible RESULT sections — */
+
+.result-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.6rem;
+}
+
+/*
+ * The whole heading is the control, so the target is a heading's width rather than a
+ * caret's. It is a button, but must not read as one — reset the chrome.
+ */
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.section-toggle:hover,
+.section-toggle:active {
+  background: none;
+}
+
+.section-toggle h2 {
+  margin: 0;
+  font-weight: 500;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+}
+
+.section-caret {
+  color: var(--color-accent);
+  font-size: 0.8rem;
+  line-height: 1;
+  width: 0.75rem;
+}
+
+.section-summary {
+  margin-left: auto;
+}
+
+.section-body {
+  margin-top: 0.3rem;
+}
+
 .zoom-control {
   display: inline-flex;
   align-items: center;
