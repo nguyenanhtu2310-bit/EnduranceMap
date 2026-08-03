@@ -681,7 +681,7 @@ export default function App() {
     const base = name.replace(/[^\w\d -]+/g, '').trim() || 'race';
     return {
       html,
-      fileName: theme === 'dark' ? `${base} - CP operations (share).html` : `${base} - CP operations.html`,
+      fileName: theme === 'dark' ? `${base} - CP operations (dark).html` : `${base} - CP operations.html`,
     };
   }
 
@@ -1032,9 +1032,9 @@ export default function App() {
           <section className="card">
             <h2>Export</h2>
             <p className="hint">
-              The share page carries the brand theme and the crossing-time distribution chart — put it on
-              Drive or a web host and send the organiser the link. The print report is the same content
-              ink-on-white for paper and email. Both are single self-contained files that open offline.
+              One report in two finishes. The dark one keeps the brand theme, for reading on a screen or
+              hosting behind a link; the print one is the same content ink-on-white for paper and email.
+              Both are single self-contained files that open offline.
             </p>
             <div className="folder-list" style={{ marginBottom: '1rem' }}>
               {REPORT_SECTIONS.map((section) => (
@@ -1072,9 +1072,9 @@ export default function App() {
                   downloadReport(html, fileName);
                 }}
                 disabled={!Object.values(reportSections).some(Boolean)}
-                title="Brand theme with the distribution chart — for viewing on screen or hosting behind a link"
+                title="The same report in the brand's dark theme — for screens, and for hosting behind a link"
               >
-                Download share page
+                Download dark report
               </button>
               <button
                 className="secondary"

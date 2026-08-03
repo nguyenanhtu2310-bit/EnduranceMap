@@ -46,9 +46,9 @@ export const ALL_REPORT_SECTIONS: ReportSections = {
 export interface ReportOptions {
   raceName: string;
   /**
-   * 'light' is the printable document; 'dark' is the on-screen share page in the
-   * brand's own theme, with the distribution chart drawn in the dark palette. Both
-   * print light — paper is paper whatever the screen looked like.
+   * 'light' is the printable document; 'dark' is the same report in the brand's own
+   * theme, with the distribution chart drawn in the dark palette. Both print light —
+   * paper is paper whatever the screen looked like.
    */
   theme?: 'light' | 'dark';
   /** Operator notes per station (staff, decoder serial), keyed by map name. */
@@ -453,7 +453,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(raceName)} — CP operations</title>
 <style>
-  /* EnduranceMap brand. The dark variant is the on-screen share page in the app's own
+  /* EnduranceMap brand. The dark variant is the same report in the app's own
      theme; the light variant is the printable document. Print always drops to
      ink-on-paper — paper is paper whatever the screen looked like. */
   :root {
