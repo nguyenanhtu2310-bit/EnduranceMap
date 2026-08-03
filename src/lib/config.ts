@@ -63,14 +63,32 @@ export const DEFAULT_HISTOGRAM_BIN_MINUTES = 15;
  * exactly on the tail of the field would turn every modelling error into a runner pulled
  * off the course, so the proposal sits behind it.
  */
-export const DEFAULT_CUTOFF_GRACE_MINUTES = 15;
+export const DEFAULT_CUTOFF_GRACE_MINUTES = 5;
 
 /**
  * Proposed cut-offs are rounded up to this many minutes. Crews and runners work from
- * quarter hours, not 08:37, and rounding up never makes a cut-off tighter than the
+ * round times, not 08:37, and rounding up never makes a cut-off tighter than the
  * calculation intended.
+ *
+ * Five, not fifteen: rounding up to the quarter hour adds up to fifteen minutes on top
+ * of the grace, so a point could be held nearly twenty minutes past the last runner the
+ * model puts through it. A five-minute mark reads just as cleanly off a schedule and
+ * keeps the whole margin inside MAX_CUTOFF_MARGIN_MINUTES.
  */
-export const DEFAULT_CUTOFF_ROUNDING_MINUTES = 15;
+export const DEFAULT_CUTOFF_ROUNDING_MINUTES = 5;
+
+/**
+ * The furthest a proposal may sit past the slowest modelled arrival, whatever the grace
+ * and rounding would otherwise produce. Beyond this a marshal is standing at a point the
+ * model says the last runner has already left.
+ *
+ * A grace set larger than this wins: the operator asking for thirty minutes has said
+ * what they want, and the cap exists to stop rounding inflating a margin nobody chose.
+ */
+export const MAX_CUTOFF_MARGIN_MINUTES = 15;
+
+/** Fallback step when the cap bites and the usual rounding overshoots it. */
+export const CUTOFF_CAP_STEP_MINUTES = 5;
 
 export interface ActivityThresholds {
   mediumRunnersPerHour: number;

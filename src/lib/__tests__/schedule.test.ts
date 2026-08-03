@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_CUTOFF_GRACE_MINUTES, MAX_CUTOFF_MARGIN_MINUTES } from '../config';
+import { parseClockTimeToSeconds } from '../time';
 import {
   buildArrivalHistogram,
   buildCutoffTable,
@@ -180,16 +182,55 @@ describe('buildCutoffTable', () => {
 
   it('proposes a cut-off for every crossing, not only those the map named', () => {
     const stations = [buildStationSchedule('No Cutoff', [crossing('10km', 5, '07:00', '09:00')])];
-    const rows = buildCutoffTable(stations);
+    const rows = buildCutoffTable(stations, { graceMinutes: 15 });
     expect(rows).toHaveLength(1);
     expect(rows[0].mapClockTime).toBeUndefined();
     // 09:00 tail + 15 min grace, already on a quarter hour.
     expect(rows[0].suggestedClockTime).toBe('09:15:00');
   });
 
-  it('rounds a proposal up to the next quarter hour rather than to nearest', () => {
+  it('rounds a proposal up rather than to nearest', () => {
     const stations = [buildStationSchedule('Odd', [crossing('10km', 5, '07:00', '09:01')])];
-    // 09:01 + 15 = 09:16, which rounds up to 09:30 — never back to 09:15.
-    expect(buildCutoffTable(stations)[0].suggestedClockTime).toBe('09:30:00');
+    // 09:01 + 5 = 09:06, which rounds up to 09:10 — never back to 09:05, which would
+    // be tighter than the calculation asked for.
+    expect(buildCutoffTable(stations)[0].suggestedClockTime).toBe('09:10:00');
+  });
+
+  it('adds the operator’s grace, not a fixed one', () => {
+    const stations = [buildStationSchedule('Grace', [crossing('10km', 5, '07:00', '09:00')])];
+    // The same tail, held open longer, has to propose a later cut-off.
+    expect(buildCutoffTable(stations, { graceMinutes: 5 })[0].suggestedClockTime).toBe('09:05:00');
+    expect(buildCutoffTable(stations, { graceMinutes: 40 })[0].suggestedClockTime).toBe('09:40:00');
+  });
+
+  it('never sits more than fifteen minutes past the slowest arrival', () => {
+    // Every minute of an hour, so no arrival happens to fall kindly on the rounding.
+    for (let minute = 0; minute < 60; minute++) {
+      const tail = `09:${String(minute).padStart(2, '0')}`;
+      const stations = [buildStationSchedule('Tail', [crossing('10km', 5, '07:00', tail)])];
+      const row = buildCutoffTable(stations)[0];
+
+      const proposed = parseClockTimeToSeconds(row.suggestedClockTime)!;
+      const arrival = parseClockTimeToSeconds(row.modeledLastArrivalClockTime)!;
+      const margin = (proposed - arrival) / 60;
+
+      expect(margin).toBeLessThanOrEqual(MAX_CUTOFF_MARGIN_MINUTES);
+      // And never before the field it is meant to let through.
+      expect(margin).toBeGreaterThanOrEqual(DEFAULT_CUTOFF_GRACE_MINUTES);
+    }
+  });
+
+  it('lets a grace larger than the cap stand, since the operator chose it', () => {
+    const stations = [buildStationSchedule('Long', [crossing('10km', 5, '07:00', '09:02')])];
+    const row = buildCutoffTable(stations, { graceMinutes: 30 })[0];
+    const margin =
+      (parseClockTimeToSeconds(row.suggestedClockTime)! -
+        parseClockTimeToSeconds(row.modeledLastArrivalClockTime)!) /
+      60;
+    expect(margin).toBeGreaterThanOrEqual(30);
+  });
+
+  it('starts a race with five minutes of grace', () => {
+    expect(DEFAULT_CUTOFF_GRACE_MINUTES).toBe(5);
   });
 });

@@ -1,9 +1,11 @@
 import { parseClockTimeToSeconds, secondsToClockTime } from './time';
 import type { PercentileResult } from './percentiles';
 import {
+  CUTOFF_CAP_STEP_MINUTES,
   DEFAULT_ACTIVITY_THRESHOLDS,
   DEFAULT_CUTOFF_GRACE_MINUTES,
   DEFAULT_CUTOFF_ROUNDING_MINUTES,
+  MAX_CUTOFF_MARGIN_MINUTES,
   DEFAULT_HISTOGRAM_BIN_MINUTES,
   DEFAULT_SETUP_BUFFER_MINUTES,
   DEFAULT_TEARDOWN_BUFFER_MINUTES,
@@ -225,24 +227,41 @@ export interface CutoffTableRow {
 
 /**
  * Proposes when a position should stop runners: the slowest modelled arrival plus a
- * grace margin, rounded up to the next quarter hour. Rounding up matters — rounding to
- * nearest could pull a cut-off earlier than the calculation, which is the one direction
- * that costs a runner their race.
+ * grace margin, rounded up. Rounding up matters — rounding to nearest could pull a
+ * cut-off earlier than the calculation, which is the one direction that costs a runner
+ * their race.
+ *
+ * The proposal is then held within `maxMarginMinutes` of that slowest arrival. Rounding
+ * up is free to overshoot, and a point held open well past the last runner the model
+ * puts through it is a crew kept standing for nobody. Where the cap bites, the latest
+ * five-minute mark that fits is used instead; it can never land before the grace,
+ * because the cap is never tighter than the grace itself.
  */
 export function suggestCutoffSeconds(
   slowestArrivalSeconds: number,
   graceMinutes = DEFAULT_CUTOFF_GRACE_MINUTES,
-  roundingMinutes = DEFAULT_CUTOFF_ROUNDING_MINUTES
+  roundingMinutes = DEFAULT_CUTOFF_ROUNDING_MINUTES,
+  maxMarginMinutes = MAX_CUTOFF_MARGIN_MINUTES
 ): number {
   const withGrace = slowestArrivalSeconds + graceMinutes * 60;
-  if (roundingMinutes <= 0) return withGrace;
   const step = roundingMinutes * 60;
-  return Math.ceil(withGrace / step) * step;
+  const rounded = roundingMinutes > 0 ? Math.ceil(withGrace / step) * step : withGrace;
+
+  if (maxMarginMinutes <= 0) return rounded;
+
+  // An explicit grace beyond the cap is an instruction, not an accident of rounding.
+  const ceiling = slowestArrivalSeconds + Math.max(maxMarginMinutes, graceMinutes) * 60;
+  if (rounded <= ceiling) return rounded;
+
+  const capStep = CUTOFF_CAP_STEP_MINUTES * 60;
+  return Math.max(withGrace, Math.floor(ceiling / capStep) * capStep);
 }
 
 export interface CutoffTableOptions {
   graceMinutes?: number;
   roundingMinutes?: number;
+  /** Furthest a proposal may sit past the slowest modelled arrival. */
+  maxMarginMinutes?: number;
 }
 
 /**
@@ -257,6 +276,7 @@ export function buildCutoffTable(
 ): CutoffTableRow[] {
   const graceMinutes = options.graceMinutes ?? DEFAULT_CUTOFF_GRACE_MINUTES;
   const roundingMinutes = options.roundingMinutes ?? DEFAULT_CUTOFF_ROUNDING_MINUTES;
+  const maxMarginMinutes = options.maxMarginMinutes ?? MAX_CUTOFF_MARGIN_MINUTES;
   const rows: CutoffTableRow[] = [];
 
   for (const station of stations) {
@@ -265,7 +285,12 @@ export function buildCutoffTable(
       const p99 = percentiles.find((p) => p.percentile === 99) ?? percentiles[percentiles.length - 1];
       if (!p99) continue;
 
-      const suggestedSeconds = suggestCutoffSeconds(p99.seconds, graceMinutes, roundingMinutes);
+      const suggestedSeconds = suggestCutoffSeconds(
+        p99.seconds,
+        graceMinutes,
+        roundingMinutes,
+        maxMarginMinutes
+      );
       const mapSeconds = crossing.officialCutoffClock
         ? parseClockTimeToSeconds(crossing.officialCutoffClock)
         : null;

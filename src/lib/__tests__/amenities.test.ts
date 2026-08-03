@@ -272,11 +272,26 @@ describe('cut-off highlighting in the report', () => {
     }
   });
 
-  it('marks exactly one row per station as final', async () => {
+  it('marks every station’s closing time, and marks nothing earlier', async () => {
+    // Not one row per station: two distances can round up to the same quarter hour, and
+    // when they do both rows genuinely are when that station shuts. What must hold is
+    // that a tagged row always carries its station's latest proposal, and that no
+    // station is left without one.
     const { result, html } = await build('dark');
-    const stations = new Set(result.cutoffTable.map((r) => r.stationName));
+
+    const latest = new Map<string, string>();
+    for (const row of result.cutoffTable) {
+      const held = latest.get(row.stationName);
+      if (!held || row.suggestedClockTime > held) latest.set(row.stationName, row.suggestedClockTime);
+    }
+
+    const expected = result.cutoffTable.filter(
+      (row) => row.suggestedClockTime === latest.get(row.stationName)
+    ).length;
     const finals = (html.match(/class="final-row"/g) ?? []).length;
-    expect(finals).toBe(stations.size);
+
+    expect(finals).toBe(expected);
+    expect(finals).toBeGreaterThanOrEqual(latest.size);
   });
 
   it('picks the latest proposal at a station served by several distances', async () => {
