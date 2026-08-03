@@ -117,3 +117,60 @@ describe('the exported workbook', () => {
     }
   });
 });
+
+describe('the printed distribution chart', () => {
+  const withLeaders = runPipeline(kml, [
+    {
+      ...inputs[0],
+      leaders: [
+        { sex: 'M', startOffsetSeconds: 0, paceMinPerKm: 4, finishSeconds: 40 * 60 },
+        { sex: 'F', startOffsetSeconds: 30, paceMinPerKm: 5, finishSeconds: 50 * 60 },
+      ],
+    },
+  ]);
+  const printed = buildReportHtml(withLeaders, {
+    raceName: 'Fixture race',
+    rules: DEFAULT_AMENITY_RULES,
+    overrides: {},
+  });
+
+  it('draws the same lead marks the screen does', () => {
+    const marks = withLeaders.stations.reduce((n, s) => n + s.leadArrivals.length, 0);
+    expect(marks).toBeGreaterThan(0);
+    expect((printed.match(/♂/g) ?? []).length + (printed.match(/♀/g) ?? []).length).toBeGreaterThanOrEqual(
+      marks
+    );
+  });
+
+  it('names each mark, since a printed page has no tooltip to open', () => {
+    expect(printed).toMatch(/<title>First Male — [^<]*\d\d:\d\d at [\d.]+ km<\/title>/);
+    expect(printed).toMatch(/<title>First Female — /);
+  });
+
+  it('carries the two times as text as well as marks', () => {
+    expect(printed).toContain('<th class="num">First Male</th>');
+    expect(printed).toContain('<th class="num">First Female</th>');
+  });
+
+  it('leaves the chart unchanged where no export named the sexes', () => {
+    // The plain fixture has no leaders; it must not grow an empty marker band.
+    expect(html).not.toContain('♂');
+    expect(html).not.toContain('First Male');
+  });
+
+  it('gives every row the same height, so labels stay level with their bars', () => {
+    // One band for the whole chart: rows are laid out by index, so a row that grew to
+    // fit its own marks would put every row under it out of step with its label.
+    // Matched by aria-label — the page carries other SVGs, the brand mark among them.
+    const chart = printed.match(
+      /<svg viewBox="0 0 [\d.]+ ([\d.]+)"[^>]*aria-label="Runner arrivals/
+    );
+    expect(chart, 'the report should carry a distribution chart').toBeTruthy();
+
+    const plotted = Number(chart![1]) - 26;
+    const rows = withLeaders.stations.length;
+    expect(plotted % rows).toBe(0);
+    // Tall enough for the bars and a lane of glyphs, not just the bars.
+    expect(plotted / rows).toBeGreaterThan(40);
+  });
+});

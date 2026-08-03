@@ -8,6 +8,13 @@ import {
   type AmenityRules,
   type AmenitySet,
 } from './amenities';
+import {
+  assignLeadLanes,
+  firstLeadOfSex,
+  leadsForStation,
+  sexGlyph,
+  sexLabel,
+} from './leadMarkers';
 import { SPORTSTATS_LOGO_DATA_URI } from '../assets/sportstatsLogo';
 
 /** Which parts of the plan to print. An organiser rarely needs all of it at once. */
@@ -119,16 +126,29 @@ function buildDistributionSvg(result: PipelineResult, series: string[], ink: { l
   const binCount = stations[0]?.distribution.length ?? 0;
   if (binCount === 0) return '';
 
-  const ROW_H = 40;
+  const ROW_BODY = 40;
   const AXIS_H = 26;
   const LABEL_W = 190;
   const PLOT_W = Math.max(560, Math.min(860, binCount * 8));
   const width = LABEL_W + PLOT_W + 12;
-  const height = stations.length * ROW_H + AXIS_H;
   const span = result.timeRangeSeconds.end - result.timeRangeSeconds.start || 1;
   const binW = PLOT_W / binCount;
   const barW = Math.max(1, binW - 2);
   const x = (sec: number) => LABEL_W + ((sec - result.timeRangeSeconds.start) / span) * PLOT_W;
+
+  // Lead markers are laid out exactly as on screen, so the printed chart and the one it
+  // was made from carry the same marks in the same places. Paper cannot be stretched to
+  // pull crowded glyphs apart, so the lanes matter more here than they do live.
+  const GLYPH = 11;
+  const LANE_STEP = 11;
+  const BAND_PAD = 8;
+  const rowLeads = stations.map((s) => leadsForStation(s));
+  const rowLanes = rowLeads.map((leads) => assignLeadLanes(leads.map((l) => x(l.seconds)), GLYPH + 1));
+  const hasLeads = rowLeads.some((leads) => leads.length > 0);
+  const laneCount = Math.max(1, ...rowLanes.map((lanes) => Math.max(0, ...lanes) + 1));
+  const band = hasLeads ? BAND_PAD + laneCount * LANE_STEP : 0;
+  const ROW_H = ROW_BODY + band;
+  const height = stations.length * ROW_H + AXIS_H;
 
   const parts: string[] = [];
   const firstHour = Math.ceil(result.timeRangeSeconds.start / 3600) * 3600;
@@ -140,7 +160,7 @@ function buildDistributionSvg(result: PipelineResult, series: string[], ink: { l
   stations.forEach((station, row) => {
     const top = row * ROW_H;
     const baseline = top + ROW_H - 6;
-    const usable = ROW_H - 14;
+    const usable = ROW_BODY - 14;
     const rowMax = Math.max(1, ...station.distribution.map((b) => b.total));
     const label = station.schedule.name.length > 28 ? `${station.schedule.name.slice(0, 27)}…` : station.schedule.name;
 
@@ -160,6 +180,21 @@ function buildDistributionSvg(result: PipelineResult, series: string[], ink: { l
       if (i === station.peakBinIndex) {
         parts.push(`<rect x="${(bx - 1.5).toFixed(1)}" y="${(baseline - (bin.total / rowMax) * usable - 5).toFixed(1)}" width="${(barW + 3).toFixed(1)}" height="3" fill="${ink.peak}"/>`);
       }
+    });
+
+    // The head of the field: one mark per distance per sex, in that distance's colour.
+    rowLeads[row].forEach((lead, i) => {
+      const lx = x(lead.seconds);
+      if (lx < LABEL_W || lx > LABEL_W + PLOT_W) return;
+      const colour = series[Math.max(0, result.courseOrder.indexOf(lead.courseName)) % series.length];
+      const gy = top + BAND_PAD / 2 + rowLanes[row][i] * LANE_STEP + GLYPH / 2;
+      const title = `${sexLabel(lead.sex)} — ${esc(lead.courseName)}, ${secondsToClockTime(
+        lead.seconds
+      ).slice(0, 5)} at ${lead.kmFromStart.toFixed(1)} km`;
+      parts.push(
+        `<line x1="${lx.toFixed(1)}" y1="${(gy + GLYPH / 2).toFixed(1)}" x2="${lx.toFixed(1)}" y2="${baseline}" stroke="${colour}" stroke-width="1.5" stroke-dasharray="2 2" opacity="0.75"/>` +
+          `<text x="${lx.toFixed(1)}" y="${gy.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" fill="${colour}" font-size="${GLYPH}"><title>${title}</title>${sexGlyph(lead.sex)}</text>`
+      );
     });
   });
 
@@ -337,6 +372,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   const distributionTable = !sections.distribution
     ? ''
     : (() => {
+        const anyLeads = result.stations.some((s) => leadsForStation(s).length > 0);
         const body = result.stations
           .map((station) => {
             const peak = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
@@ -345,12 +381,21 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
                   peak.binEndSeconds
                 ).slice(0, 5)}`
               : '–';
+            const lead = (sex: 'M' | 'F') => {
+              const first = firstLeadOfSex(station, sex);
+              return first
+                ? `${secondsToClockTime(first.seconds).slice(0, 5)} <span class="sub">${esc(
+                    first.courseName
+                  )}</span>`
+                : '–';
+            };
             return `<tr>
               <td>${esc(station.schedule.name)}</td>
               <td class="num">${window}</td>
               <td class="num">${peak ? peak.total.toLocaleString() : '–'}</td>
               <td class="num">${Math.round(station.schedule.peakRunnersPerHour).toLocaleString()}</td>
               <td><span class="tag ${station.schedule.activityLevel}">${station.schedule.activityLevel}</span></td>
+              ${anyLeads ? `<td class="num">${lead('M')}</td><td class="num">${lead('F')}</td>` : ''}
             </tr>`;
           })
           .join('');
@@ -364,11 +409,14 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         const svg = buildDistributionSvg(result, series, ink);
         return `<h2>Crossing time distribution</h2>
         <p class="note">Runner arrivals per ${result.binMinutes} minutes on one shared clock, stacked by distance. Each row is scaled to its own peak; the table beneath carries the absolute numbers.</p>
-        <div class="legend">${legend}<span class="key"><span class="swatch peak"></span>Peak window</span></div>
+        <div class="legend">${legend}<span class="key"><span class="swatch peak"></span>Peak window</span>${
+          anyLeads ? '<span class="key">♂♀ First Male / Female, coloured by distance</span>' : ''
+        }</div>
         ${svg}
         <table><thead><tr>
           <th>Station</th><th class="num">Peak window</th><th class="num">Runners in window</th>
           <th class="num">Rate /hr</th><th>Activity</th>
+          ${anyLeads ? '<th class="num">First Male</th><th class="num">First Female</th>' : ''}
         </tr></thead><tbody>${body}</tbody></table>`;
       })();
 

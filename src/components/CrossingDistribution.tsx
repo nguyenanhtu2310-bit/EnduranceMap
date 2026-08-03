@@ -1,6 +1,13 @@
 import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import type { LeadArrival, PipelineResult, PipelineStation } from '../lib/pipeline';
 import { secondsToClockTime } from '../lib/time';
+import {
+  assignLeadLanes,
+  firstLeadOfSex,
+  leadsForStation,
+  sexGlyph,
+  sexLabel,
+} from '../lib/leadMarkers';
 
 interface Props {
   result: PipelineResult;
@@ -38,24 +45,6 @@ const LANE_STEP = 11;
 const MIN_LANE_STEP = 8;
 /** Clearance above the first lane and below the last, so nothing touches a bar. */
 const BAND_PADDING = 8;
-
-/**
- * Stacks the markers of one row so every glyph is drawn.
- *
- * Markers arrive in time order. Each takes the topmost lane whose last glyph has
- * cleared, so two leaders a minute apart sit one above the other rather than one of
- * them going unlabelled — which is what a bare hairline was: a mark whose whole point,
- * saying which leader it is, had been dropped to save room.
- */
-function assignLanes(xs: number[], glyphWidth: number): number[] {
-  const lastInLane: number[] = [];
-  return xs.map((x) => {
-    let lane = 0;
-    while (lastInLane[lane] !== undefined && x - lastInLane[lane] < glyphWidth) lane++;
-    lastInLane[lane] = x;
-    return lane;
-  });
-}
 
 /**
  * How far the timeline is stretched. 1 fits the card; the upper end gives roughly a
@@ -129,7 +118,7 @@ export function CrossingDistribution({ result }: Props) {
     [stations]
   );
 
-  const hasLeads = stations.some((s) => leadsFor(s).length > 0);
+  const hasLeads = stations.some((s) => leadsForStation(s).length > 0);
 
   const binCount = stations[0]?.distribution.length ?? 0;
   if (binCount === 0) {
@@ -175,9 +164,9 @@ export function CrossingDistribution({ result }: Props) {
 
   // Rows are only as tall as the busiest one needs. Stretching the timeline pulls
   // markers apart, so the band shrinks back as lanes empty and the bars regain the room.
-  const rowLeads = stations.map((s) => leadsFor(s));
+  const rowLeads = stations.map((s) => leadsForStation(s));
   const rowLanes = rowLeads.map((leads) =>
-    assignLanes(leads.map((l) => xForSeconds(l.seconds)), glyphPx + 1)
+    assignLeadLanes(leads.map((l) => xForSeconds(l.seconds)), glyphPx + 1)
   );
   const laneCount = Math.max(1, ...rowLanes.map((lanes) => Math.max(0, ...lanes) + 1));
   const markerBand = hasLeads ? bandPadding + laneCount * laneStep : 0;
@@ -433,7 +422,7 @@ export function CrossingDistribution({ result }: Props) {
                           fill={colour}
                           style={{ fontSize: `${glyphPx}px` }}
                         >
-                          {lead.sex === 'M' ? '♂' : '♀'}
+                          {sexGlyph(lead.sex)}
                         </text>
                       </g>
                     );
@@ -482,7 +471,7 @@ export function CrossingDistribution({ result }: Props) {
       {!showTable && hover?.kind === 'lead' && (
         <ChartTooltip anchor={hover} box={boxRef.current}>
           <strong>{hover.station}</strong>
-          <span className="muted small">{hover.lead.sex === 'M' ? 'First Male' : 'First Female'}</span>
+          <span className="muted small">{sexLabel(hover.lead.sex)}</span>
           <table className="tooltip-table">
             <tbody>
               <tr>
@@ -541,17 +530,9 @@ function ChartTooltip({
   );
 }
 
-/**
- * Lead markers for a row, earliest first. Tolerates a race saved before the field
- * existed, which would otherwise throw on reopening.
- */
-function leadsFor(station: PipelineStation): LeadArrival[] {
-  return [...(station.leadArrivals ?? [])].sort((a, b) => a.seconds - b.seconds);
-}
-
 /** The WCAG-clean twin of the chart: every plotted value reachable as text. */
 function DistributionTable({ result }: { result: PipelineResult }) {
-  const hasLeads = result.stations.some((s) => leadsFor(s).length > 0);
+  const hasLeads = result.stations.some((s) => leadsForStation(s).length > 0);
 
   return (
     <div className="table-scroll">
@@ -589,7 +570,7 @@ function DistributionTable({ result }: { result: PipelineResult }) {
 
 /** The earliest lead arrival of one sex at a station, across every distance through it. */
 function firstLeadLabel(station: PipelineStation, sex: LeadArrival['sex']): string {
-  const first = leadsFor(station).find((l) => l.sex === sex);
+  const first = firstLeadOfSex(station, sex);
   return first ? `${formatHm(first.seconds)} ${first.courseName}` : '—';
 }
 
