@@ -450,16 +450,16 @@ describe('isEndZoneStop', () => {
 });
 
 describe('lead athlete markers', () => {
-  const withLeaders = runPipeline(kml, [
-    {
-      ...inputs[0],
-      startTimeClock: '05:00',
-      leaders: [
-        { sex: 'M', startOffsetSeconds: 0, paceMinPerKm: 4, finishSeconds: 40 * 60 },
-        { sex: 'F', startOffsetSeconds: 30, paceMinPerKm: 5, finishSeconds: 50 * 60 },
-      ],
-    },
-  ]);
+  // Both distances carry leaders: the out-and-back point and the start/finish line are
+  // both on the Half, and a station serving two races is where crowding showed up.
+  const leaders = [
+    { sex: 'M' as const, startOffsetSeconds: 0, paceMinPerKm: 4, finishSeconds: 40 * 60 },
+    { sex: 'F' as const, startOffsetSeconds: 30, paceMinPerKm: 5, finishSeconds: 50 * 60 },
+  ];
+  const withLeaders = runPipeline(
+    kml,
+    inputs.map((input) => ({ ...input, startTimeClock: '05:00', leaders }))
+  );
 
   it('places each leader by their own offset and pace, not by a percentile', () => {
     const station = withLeaders.stations.find((s) => s.leadArrivals.length > 0)!;
@@ -470,11 +470,47 @@ describe('lead athlete markers', () => {
     }
   });
 
-  it('marks both sexes at every point the distance passes', () => {
+  it('marks each sex once per distance, however often the course passes', () => {
     for (const station of withLeaders.stations) {
-      const passes = station.crossings.filter((c) => c.courseName === inputs[0].courseName).length;
-      expect(station.leadArrivals).toHaveLength(passes * 2);
+      const seen = station.leadArrivals.map((l) => `${l.courseName} ${l.sex}`);
+      expect(new Set(seen).size).toBe(seen.length);
+      // Two distances, two sexes — never one per pass.
+      expect(seen.length).toBeLessThanOrEqual(4);
     }
+  });
+
+  it('marks the first time a leader comes through an out-and-back point', () => {
+    // "COT 3" sits on both legs of the Half, so its leaders could be timed at either.
+    const twicePassed = withLeaders.stations.find((s) =>
+      s.crossings.some(
+        (c) => s.crossings.filter((o) => o.courseName === c.courseName).length > 1
+      )
+    );
+    expect(twicePassed, 'the fixture should have a point passed twice').toBeTruthy();
+
+    for (const lead of twicePassed!.leadArrivals) {
+      const kms = twicePassed!.crossings
+        .filter((c) => c.courseName === lead.courseName)
+        .map((c) => c.kmFromStart);
+      expect(lead.kmFromStart).toBe(Math.min(...kms));
+    }
+  });
+
+  it('leaves the start line unmarked, where the gun time is true of everyone', () => {
+    for (const station of withLeaders.stations) {
+      for (const lead of station.leadArrivals) expect(lead.kmFromStart).toBeGreaterThan(0);
+    }
+  });
+
+  it('still marks the finish of a point that is also the start', () => {
+    // The start/finish line is crossed at 0 km and again at the full distance. Dropping
+    // the gun must not take the finish with it — that is the pass being waited on.
+    const startFinish = withLeaders.stations.find((s) =>
+      s.crossings.some((c) => c.kmFromStart === 0) && s.crossings.some((c) => c.kmFromStart > 1)
+    );
+    expect(startFinish, 'the fixture should have a start/finish point').toBeTruthy();
+    expect(startFinish!.leadArrivals.length).toBe(2);
+    for (const lead of startFinish!.leadArrivals) expect(lead.kmFromStart).toBeGreaterThan(1);
   });
 
   it('has the faster leader ahead at every point they both pass', () => {

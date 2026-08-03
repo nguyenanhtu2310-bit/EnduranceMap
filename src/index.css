@@ -590,6 +590,12 @@ tr.drop-target td {
   letter-spacing: -1px;
 }
 
+/* The one figure a marshal is waiting on, so it carries the loudest colour we have. */
+.lead-time {
+  color: #39ff88;
+  font-weight: 600;
+}
+
 /* — chart controls — */
 
 .chart-controls {

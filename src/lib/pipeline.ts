@@ -171,6 +171,30 @@ export interface StationCrossingDetail {
   officialCutoffClock?: string;
 }
 
+/**
+ * A point nearer the start than this is the start. Its lead marker would only restate
+ * the gun time, so it is left off.
+ */
+const LEAD_MARKER_MIN_KM = 0.05;
+
+/**
+ * One marker per distance per sex, at the earliest crossing.
+ *
+ * An out-and-back point is passed twice by the same race, and the same lead athlete
+ * appears at each — but it is one athlete, and what a marshal is waiting for is the
+ * first time they come through. Marking every pass put four or six glyphs on a row that
+ * describes two people.
+ */
+function firstLeadPerDistanceAndSex(arrivals: LeadArrival[]): LeadArrival[] {
+  const first = new Map<string, LeadArrival>();
+  for (const arrival of arrivals) {
+    const key = `${arrival.courseName} ${arrival.sex}`;
+    const held = first.get(key);
+    if (!held || arrival.seconds < held.seconds) first.set(key, arrival);
+  }
+  return [...first.values()].sort((a, b) => a.seconds - b.seconds);
+}
+
 /** When the lead athlete of one sex, on one distance, reaches a station. */
 export interface LeadArrival {
   courseName: string;
@@ -516,8 +540,11 @@ export function runPipeline(
       });
 
       // The same formula the rest of the field is modelled with, run for one athlete.
+      // The start line is skipped: there the answer is only the gun time, which is true
+      // of the entire field and says nothing about the leader. It also crowds out the
+      // pass that matters at a start/finish point, which is the finish.
       const startSeconds = parseClockTimeToSeconds(input.startTimeClock);
-      if (startSeconds !== null) {
+      if (startSeconds !== null && snap.kmFromStart >= LEAD_MARKER_MIN_KM) {
         for (const leader of input.leaders ?? []) {
           leadArrivals.push({
             courseName: snap.courseName,
@@ -543,7 +570,7 @@ export function runPipeline(
       // Filled in below, once the shared time grid is known.
       distribution: [],
       peakBinIndex: -1,
-      leadArrivals,
+      leadArrivals: firstLeadPerDistanceAndSex(leadArrivals),
       sourceNames: names,
       coLocatedNames,
       crossings: details,

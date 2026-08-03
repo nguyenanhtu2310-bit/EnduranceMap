@@ -407,9 +407,7 @@ export function CrossingDistribution({ result }: Props) {
       {!showTable && hover?.kind === 'lead' && (
         <ChartTooltip anchor={hover} box={boxRef.current}>
           <strong>{hover.station}</strong>
-          <span className="muted small">
-            {hover.lead.sex === 'M' ? 'First man' : 'First woman'} through this point
-          </span>
+          <span className="muted small">{hover.lead.sex === 'M' ? 'First Male' : 'First Female'}</span>
           <table className="tooltip-table">
             <tbody>
               <tr>
@@ -420,7 +418,7 @@ export function CrossingDistribution({ result }: Props) {
                   />{' '}
                   {hover.lead.courseName}
                 </td>
-                <td className="num">{formatHm(hover.lead.seconds)}</td>
+                <td className="num lead-time">{formatHm(hover.lead.seconds)}</td>
               </tr>
               <tr>
                 <td>At</td>
