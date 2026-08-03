@@ -97,6 +97,9 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
                   <td className="num">{row.kmFromStart.toFixed(1)}</td>
                   <td className="num muted">{row.modeledLastArrivalClockTime.slice(0, 5)}</td>
                   <td className={isFinal(row) ? 'num cot-final' : 'num muted'}>
+                    {/* The tag leads, so every time in the column keeps one right edge
+                        instead of the final row's being shunted left by its own label. */}
+                    {isFinal(row) && <span className="cot-final-tag">final</span>}
                     {onCrossingEdit ? (
                       <EditableCell
                         computed={hm(row.suggestedClockTime)}
@@ -109,7 +112,6 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
                     ) : (
                       <strong>{hm(row.suggestedClockTime)}</strong>
                     )}
-                    {isFinal(row) && <span className="cot-final-tag">final</span>}
                   </td>
                   <td className="num muted">{margin === null ? '—' : `+${margin} min`}</td>
                   <td className="num">

@@ -210,12 +210,14 @@ export function DistanceRunView({
                     )}
                   </td>
                   <td className="num">
-                    {stop.gapKm.toFixed(1)}
+                    {/* The tag leads, so the figures stay flush right in one column
+                        instead of the tagged row's number being shunted left. */}
                     {stop.gapKm === longestGap && stop.gapKm > 0 && (
-                      <span className="tag over" style={{ marginLeft: '0.4rem' }}>
+                      <span className="tag over" style={{ marginRight: '0.4rem' }}>
                         longest
                       </span>
                     )}
+                    {stop.gapKm.toFixed(1)}
                   </td>
                   <td className="num">{hm(stop.station.schedule.openClockTime)}</td>
                   <td className="num">{hm(stop.station.schedule.closeClockTime)}</td>
@@ -292,12 +294,12 @@ export function DistanceRunView({
                 <td className="muted">Course end</td>
                 <td className="num">{course.totalKm.toFixed(1)}</td>
                 <td className="num">
-                  {finalGap.toFixed(1)}
                   {finalGap === longestGap && finalGap > 0 && (
-                    <span className="tag over" style={{ marginLeft: '0.4rem' }}>
+                    <span className="tag over" style={{ marginRight: '0.4rem' }}>
                       longest
                     </span>
                   )}
+                  {finalGap.toFixed(1)}
                 </td>
                 <td className="num">—</td>
                 <td className="num">—</td>

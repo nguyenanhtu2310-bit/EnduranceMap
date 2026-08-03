@@ -299,9 +299,9 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         <td>${esc(row.courseName)}</td>
         <td class="num">${row.kmFromStart.toFixed(1)}</td>
         <td class="num">${row.modeledLastArrivalClockTime.slice(0, 5)}</td>
-        <td class="num ${isFinal ? 'cot-final' : 'cot-other'}"><strong>${hm(row.suggestedClockTime)}</strong>${
+        <td class="num ${isFinal ? 'cot-final' : 'cot-other'}">${
           isFinal ? '<span class="final-tag">final</span>' : ''
-        }</td>
+        }<strong>${hm(row.suggestedClockTime)}</strong></td>
         <td class="num muted">${margin === null ? '–' : `+${margin} min`}</td>
         <td class="num${row.mapIsTighter ? ' risk' : ''}">${row.mapClockTime ? hm(row.mapClockTime) : '–'}</td>
       </tr>`;
@@ -440,7 +440,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   .cot-other { color: var(--muted); }
   .final-row td { background: ${dark ? 'rgba(7, 188, 2, 0.07)' : '#f2faf5'}; }
   .final-tag {
-    display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 4px;
+    display: inline-block; margin-right: 6px; padding: 1px 5px; border-radius: 4px;
     background: ${dark ? 'rgba(7, 188, 2, 0.16)' : '#dff2e5'};
     color: var(--accent); font-size: 9px; font-weight: 700;
     text-transform: uppercase; letter-spacing: .06em; vertical-align: 1px;
