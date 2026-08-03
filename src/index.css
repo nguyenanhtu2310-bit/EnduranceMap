@@ -557,6 +557,28 @@ tr.drop-target td {
   fill: var(--chart-peak);
 }
 
+/*
+ * The head of the field. Drawn as a hairline rather than a bar because it marks one
+ * athlete at an instant, not a count over a window — it must not read as volume.
+ */
+.lead-marker line {
+  stroke: var(--color-text);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  opacity: 0.55;
+}
+
+.lead-marker text {
+  fill: var(--color-text);
+  font-size: 11px;
+  dominant-baseline: middle;
+}
+
+.legend-lead {
+  color: var(--color-text);
+  letter-spacing: -1px;
+}
+
 .axis-text {
   fill: var(--color-faint);
   font-size: 11px;

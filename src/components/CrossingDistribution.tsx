@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { PipelineResult, PipelineStation } from '../lib/pipeline';
+import type { LeadArrival, PipelineResult, PipelineStation } from '../lib/pipeline';
 import { secondsToClockTime } from '../lib/time';
 
 interface Props {
@@ -62,6 +62,8 @@ export function CrossingDistribution({ result }: Props) {
     [stations]
   );
 
+  const hasLeads = stations.some((s) => leadsFor(s).length > 0);
+
   const binCount = stations[0]?.distribution.length ?? 0;
   if (binCount === 0) {
     return <p className="hint">No modeled arrivals to plot.</p>;
@@ -109,6 +111,12 @@ export function CrossingDistribution({ result }: Props) {
           <span className="legend-swatch peak-swatch" />
           Peak {binMinutes}-min window
         </span>
+        {hasLeads && (
+          <span className="legend-item" title="The fastest finisher of each sex, on each distance">
+            <span className="legend-lead">♂♀</span>
+            First man / woman
+          </span>
+        )}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: '0.6rem', alignItems: 'center' }}>
           {!showTable && (
             <button
@@ -237,6 +245,27 @@ export function CrossingDistribution({ result }: Props) {
                       </g>
                     );
                   })}
+
+                  {/* The head of the field, drawn over the bars: the lead athletes
+                      arrive before the bulk of the distribution and would otherwise be
+                      lost in a column one runner tall. */}
+                  {leadsFor(station).map((lead) => {
+                    const lx = xForSeconds(lead.seconds);
+                    if (lx < labelWidth || lx > labelWidth + plotWidth) return null;
+                    return (
+                      <g key={`${lead.courseName}-${lead.sex}-${lead.passIndex}`} className="lead-marker">
+                        <line x1={lx} x2={lx} y1={rowTop + 4} y2={baseline} />
+                        <text x={lx} y={rowTop + 4} textAnchor="middle">
+                          <title>
+                            {`First ${lead.sex === 'M' ? 'man' : 'woman'} on ${lead.courseName} — ${formatHm(
+                              lead.seconds
+                            )} at ${lead.kmFromStart.toFixed(1)} km`}
+                          </title>
+                          {lead.sex === 'M' ? '♂' : '♀'}
+                        </text>
+                      </g>
+                    );
+                  })}
                 </g>
               );
             })}
@@ -287,6 +316,8 @@ export function CrossingDistribution({ result }: Props) {
 
 /** The WCAG-clean twin of the chart: every plotted value reachable as text. */
 function DistributionTable({ result }: { result: PipelineResult }) {
+  const hasLeads = result.stations.some((s) => leadsFor(s).length > 0);
+
   return (
     <div className="table-scroll">
       <table>
@@ -297,6 +328,8 @@ function DistributionTable({ result }: { result: PipelineResult }) {
             <th className="num">Runners in window</th>
             <th className="num">Rate /hr</th>
             <th>Busiest distance</th>
+            {hasLeads && <th className="num">First man</th>}
+            {hasLeads && <th className="num">First woman</th>}
           </tr>
         </thead>
         <tbody>
@@ -309,12 +342,28 @@ function DistributionTable({ result }: { result: PipelineResult }) {
               <td className="num">{peakBin(station)?.total.toLocaleString() ?? '—'}</td>
               <td className="num">{Math.round(station.schedule.peakRunnersPerHour).toLocaleString()}</td>
               <td>{busiestCourse(station, result.courseOrder)}</td>
+              {hasLeads && <td className="num">{firstLeadLabel(station, 'M')}</td>}
+              {hasLeads && <td className="num">{firstLeadLabel(station, 'F')}</td>}
             </tr>
           ))}
         </tbody>
       </table>
     </div>
   );
+}
+
+/** The earliest lead arrival of one sex at a station, across every distance through it. */
+function firstLeadLabel(station: PipelineStation, sex: LeadArrival['sex']): string {
+  const first = leadsFor(station).find((l) => l.sex === sex);
+  return first ? formatHm(first.seconds) : '—';
+}
+
+/**
+ * Lead markers for a row, earliest first. Tolerates a race saved before the field
+ * existed, which would otherwise throw on reopening.
+ */
+function leadsFor(station: PipelineStation): LeadArrival[] {
+  return [...(station.leadArrivals ?? [])].sort((a, b) => a.seconds - b.seconds);
 }
 
 function peakBin(station: PipelineStation) {

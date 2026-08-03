@@ -723,10 +723,12 @@ export default function App() {
     setError(null);
     try {
       const samplesByCourse = new Map<string, ContestProfile['samples']>();
+      const leadersByCourse = new Map<string, ContestProfile['leaders']>();
       if (results?.kind === 'single') {
         for (const profile of results.profiles) {
           const courseName = contestMapping[profile.contest];
           if (courseName && profile.samples.length > 0) samplesByCourse.set(courseName, profile.samples);
+          if (courseName && profile.leaders.length > 0) leadersByCourse.set(courseName, profile.leaders);
         }
       }
 
@@ -758,6 +760,7 @@ export default function App() {
           slowestMinPerKm: r.slowestMinPerKm,
           organizerCutoffClock: r.organizerCutoffClock?.trim() || undefined,
           samples: samplesByCourse.get(r.courseName),
+          leaders: leadersByCourse.get(r.courseName),
         }));
 
       const computed = runPipeline(kml.text, inputs, {

@@ -448,3 +448,48 @@ describe('isEndZoneStop', () => {
     expect(isEndZoneStop('CP', 0, 0)).toBe(true); // within END_ZONE_KM of the start line
   });
 });
+
+describe('lead athlete markers', () => {
+  const withLeaders = runPipeline(kml, [
+    {
+      ...inputs[0],
+      startTimeClock: '05:00',
+      leaders: [
+        { sex: 'M', startOffsetSeconds: 0, paceMinPerKm: 4, finishSeconds: 40 * 60 },
+        { sex: 'F', startOffsetSeconds: 30, paceMinPerKm: 5, finishSeconds: 50 * 60 },
+      ],
+    },
+  ]);
+
+  it('places each leader by their own offset and pace, not by a percentile', () => {
+    const station = withLeaders.stations.find((s) => s.leadArrivals.length > 0)!;
+    for (const lead of station.leadArrivals) {
+      const pace = lead.sex === 'M' ? 4 : 5;
+      const offset = lead.sex === 'M' ? 0 : 30;
+      expect(lead.seconds).toBeCloseTo(5 * 3600 + offset + pace * lead.kmFromStart * 60, 6);
+    }
+  });
+
+  it('marks both sexes at every point the distance passes', () => {
+    for (const station of withLeaders.stations) {
+      const passes = station.crossings.filter((c) => c.courseName === inputs[0].courseName).length;
+      expect(station.leadArrivals).toHaveLength(passes * 2);
+    }
+  });
+
+  it('has the faster leader ahead at every point they both pass', () => {
+    for (const station of withLeaders.stations) {
+      for (const man of station.leadArrivals.filter((l) => l.sex === 'M')) {
+        const woman = station.leadArrivals.find(
+          (l) => l.sex === 'F' && l.passIndex === man.passIndex
+        );
+        if (!woman || man.kmFromStart === 0) continue;
+        expect(man.seconds).toBeLessThan(woman.seconds);
+      }
+    }
+  });
+
+  it('leaves the markers off when no reference field named the sexes', () => {
+    expect(runPipeline(kml, inputs).stations.every((s) => s.leadArrivals.length === 0)).toBe(true);
+  });
+});

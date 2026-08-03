@@ -15,6 +15,47 @@ export interface RunnerSample {
   paceMinPerKm: number;
 }
 
+export type Sex = 'M' | 'F';
+
+/**
+ * The winner of a sex within a contest, kept as a modelling input rather than a result:
+ * their own start offset and pace, so the point they reach any kilometre can be worked
+ * out the same way every other arrival is. Deliberately nameless — the schedule needs
+ * when the lead athlete arrives, not who they were.
+ */
+export interface LeadAthlete {
+  sex: Sex;
+  startOffsetSeconds: number;
+  paceMinPerKm: number;
+  /** Their finishing time, so the marker can say what effort it represents. */
+  finishSeconds: number;
+}
+
+/**
+ * No human runs a kilometre this fast over a race distance — the road 10 km record is
+ * about 2.64 min/km. A leader below it is a mistimed chip or an athlete recorded against
+ * the wrong contest, and unlike a stray value in the bulk of the field it would be shown
+ * on its own as the moment to have the tape up. The next fastest is used instead.
+ */
+export const FASTEST_CREDIBLE_MIN_PER_KM = 2.5;
+
+/** Column headers timing systems use for the athlete's sex. */
+export const SEX_COLUMN_NAMES = ['Gender', 'Sex', 'GenderMF', 'M/F', 'Div', 'Division'];
+
+/**
+ * Reads the sex from whatever the export calls it. Division codes are accepted because
+ * an Ironman export often has no plain gender column but does have "F30-34" — the sex
+ * is the first character, and the age band is none of the schedule's business.
+ */
+export function normalizeSex(value: string): Sex | null {
+  const text = value.trim().toUpperCase();
+  if (!text) return null;
+  if (/^(M|MALE|MEN|MAN|BOY|BOYS)$/.test(text)) return 'M';
+  if (/^(F|W|FEMALE|WOMEN|WOMAN|GIRL|GIRLS)$/.test(text)) return 'F';
+  const division = text.match(/^([MF])\s*\d/);
+  return division ? (division[1] as Sex) : null;
+}
+
 export interface ContestProfile {
   contest: string;
   /**
@@ -32,6 +73,12 @@ export interface ContestProfile {
   /** Finishers whose start time was also recorded, so their offset is real. */
   withStartTime: number;
   samples: RunnerSample[];
+  /**
+   * The fastest man and fastest woman, where the file says who is which. Empty when the
+   * export carries no gender column — the field is still modelled, only the lead
+   * markers are missing.
+   */
+  leaders: LeadAthlete[];
   warnings: string[];
 }
 
@@ -199,6 +246,7 @@ export function parseResultsCsv(text: string, options: ResultsParseOptions = {})
   const chipCol = findColumn(headers, 'ChipTime', 'Chip', 'NetTime', 'Net');
   const gunCol = findColumn(headers, 'GunTime', 'Gun', 'Time');
   const finishCol = findColumn(headers, 'finishTOD', 'FinishTOD', 'Finish');
+  const sexCol = findColumn(headers, ...SEX_COLUMN_NAMES);
 
   if (!contestCol) {
     return {
@@ -256,6 +304,8 @@ export function parseResultsCsv(text: string, options: ResultsParseOptions = {})
     const firstStart = startTimes.length > 0 ? Math.min(...startTimes) : null;
 
     const samples: RunnerSample[] = [];
+    const leaders = new Map<Sex, LeadAthlete>();
+    let implausibleLeaders = 0;
     let finishers = 0;
     let withStartTime = 0;
 
@@ -281,7 +331,22 @@ export function parseResultsCsv(text: string, options: ResultsParseOptions = {})
       const startOffsetSeconds = ownStart !== null && firstStart !== null ? ownStart - firstStart : 0;
       if (ownStart !== null) withStartTime += 1;
 
-      samples.push({ startOffsetSeconds, paceMinPerKm: elapsed / 60 / distanceKm });
+      const paceMinPerKm = elapsed / 60 / distanceKm;
+      samples.push({ startOffsetSeconds, paceMinPerKm });
+
+      // The winner of each sex, by finishing time. Their own offset and pace are kept so
+      // the marker moves down the course the way that athlete actually did.
+      const sex = sexCol ? normalizeSex(row[sexCol] ?? '') : null;
+      if (sex && elapsed < (leaders.get(sex)?.finishSeconds ?? Infinity)) {
+        if (paceMinPerKm < FASTEST_CREDIBLE_MIN_PER_KM) implausibleLeaders += 1;
+        else leaders.set(sex, { sex, startOffsetSeconds, paceMinPerKm, finishSeconds: elapsed });
+      }
+    }
+
+    if (implausibleLeaders > 0) {
+      profileWarnings.push(
+        `${implausibleLeaders} finisher(s) in "${contest}" are timed faster than any human runs — they are left out of the first man/woman markers.`
+      );
     }
 
     if (samples.length > 0 && withStartTime < samples.length) {
@@ -299,6 +364,8 @@ export function parseResultsCsv(text: string, options: ResultsParseOptions = {})
       finishers,
       withStartTime,
       samples,
+      // Men first, so the two markers keep a stable order on every chart.
+      leaders: (['M', 'F'] as Sex[]).map((s) => leaders.get(s)).filter((l): l is LeadAthlete => !!l),
       warnings: profileWarnings,
     });
   }

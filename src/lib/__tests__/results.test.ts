@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { inferContestDistanceKm, parseElapsedToSeconds, parseResultsCsv, summarizeProfile } from '../results';
+import {
+  inferContestDistanceKm,
+  normalizeSex,
+  parseElapsedToSeconds,
+  parseResultsCsv,
+  summarizeProfile,
+} from '../results';
 import { arrivalPercentilesFromSamples, projectSampleArrivals } from '../paceModel';
 
 /** Mirrors a real finish-line export: BOM, contest column, chip/gun times, statuses. */
@@ -165,5 +171,75 @@ describe('projecting a real field onto a new race', () => {
   it('returns nothing when the field is empty', () => {
     expect(projectSampleArrivals([], { startTimeClock: '06:00', runnerCount: 100 }, 10)).toEqual([]);
     expect(projectSampleArrivals(marathon.samples, { startTimeClock: '06:00', runnerCount: 0 }, 10)).toEqual([]);
+  });
+});
+
+describe('normalizeSex', () => {
+  it('reads the plain codes an operator would type', () => {
+    expect(normalizeSex('m')).toBe('M');
+    expect(normalizeSex('F')).toBe('F');
+    expect(normalizeSex(' Male ')).toBe('M');
+    expect(normalizeSex('Female')).toBe('F');
+    expect(normalizeSex('W')).toBe('F');
+  });
+
+  it('takes the sex off a division code, which is all some exports carry', () => {
+    expect(normalizeSex('F30-34')).toBe('F');
+    expect(normalizeSex('M35-39')).toBe('M');
+  });
+
+  it('refuses to guess from anything else', () => {
+    expect(normalizeSex('')).toBeNull();
+    expect(normalizeSex('Mixed')).toBeNull();
+    expect(normalizeSex('Relay')).toBeNull();
+    expect(normalizeSex('40-44')).toBeNull();
+  });
+});
+
+describe('lead athletes', () => {
+  const { profiles } = parseResultsCsv(CSV);
+  const marathon = profiles.find((p) => p.contest === 'Full Marathon')!;
+
+  it('names one leader per sex, the fastest of each', () => {
+    expect(marathon.leaders.map((l) => l.sex)).toEqual(['M', 'F']);
+    expect(marathon.leaders.map((l) => l.finishSeconds)).toEqual([3 * 3600, 3 * 3600 + 59 * 60]);
+  });
+
+  it('keeps the leader’s own offset and pace, so the marker moves as they did', () => {
+    const [man, woman] = marathon.leaders;
+    expect(man.startOffsetSeconds).toBe(0);
+    expect(woman.startOffsetSeconds).toBe(60);
+    expect(man.paceMinPerKm).toBeCloseTo(180 / 42.195, 3);
+  });
+
+  it('never carries a name or a bib out of the file', () => {
+    expect(Object.keys(marathon.leaders[0]).sort()).toEqual([
+      'finishSeconds',
+      'paceMinPerKm',
+      'sex',
+      'startOffsetSeconds',
+    ]);
+  });
+
+  it('ignores a runner the status column excluded', () => {
+    // "E" is a DNS woman with no time; the lead woman must still be B.
+    expect(marathon.leaders.find((l) => l.sex === 'F')!.finishSeconds).toBe(3 * 3600 + 59 * 60);
+  });
+
+  it('leaves the markers off when the export never says who is which', () => {
+    const noGender = CSV.replace(/,"Gender"/, ',"Nation"');
+    const p = parseResultsCsv(noGender).profiles.find((x) => x.contest === 'Full Marathon')!;
+    expect(p.leaders).toEqual([]);
+    // The field itself is unaffected — only the markers are missing.
+    expect(p.samples.length).toBe(3);
+  });
+
+  it('passes over a leader timed faster than any human, and says so', () => {
+    const bogus = CSV.replace('"Full Marathon","A","1","M","03:00:00","3:00:00","3:00:00"',
+      '"Full Marathon","A","1","M","03:00:00","1:00:00","1:00:00"');
+    const p = parseResultsCsv(bogus).profiles.find((x) => x.contest === 'Full Marathon')!;
+    // A 1:00:00 marathon is 1.42 min/km — the next man, at 5:00:00, leads instead.
+    expect(p.leaders.find((l) => l.sex === 'M')!.finishSeconds).toBe(5 * 3600);
+    expect(p.warnings.join(' ')).toMatch(/faster than any human/i);
   });
 });

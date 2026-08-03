@@ -18,7 +18,7 @@ import {
   type PaceBand,
   type StartField,
 } from './paceModel';
-import type { RunnerSample } from './results';
+import type { LeadAthlete, RunnerSample, Sex } from './results';
 import {
   buildCutoffTable,
   buildStackedHistogram,
@@ -51,6 +51,13 @@ export interface DistanceInput extends PaceBand, StartField {
    * and the samples are the actual distribution.
    */
   samples?: RunnerSample[];
+  /**
+   * The fastest man and fastest woman of the reference field. They are modelled apart
+   * from the rest because the organizer needs the lead athlete's arrival to a minute —
+   * tape, podium, lead vehicle and photographers all key off it — and the head of the
+   * field is the one place where a percentile of the whole distribution is no use.
+   */
+  leaders?: LeadAthlete[];
   /**
    * The drawn LineString this input runs on, when it differs from `courseName`. A
    * duathlon runs its two run legs over one loop, and each leg needs its own crossings,
@@ -164,6 +171,16 @@ export interface StationCrossingDetail {
   officialCutoffClock?: string;
 }
 
+/** When the lead athlete of one sex, on one distance, reaches a station. */
+export interface LeadArrival {
+  courseName: string;
+  sex: Sex;
+  kmFromStart: number;
+  passIndex: number;
+  /** Seconds since midnight, on the same clock as every other arrival. */
+  seconds: number;
+}
+
 export interface PipelineStation {
   schedule: StationSchedule;
   /**
@@ -177,6 +194,8 @@ export interface PipelineStation {
   distribution: StackedBin[];
   /** Index into `distribution` of the busiest bin, or -1 when nobody crosses. */
   peakBinIndex: number;
+  /** Head of the field through this point, empty when no export named the sexes. */
+  leadArrivals: LeadArrival[];
   /** Names of the placemarks in a selected folder that make this a station. */
   sourceNames: string[];
   /**
@@ -455,6 +474,7 @@ export function runPipeline(
 
     const crossings: DistanceCrossing[] = [];
     const details: StationCrossingDetail[] = [];
+    const leadArrivals: LeadArrival[] = [];
 
     for (const snap of group.snaps) {
       const input = inputByCourse.get(snap.courseName);
@@ -494,6 +514,21 @@ export function runPipeline(
         offsetKm: snap.offsetKm,
         officialCutoffClock,
       });
+
+      // The same formula the rest of the field is modelled with, run for one athlete.
+      const startSeconds = parseClockTimeToSeconds(input.startTimeClock);
+      if (startSeconds !== null) {
+        for (const leader of input.leaders ?? []) {
+          leadArrivals.push({
+            courseName: snap.courseName,
+            sex: leader.sex,
+            kmFromStart: snap.kmFromStart,
+            passIndex: snap.passIndex,
+            seconds:
+              startSeconds + leader.startOffsetSeconds + leader.paceMinPerKm * snap.kmFromStart * 60,
+          });
+        }
+      }
     }
 
     if (crossings.length === 0) {
@@ -508,6 +543,7 @@ export function runPipeline(
       // Filled in below, once the shared time grid is known.
       distribution: [],
       peakBinIndex: -1,
+      leadArrivals,
       sourceNames: names,
       coLocatedNames,
       crossings: details,
