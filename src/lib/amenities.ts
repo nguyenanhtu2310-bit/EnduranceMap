@@ -13,20 +13,16 @@ export interface Amenity {
 }
 
 /**
- * What a station hands out by default. Every race provisions differently — one hands out
- * gels and sponges, another salt tablets — so this is only the starting list, and the
- * operator renames, re-icons, adds and removes from it. Keys stay fixed while labels
- * change, so a rename never loses the per-station decisions stored against them.
+ * What a station hands out by default. Deliberately just the two every race has an
+ * opinion about — water at every point, medical cover at the busy ones — because a
+ * sheet that arrives pre-filled with eight guessed columns takes longer to correct than
+ * an empty one takes to fill. Every race provisions differently, so the operator renames,
+ * re-icons, adds and removes from here. Keys stay fixed while labels change, so a rename
+ * never loses the per-station decisions stored against them.
  */
 export const DEFAULT_AMENITIES: Amenity[] = [
   { key: 'water', label: 'Water', icon: '💧', group: 'station' },
-  { key: 'electrolyte', label: 'Electrolyte', icon: '⚡', group: 'station' },
-  { key: 'banana', label: 'Banana', icon: '🍌', group: 'station' },
-  { key: 'watermelon', label: 'Watermelon', icon: '🍉', group: 'station' },
-  { key: 'iceBucket', label: 'Ice bucket', icon: '🧊', group: 'station' },
-  { key: 'portaToilet', label: 'Porta toilet', icon: '🚻', group: 'station' },
-  { key: 'medical', label: 'Medical', icon: '➕', group: 'medical' },
-  { key: 'ambulance', label: 'Ambulance', icon: '🚑', group: 'medical' },
+  { key: 'medical', label: 'Medical', icon: '⛑️', group: 'medical' },
 ];
 
 export type AmenitySet = Record<string, boolean>;
@@ -37,15 +33,14 @@ export type AmenityRules = Record<ActivityLevel, AmenitySet>;
 const on = (...keys: string[]): AmenitySet => Object.fromEntries(keys.map((k) => [k, true]));
 
 /**
- * Starting rules, not house rules. Every station carries water, electrolyte and a
- * toilet; busier ones add solid food and cooling; only the busiest carry medical cover.
- * These are a first guess at the categorisation and are meant to be edited — the real
- * thresholds belong to whoever plans the race.
+ * Starting rules, not house rules. Every station carries water; only the busiest carry
+ * medical cover. These are a first guess at the categorisation and are meant to be
+ * edited — the real thresholds belong to whoever plans the race.
  */
 export const DEFAULT_AMENITY_RULES: AmenityRules = {
-  Low: on('water', 'electrolyte', 'portaToilet'),
-  Medium: on('water', 'electrolyte', 'portaToilet', 'banana', 'watermelon'),
-  High: on('water', 'electrolyte', 'portaToilet', 'banana', 'watermelon', 'iceBucket', 'medical', 'ambulance'),
+  Low: on('water'),
+  Medium: on('water'),
+  High: on('water', 'medical'),
 };
 
 /**

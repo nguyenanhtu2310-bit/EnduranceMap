@@ -5,56 +5,99 @@ import {
   nextAmenityKey,
   resolveAmenities,
   totalAmenities,
+  type Amenity,
+  type AmenityRules,
 } from '../amenities';
+
+/**
+ * A stand-in catalogue for the mechanics below. What is under test is the rules engine,
+ * not which columns happen to ship, so these stay put when the shipped defaults change —
+ * an operator's own list is just as valid an input as ours.
+ */
+const CATALOGUE: Amenity[] = [
+  { key: 'water', label: 'Water', icon: '💧', group: 'station' },
+  { key: 'banana', label: 'Banana', icon: '🍌', group: 'station' },
+  { key: 'medical', label: 'Medical', icon: '⛑️', group: 'medical' },
+];
+
+const RULES: AmenityRules = {
+  Low: { water: true },
+  Medium: { water: true, banana: true },
+  High: { water: true, banana: true, medical: true },
+};
+
+describe('the columns a new race starts with', () => {
+  it('offers water and medical cover, and nothing else to correct', () => {
+    expect(DEFAULT_AMENITIES.map((a) => a.key)).toEqual(['water', 'medical']);
+    expect(DEFAULT_AMENITIES.map((a) => a.label)).toEqual(['Water', 'Medical']);
+  });
+
+  it('gives each the icon it is recognised by', () => {
+    expect(DEFAULT_AMENITIES.find((a) => a.key === 'water')!.icon).toBe('💧');
+    expect(DEFAULT_AMENITIES.find((a) => a.key === 'medical')!.icon).toBe('⛑️');
+  });
+
+  it('waters every station and reserves medical cover for the busiest', () => {
+    for (const level of ['Low', 'Medium', 'High'] as const) {
+      expect(resolveAmenities(level, DEFAULT_AMENITY_RULES, undefined).water).toBe(true);
+    }
+    expect(resolveAmenities('Medium', DEFAULT_AMENITY_RULES, undefined).medical).toBe(false);
+    expect(resolveAmenities('High', DEFAULT_AMENITY_RULES, undefined).medical).toBe(true);
+  });
+
+  it('mentions no column it does not ship, so nothing resolves to a ghost', () => {
+    const keys = new Set(DEFAULT_AMENITIES.map((a) => a.key));
+    for (const level of Object.values(DEFAULT_AMENITY_RULES)) {
+      for (const key of Object.keys(level)) expect(keys.has(key)).toBe(true);
+    }
+  });
+});
 
 describe('resolveAmenities', () => {
   it('gives every station the basics regardless of traffic', () => {
     for (const level of ['Low', 'Medium', 'High'] as const) {
-      const set = resolveAmenities(level, DEFAULT_AMENITY_RULES, undefined);
-      expect(set.water).toBe(true);
-      expect(set.electrolyte).toBe(true);
-      expect(set.portaToilet).toBe(true);
+      expect(resolveAmenities(level, RULES, undefined, CATALOGUE).water).toBe(true);
     }
   });
 
   it('adds solid food only from medium traffic upward', () => {
-    expect(resolveAmenities('Low', DEFAULT_AMENITY_RULES, undefined).banana).toBe(false);
-    expect(resolveAmenities('Medium', DEFAULT_AMENITY_RULES, undefined).banana).toBe(true);
+    expect(resolveAmenities('Low', RULES, undefined, CATALOGUE).banana).toBe(false);
+    expect(resolveAmenities('Medium', RULES, undefined, CATALOGUE).banana).toBe(true);
   });
 
   it('reserves medical cover for the busiest stations', () => {
-    expect(resolveAmenities('Medium', DEFAULT_AMENITY_RULES, undefined).ambulance).toBe(false);
-    expect(resolveAmenities('High', DEFAULT_AMENITY_RULES, undefined).ambulance).toBe(true);
+    expect(resolveAmenities('Medium', RULES, undefined, CATALOGUE).medical).toBe(false);
+    expect(resolveAmenities('High', RULES, undefined, CATALOGUE).medical).toBe(true);
   });
 
   it('lets a hand edit win over the rule, in both directions', () => {
-    const added = resolveAmenities('Low', DEFAULT_AMENITY_RULES, { medical: true });
-    expect(added.medical).toBe(true);
-
-    const removed = resolveAmenities('High', DEFAULT_AMENITY_RULES, { ambulance: false });
-    expect(removed.ambulance).toBe(false);
+    expect(resolveAmenities('Low', RULES, { medical: true }, CATALOGUE).medical).toBe(true);
+    expect(resolveAmenities('High', RULES, { medical: false }, CATALOGUE).medical).toBe(false);
   });
 
   it('leaves untouched amenities following the rule when one is edited', () => {
-    const set = resolveAmenities('Low', DEFAULT_AMENITY_RULES, { medical: true });
+    const set = resolveAmenities('Low', RULES, { medical: true }, CATALOGUE);
     expect(set.water).toBe(true);
     expect(set.banana).toBe(false);
   });
 
   it('reports every known amenity so a row never has holes', () => {
-    const set = resolveAmenities('Low', DEFAULT_AMENITY_RULES, undefined);
-    expect(Object.keys(set).sort()).toEqual(DEFAULT_AMENITIES.map((a) => a.key).sort());
+    const set = resolveAmenities('Low', RULES, undefined, CATALOGUE);
+    expect(Object.keys(set).sort()).toEqual(CATALOGUE.map((a) => a.key).sort());
   });
 });
 
 describe('totalAmenities', () => {
   it('counts each column across the stops', () => {
-    const totals = totalAmenities([
-      resolveAmenities('High', DEFAULT_AMENITY_RULES, undefined),
-      resolveAmenities('Low', DEFAULT_AMENITY_RULES, undefined),
-    ]);
+    const totals = totalAmenities(
+      [
+        resolveAmenities('High', RULES, undefined, CATALOGUE),
+        resolveAmenities('Low', RULES, undefined, CATALOGUE),
+      ],
+      CATALOGUE
+    );
     expect(totals.water).toBe(2);
-    expect(totals.ambulance).toBe(1);
+    expect(totals.medical).toBe(1);
   });
 
   it('returns zeroes rather than nothing for an empty course', () => {
@@ -251,22 +294,25 @@ describe('cut-off highlighting in the report', () => {
 
 describe('renaming a column', () => {
   it('keeps what each station already had ticked', () => {
-    // Labels are the operator's; keys are the app's. Renaming "Watermelon" to "Orange
+    // Labels are the operator's; keys are the app's. Renaming "Banana" to "Orange
     // slices" must not quietly untick every station that already carried it.
-    const renamed = DEFAULT_AMENITIES.map((a) =>
-      a.key === 'watermelon' ? { ...a, label: 'Orange slices', icon: '🍊' } : a
+    const renamed = CATALOGUE.map((a) =>
+      a.key === 'banana' ? { ...a, label: 'Orange slices', icon: '🍊' } : a
     );
-    const overrides = { watermelon: true };
+    const overrides = { banana: true };
 
-    const before = resolveAmenities('Low', DEFAULT_AMENITY_RULES, overrides, DEFAULT_AMENITIES);
-    const after = resolveAmenities('Low', DEFAULT_AMENITY_RULES, overrides, renamed);
+    const before = resolveAmenities('Low', RULES, overrides, CATALOGUE);
+    const after = resolveAmenities('Low', RULES, overrides, renamed);
 
-    expect(after.watermelon).toBe(true);
+    expect(after.banana).toBe(true);
     expect(after).toEqual(before);
   });
 
   it('gives a column added by the operator a key of its own', () => {
-    const added = [...DEFAULT_AMENITIES, { key: nextAmenityKey(DEFAULT_AMENITIES), label: 'Gels', icon: '🍫', group: 'station' as const }];
+    const added = [
+      ...DEFAULT_AMENITIES,
+      { key: nextAmenityKey(DEFAULT_AMENITIES), label: 'Gels', icon: '🍫', group: 'station' as const },
+    ];
     const keys = added.map((a) => a.key);
     expect(new Set(keys).size).toBe(keys.length);
 
@@ -276,8 +322,8 @@ describe('renaming a column', () => {
   });
 
   it('drops a removed column from the totals rather than counting a ghost', () => {
-    const fewer = DEFAULT_AMENITIES.filter((a) => a.key !== 'ambulance');
-    const sets = [resolveAmenities('High', DEFAULT_AMENITY_RULES, undefined, DEFAULT_AMENITIES)];
-    expect(totalAmenities(sets, fewer)).not.toHaveProperty('ambulance');
+    const fewer = CATALOGUE.filter((a) => a.key !== 'medical');
+    const sets = [resolveAmenities('High', RULES, undefined, CATALOGUE)];
+    expect(totalAmenities(sets, fewer)).not.toHaveProperty('medical');
   });
 });
