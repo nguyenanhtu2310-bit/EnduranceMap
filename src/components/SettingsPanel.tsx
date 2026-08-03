@@ -18,11 +18,23 @@ const FIELDS: { key: keyof Settings; label: string; hint: string; step?: number 
   {
     key: 'cutoffGraceMinutes',
     label: 'Cut-off grace (min)',
-    hint: 'Added to the slowest arrival before rounding up to the quarter hour',
+    hint: 'Added to the slowest arrival, then rounded up to five minutes',
   },
   { key: 'binMinutes', label: 'Histogram bin (min)', hint: 'Width of each arrival bucket' },
-  { key: 'mediumRunnersPerHour', label: 'Medium at (/hr)', hint: 'Peak load to tag Medium', step: 10 },
-  { key: 'highRunnersPerHour', label: 'High at (/hr)', hint: 'Peak load to tag High', step: 10 },
+  // Thresholds stay hourly on purpose: they are the one figure that must not move when
+  // the bin width changes, or narrowing the window would silently reclassify every point.
+  {
+    key: 'mediumRunnersPerHour',
+    label: 'Medium at (/hr)',
+    hint: 'Peak load to tag Medium, as an hourly rate whatever the bin',
+    step: 10,
+  },
+  {
+    key: 'highRunnersPerHour',
+    label: 'High at (/hr)',
+    hint: 'Peak load to tag High, as an hourly rate whatever the bin',
+    step: 10,
+  },
 ];
 
 export function SettingsPanel({ settings, onChange }: Props) {

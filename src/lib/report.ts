@@ -15,6 +15,7 @@ import {
   sexGlyph,
   sexLabel,
 } from './leadMarkers';
+import { peakRunnersPerWindow } from './schedule';
 import { SPORTSTATS_LOGO_DATA_URI } from '../assets/sportstatsLogo';
 
 /** Which parts of the plan to print. An organiser rarely needs all of it at once. */
@@ -237,7 +238,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         <td class="sub">${crossings}</td>
         <td class="num">${hm(station.schedule.openClockTime)}</td>
         <td class="num">${hm(station.schedule.closeClockTime)}</td>
-        <td class="num">${Math.round(station.schedule.peakRunnersPerHour).toLocaleString()}</td>
+        <td class="num">${peakRunnersPerWindow(station.schedule.peakRunnersPerHour, result.binMinutes).toLocaleString()}</td>
         <td><span class="tag ${station.schedule.activityLevel}">${station.schedule.activityLevel}</span></td>
         ${station.schedule.cutoffExceeded ? '<td class="risk">Over cut-off</td>' : '<td></td>'}
       </tr>`;
@@ -393,7 +394,6 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
               <td>${esc(station.schedule.name)}</td>
               <td class="num">${window}</td>
               <td class="num">${peak ? peak.total.toLocaleString() : '–'}</td>
-              <td class="num">${Math.round(station.schedule.peakRunnersPerHour).toLocaleString()}</td>
               <td><span class="tag ${station.schedule.activityLevel}">${station.schedule.activityLevel}</span></td>
               ${anyLeads ? `<td class="num">${lead('M')}</td><td class="num">${lead('F')}</td>` : ''}
             </tr>`;
@@ -414,8 +414,8 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         }</div>
         ${svg}
         <table><thead><tr>
-          <th>Station</th><th class="num">Peak window</th><th class="num">Runners in window</th>
-          <th class="num">Rate /hr</th><th>Activity</th>
+          <th>Station</th><th class="num">Peak window</th>
+          <th class="num">Through in ${result.binMinutes} min</th><th>Activity</th>
           ${anyLeads ? '<th class="num">First Male</th><th class="num">First Female</th>' : ''}
         </tr></thead><tbody>${body}</tbody></table>`;
       })();
@@ -547,7 +547,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   <table>
     <thead><tr>
       <th>Station</th><th>Crossings</th><th class="num">Open</th><th class="num">Close</th>
-      <th class="num">Peak /hr</th><th>Activity</th><th></th>
+      <th class="num">Peak /${result.binMinutes} min</th><th>Activity</th><th></th>
     </tr></thead>
     <tbody>${scheduleRows}</tbody>
   </table>`

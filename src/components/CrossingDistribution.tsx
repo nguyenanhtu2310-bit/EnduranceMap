@@ -453,14 +453,8 @@ export function CrossingDistribution({ result }: Props) {
                 ) : null
               )}
               <tr className="tooltip-total">
-                <td>Total</td>
+                <td>Through in {binMinutes} min</td>
                 <td className="num">{hoveredBin.total.toLocaleString()}</td>
-              </tr>
-              <tr>
-                <td>Rate</td>
-                <td className="num">
-                  {Math.round(hoveredBin.total * (60 / binMinutes)).toLocaleString()}/hr
-                </td>
               </tr>
             </tbody>
           </table>
@@ -541,8 +535,7 @@ function DistributionTable({ result }: { result: PipelineResult }) {
           <tr>
             <th>Station</th>
             <th>Peak window</th>
-            <th className="num">Runners in window</th>
-            <th className="num">Rate /hr</th>
+            <th className="num">Through in {result.binMinutes} min</th>
             <th>Busiest distance</th>
             {hasLeads && <th className="num">First Male</th>}
             {hasLeads && <th className="num">First Female</th>}
@@ -556,7 +549,6 @@ function DistributionTable({ result }: { result: PipelineResult }) {
               </td>
               <td>{peakWindowLabel(station)}</td>
               <td className="num">{peakBin(station)?.total.toLocaleString() ?? '—'}</td>
-              <td className="num">{Math.round(station.schedule.peakRunnersPerHour).toLocaleString()}</td>
               <td>{busiestCourse(station, result.courseOrder)}</td>
               {hasLeads && <td className="num">{firstLeadLabel(station, 'M')}</td>}
               {hasLeads && <td className="num">{firstLeadLabel(station, 'F')}</td>}

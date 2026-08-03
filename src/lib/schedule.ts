@@ -93,6 +93,24 @@ export function peakRunnersPerHour(bins: HistogramBin[], binMinutes = DEFAULT_HI
   return peakCount * (60 / binMinutes);
 }
 
+/**
+ * The peak as the number actually counted: runners through in the busiest window.
+ *
+ * The hourly rate is this same figure scaled up, and scaling it up is what made it
+ * misleading. A start-line surge of 322 in a quarter of an hour reads as 1,288 an hour —
+ * an hour that never happens, over a field that does not contain that many people. What
+ * a marshal is staffing for is the 322.
+ *
+ * The rate is kept for classifying activity, where being independent of the bin width is
+ * exactly what is wanted, and it round-trips back to the count without loss.
+ */
+export function peakRunnersPerWindow(
+  peakPerHour: number,
+  binMinutes = DEFAULT_HISTOGRAM_BIN_MINUTES
+): number {
+  return Math.round((peakPerHour * binMinutes) / 60);
+}
+
 export type ActivityLevel = 'Low' | 'Medium' | 'High';
 
 export function classifyActivityLevel(

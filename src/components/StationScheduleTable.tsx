@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react';
 import type { PipelineStation } from '../lib/pipeline';
-import type { ActivityLevel } from '../lib/schedule';
+import { peakRunnersPerWindow, type ActivityLevel } from '../lib/schedule';
+import { DEFAULT_HISTOGRAM_BIN_MINUTES } from '../lib/config';
 import type { RaceOverrides, StationOverride } from '../lib/overrides';
 import { EditableCell } from './EditableCell';
 import { formatDuration, windowSeconds } from '../lib/time';
 
 interface Props {
   stations: PipelineStation[];
+  /** Width of the counting window, so the peak column can say what it counted. */
+  binMinutes?: number;
   /** Shows the map's own placemark names under each station. */
   showSourceNames?: boolean;
   /** Supplying this makes rows draggable; receives the new order as map names. */
@@ -54,6 +57,7 @@ function stationWindowSeconds(station: PipelineStation): number {
 
 export function StationScheduleTable({
   stations,
+  binMinutes = DEFAULT_HISTOGRAM_BIN_MINUTES,
   showSourceNames = true,
   onReorder,
   onRemove,
@@ -131,7 +135,7 @@ export function StationScheduleTable({
             <th className="num">Open</th>
             <th className="num">Close</th>
             <th className="num">Duration</th>
-            <th className="num">Peak /hr</th>
+            <th className="num">Peak /{binMinutes} min</th>
             <th>Activity</th>
             {onRemove && <th aria-label="Remove" />}
           </tr>
@@ -251,7 +255,9 @@ export function StationScheduleTable({
                   return seconds > 0 ? formatDuration(seconds) : '—';
                 })()}
               </td>
-              <td className="num">{Math.round(station.schedule.peakRunnersPerHour).toLocaleString()}</td>
+              <td className="num">
+                {peakRunnersPerWindow(station.schedule.peakRunnersPerHour, binMinutes).toLocaleString()}
+              </td>
               <td>
                 {onStationEdit ? (
                   <select

@@ -1142,6 +1142,7 @@ export default function App() {
             )}
             <StationScheduleTable
               stations={result.stations}
+              binMinutes={result.binMinutes}
               showSourceNames={renumber}
               onReorder={(order) => {
                 setStationOrder(order);

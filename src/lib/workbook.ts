@@ -7,6 +7,7 @@ import {
   type AmenitySet,
 } from './amenities';
 import { formatDuration, parseClockTimeToSeconds, windowSeconds } from './time';
+import { peakRunnersPerWindow } from './schedule';
 import type { ReportSections } from './report';
 import type { Sheet, CellValue } from './xlsx';
 
@@ -40,7 +41,7 @@ function coursesOf(result: PipelineResult) {
 function scheduleSheet(result: PipelineResult, options: WorkbookOptions): Sheet {
   const notes = options.notes ?? {};
   const rows: CellValue[][] = [
-    ['Station', 'Map name', 'Note', 'Open', 'Close', 'Duration', 'Peak /hr', 'Activity', 'Cut-off risk', 'Crossings'],
+    ['Station', 'Map name', 'Note', 'Open', 'Close', 'Duration', `Peak /${result.binMinutes} min`, 'Activity', 'Cut-off risk', 'Crossings'],
   ];
 
   for (const station of result.stations) {
@@ -52,7 +53,7 @@ function scheduleSheet(result: PipelineResult, options: WorkbookOptions): Sheet 
       hm(station.schedule.openClockTime),
       hm(station.schedule.closeClockTime),
       seconds && seconds > 0 ? formatDuration(seconds) : '',
-      Math.round(station.schedule.peakRunnersPerHour),
+      peakRunnersPerWindow(station.schedule.peakRunnersPerHour, result.binMinutes),
       station.schedule.activityLevel,
       station.schedule.cutoffExceeded ? 'yes' : '',
       station.crossings

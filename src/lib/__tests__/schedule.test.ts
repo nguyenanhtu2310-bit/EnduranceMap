@@ -3,6 +3,7 @@ import { DEFAULT_CUTOFF_GRACE_MINUTES, MAX_CUTOFF_MARGIN_MINUTES } from '../conf
 import { parseClockTimeToSeconds } from '../time';
 import {
   buildArrivalHistogram,
+  peakRunnersPerWindow,
   buildCutoffTable,
   buildStackedHistogram,
   buildStationSchedule,
@@ -85,6 +86,25 @@ describe('peakRunnersPerHour', () => {
 
   it('returns 0 for no bins', () => {
     expect(peakRunnersPerHour([])).toBe(0);
+  });
+});
+
+describe('peakRunnersPerWindow', () => {
+  it('gives back the number that was counted, not an extrapolation of it', () => {
+    const bins = [
+      { binStartSeconds: 0, binEndSeconds: 900, count: 10 },
+      { binStartSeconds: 900, binEndSeconds: 1800, count: 322 },
+    ];
+    // The hourly rate reads as a crowd four times the size of the one that turned up.
+    expect(peakRunnersPerHour(bins, 15)).toBe(1288);
+    expect(peakRunnersPerWindow(peakRunnersPerHour(bins, 15), 15)).toBe(322);
+  });
+
+  it('round-trips at any bin width', () => {
+    for (const bin of [5, 10, 15, 20, 30, 60]) {
+      const bins = [{ binStartSeconds: 0, binEndSeconds: bin * 60, count: 77 }];
+      expect(peakRunnersPerWindow(peakRunnersPerHour(bins, bin), bin)).toBe(77);
+    }
   });
 });
 
