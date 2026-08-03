@@ -6,8 +6,9 @@ import {
   type AmenityRules,
   type AmenitySet,
 } from './amenities';
-import { formatDuration, parseClockTimeToSeconds, windowSeconds } from './time';
+import { formatDuration, parseClockTimeToSeconds, secondsToClockTime, windowSeconds } from './time';
 import { peakRunnersPerWindow } from './schedule';
+import { firstLeadOfSex, leadsForStation } from './leadMarkers';
 import type { ReportSections } from './report';
 import type { Sheet, CellValue } from './xlsx';
 
@@ -207,6 +208,58 @@ function cutoffSheet(result: PipelineResult): Sheet {
   return { name: 'Cut-off times', rows };
 }
 
+/**
+ * The distribution as numbers rather than bars: peak window, what came through it, and
+ * the head of the field. The chart is the thing to look at; this is the thing to sort.
+ */
+function distributionSheet(result: PipelineResult): Sheet {
+  const anyLeads = result.stations.some((s) => leadsForStation(s).length > 0);
+  const rows: CellValue[][] = [
+    [
+      'Station',
+      'Peak window',
+      `Through in ${result.binMinutes} min`,
+      'Busiest distance',
+      'Activity',
+      ...(anyLeads ? ['First Male', 'First Male distance', 'First Female', 'First Female distance'] : []),
+    ],
+  ];
+
+  for (const station of result.stations) {
+    const peak = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
+    const window = peak
+      ? `${hm(secondsToClockTime(peak.binStartSeconds))}–${hm(secondsToClockTime(peak.binEndSeconds))}`
+      : '';
+
+    let busiest = '';
+    if (peak) {
+      let bestCount = 0;
+      peak.byCourse.forEach((count, i) => {
+        if (count > bestCount) {
+          bestCount = count;
+          busiest = result.courseOrder[i];
+        }
+      });
+    }
+
+    const lead = (sex: 'M' | 'F'): CellValue[] => {
+      const first = firstLeadOfSex(station, sex);
+      return first ? [hm(secondsToClockTime(first.seconds)), first.courseName] : ['', ''];
+    };
+
+    rows.push([
+      station.schedule.name,
+      window,
+      peak ? peak.total : 0,
+      busiest,
+      station.schedule.activityLevel,
+      ...(anyLeads ? [...lead('M'), ...lead('F')] : []),
+    ]);
+  }
+
+  return { name: 'Crossing distribution', rows };
+}
+
 /** A cover sheet, so a shared file explains itself without the covering email. */
 function summarySheet(result: PipelineResult, options: WorkbookOptions): Sheet {
   const rows: CellValue[][] = [
@@ -242,6 +295,7 @@ export function buildReportSheets(result: PipelineResult, options: WorkbookOptio
   if (!wanted || wanted.schedule) sheets.push(scheduleSheet(result, options));
   if (!wanted || wanted.perDistance) sheets.push(amenitiesSheet(result, options));
   if (!wanted || wanted.splits) sheets.push(splitsSheet(result));
+  if (!wanted || wanted.distribution) sheets.push(distributionSheet(result));
   if (!wanted || wanted.cutoffs) sheets.push(cutoffSheet(result));
 
   return sheets;

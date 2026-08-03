@@ -1,5 +1,5 @@
 import { isEndZoneStop, type PipelineResult, type PipelineStation } from './pipeline';
-import { parseClockTimeToSeconds, secondsToClockTime } from './time';
+import { formatDuration, parseClockTimeToSeconds, secondsToClockTime, windowSeconds } from './time';
 import {
   DEFAULT_AMENITIES,
   resolveAmenities,
@@ -238,6 +238,10 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         <td class="sub">${crossings}</td>
         <td class="num">${hm(station.schedule.openClockTime)}</td>
         <td class="num">${hm(station.schedule.closeClockTime)}</td>
+        <td class="num">${(() => {
+          const seconds = windowSeconds(station.schedule.openClockTime, station.schedule.closeClockTime);
+          return seconds && seconds > 0 ? formatDuration(seconds) : '–';
+        })()}</td>
         <td class="num">${peakRunnersPerWindow(station.schedule.peakRunnersPerHour, result.binMinutes).toLocaleString()}</td>
         <td><span class="tag ${station.schedule.activityLevel}">${station.schedule.activityLevel}</span></td>
         ${station.schedule.cutoffExceeded ? '<td class="risk">Over cut-off</td>' : '<td></td>'}
@@ -283,6 +287,9 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
             <td class="num">${hm(stop.station.schedule.openClockTime)}</td>
             <td class="num">${hm(stop.station.schedule.closeClockTime)}</td>
             <td class="num">${stop.officialCutoffClock ? hm(stop.officialCutoffClock) : '–'}</td>
+            <td><span class="tag ${stop.station.schedule.activityLevel}">${
+              stop.station.schedule.activityLevel
+            }</span></td>
             ${cells}
           </tr>`;
         })
@@ -296,11 +303,12 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
           <thead><tr>
             <th></th><th>Point</th><th class="num">At km</th><th class="num">Gap</th>
             <th class="num">Open</th><th class="num">Close</th><th class="num">Cut-off</th>
+            <th>Activity</th>
             ${amenities.map((a) => `<th class="mid">${esc(a.label)}</th>`).join('')}
           </tr></thead>
           <tbody>${rows}
             <tr class="total"><td></td><td><strong>Total</strong></td>
-            <td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td>
+            <td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td><td></td>
             ${totalCells}</tr>
           </tbody>
         </table>`;
@@ -382,6 +390,18 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
                   peak.binEndSeconds
                 ).slice(0, 5)}`
               : '–';
+            const busiest = (() => {
+              if (!peak) return '–';
+              let best = -1;
+              let bestCount = 0;
+              peak.byCourse.forEach((count, i) => {
+                if (count > bestCount) {
+                  bestCount = count;
+                  best = i;
+                }
+              });
+              return best >= 0 ? result.courseOrder[best] : '–';
+            })();
             const lead = (sex: 'M' | 'F') => {
               const first = firstLeadOfSex(station, sex);
               return first
@@ -394,6 +414,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
               <td>${esc(station.schedule.name)}</td>
               <td class="num">${window}</td>
               <td class="num">${peak ? peak.total.toLocaleString() : '–'}</td>
+              <td>${esc(busiest)}</td>
               <td><span class="tag ${station.schedule.activityLevel}">${station.schedule.activityLevel}</span></td>
               ${anyLeads ? `<td class="num">${lead('M')}</td><td class="num">${lead('F')}</td>` : ''}
             </tr>`;
@@ -415,7 +436,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         ${svg}
         <table><thead><tr>
           <th>Station</th><th class="num">Peak window</th>
-          <th class="num">Through in ${result.binMinutes} min</th><th>Activity</th>
+          <th class="num">Through in ${result.binMinutes} min</th><th>Busiest distance</th><th>Activity</th>
           ${anyLeads ? '<th class="num">First Male</th><th class="num">First Female</th>' : ''}
         </tr></thead><tbody>${body}</tbody></table>`;
       })();
@@ -547,7 +568,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   <table>
     <thead><tr>
       <th>Station</th><th>Crossings</th><th class="num">Open</th><th class="num">Close</th>
-      <th class="num">Peak /${result.binMinutes} min</th><th>Activity</th><th></th>
+      <th class="num">Duration</th><th class="num">Peak /${result.binMinutes} min</th><th>Activity</th><th></th>
     </tr></thead>
     <tbody>${scheduleRows}</tbody>
   </table>`

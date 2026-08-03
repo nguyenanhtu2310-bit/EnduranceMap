@@ -174,3 +174,165 @@ describe('the printed distribution chart', () => {
     expect(plotted / rows).toBeGreaterThan(40);
   });
 });
+
+/**
+ * The report is the deliverable — the thing an organiser is handed and works from. It is
+ * built by a separate renderer from the screen, so a column added to one has twice now
+ * silently failed to reach the other. These pin every section's columns to what the
+ * screen shows, so the next omission fails here rather than in front of a client.
+ */
+describe('the report presents the same columns as the screen', () => {
+  const withLeaders = runPipeline(kml, [
+    {
+      ...inputs[0],
+      leaders: [
+        { sex: 'M', startOffsetSeconds: 0, paceMinPerKm: 4, finishSeconds: 40 * 60 },
+        { sex: 'F', startOffsetSeconds: 30, paceMinPerKm: 5, finishSeconds: 50 * 60 },
+      ],
+    },
+  ]);
+  const page = buildReportHtml(withLeaders, {
+    raceName: 'Fixture race',
+    rules: DEFAULT_AMENITY_RULES,
+    overrides: {},
+  });
+
+  /** Column headings of the first table under a heading matching `heading`. */
+  function headersUnder(heading: RegExp): string[] {
+    const at = page.search(heading);
+    expect(at, `no section matching ${heading}`).toBeGreaterThan(-1);
+    const head = page.slice(at, page.indexOf('</thead>', at));
+    return [...head.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/g)]
+      .map((m) => m[1].replace(/<[^>]*>/g, '').trim())
+      .filter(Boolean);
+  }
+
+  it('station operating schedule', () => {
+    // Duration was on screen for weeks before the report grew it.
+    expect(headersUnder(/<h2>Station operating schedule<\/h2>/)).toEqual([
+      'Station',
+      'Crossings',
+      'Open',
+      'Close',
+      'Duration',
+      'Peak /15 min',
+      'Activity',
+    ]);
+  });
+
+  it('course amenities', () => {
+    expect(headersUnder(/<h2>10km — /)).toEqual([
+      'Point',
+      'At km',
+      'Gap',
+      'Open',
+      'Close',
+      'Cut-off',
+      'Activity',
+      'Water',
+      'Medical',
+    ]);
+  });
+
+  it('crossing time distribution', () => {
+    expect(headersUnder(/<h2>Crossing time distribution<\/h2>/)).toEqual([
+      'Station',
+      'Peak window',
+      'Through in 15 min',
+      'Busiest distance',
+      'Activity',
+      'First Male',
+      'First Female',
+    ]);
+  });
+
+  it('cut-off times', () => {
+    expect(headersUnder(/<h2>Cut-off times<\/h2>/)).toEqual([
+      'Station',
+      'Distance',
+      'Km',
+      'Slowest arrival',
+      'Proposed cut-off',
+      'Margin',
+      'Provided COT',
+    ]);
+  });
+
+  it('gives every row the same number of cells as the header', () => {
+    for (const heading of [
+      /<h2>Station operating schedule<\/h2>/,
+      /<h2>10km — /,
+      /<h2>Crossing time distribution<\/h2>/,
+      /<h2>Cut-off times<\/h2>/,
+    ]) {
+      const at = page.search(heading);
+      const table = page.slice(at, page.indexOf('</table>', at));
+      // `<th` alone also matches `<thead`, which is one phantom column per table.
+      const columns = [...table.slice(0, table.indexOf('</thead>')).matchAll(/<th[\s>]/g)].length;
+      const body = table.slice(table.indexOf('<tbody'));
+      for (const row of body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
+        expect([...row[1].matchAll(/<td[\s>]/g)].length, `row under ${heading}`).toBe(columns);
+      }
+    }
+  });
+});
+
+describe('the spreadsheet covers the same five sections', () => {
+  it('has a sheet for every RESULT section, distribution included', () => {
+    // The distribution had no sheet at all: ticking it in the export dialog changed
+    // nothing, and the spreadsheet quietly arrived a section short.
+    expect(sheets.map((s) => s.name)).toEqual([
+      'Summary',
+      'Station schedule',
+      'Course amenities',
+      'Split calculation',
+      'Crossing distribution',
+      'Cut-off times',
+    ]);
+  });
+
+  it('gives the distribution sheet the screen’s columns', () => {
+    const withLeaders = runPipeline(kml, [
+      {
+        ...inputs[0],
+        leaders: [
+          { sex: 'M', startOffsetSeconds: 0, paceMinPerKm: 4, finishSeconds: 40 * 60 },
+          { sex: 'F', startOffsetSeconds: 30, paceMinPerKm: 5, finishSeconds: 50 * 60 },
+        ],
+      },
+    ]);
+    const sheet = buildReportSheets(withLeaders, {
+      raceName: 'Fixture race',
+      rules: DEFAULT_AMENITY_RULES,
+      overrides: {},
+    }).find((s) => s.name === 'Crossing distribution')!;
+
+    expect(sheet.rows[0]).toEqual([
+      'Station',
+      'Peak window',
+      'Through in 15 min',
+      'Busiest distance',
+      'Activity',
+      'First Male',
+      'First Male distance',
+      'First Female',
+      'First Female distance',
+    ]);
+    expect(sheet.rows.length).toBe(withLeaders.stations.length + 1);
+  });
+
+  it('writes the count as a number, so a spreadsheet can total it', () => {
+    const sheet = sheets.find((s) => s.name === 'Crossing distribution')!;
+    for (const row of sheet.rows.slice(1)) expect(typeof row[2]).toBe('number');
+  });
+
+  it('honours a section being switched off', () => {
+    const only = buildReportSheets(result, {
+      raceName: 'Fixture race',
+      rules: DEFAULT_AMENITY_RULES,
+      overrides: {},
+      sections: { schedule: false, perDistance: false, splits: false, distribution: true, cutoffs: false },
+    });
+    expect(only.map((s) => s.name)).toEqual(['Summary', 'Crossing distribution']);
+  });
+});
