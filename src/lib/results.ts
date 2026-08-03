@@ -74,9 +74,13 @@ export function inferContestDistanceKm(contest: string): number | undefined {
  */
 export function parseElapsedToSeconds(value: string): number | null {
   const text = value.trim();
-  if (!/^\d{1,3}(:\d{1,2}){1,2}$/.test(text)) return null;
+  // Some timing systems write the seconds to hundredths ("2:31:30.52"). The fraction is
+  // below the resolution of anything scheduled from it, so it is dropped — the way the
+  // official time is taken — rather than treated as a malformed time. Rejecting it lost
+  // every finisher in the file, leaving the contest with no field at all.
+  if (!/^\d{1,3}(:\d{1,2}){1,2}([.,]\d+)?$/.test(text)) return null;
 
-  const parts = text.split(':').map((p) => parseInt(p, 10));
+  const parts = text.replace(/[.,]\d+$/, '').split(':').map((p) => parseInt(p, 10));
   if (parts.some((p) => !Number.isFinite(p))) return null;
 
   // "H:MM:SS" or "MM:SS".

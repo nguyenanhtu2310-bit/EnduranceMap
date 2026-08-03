@@ -23,10 +23,24 @@ describe('parseElapsedToSeconds', () => {
     expect(parseElapsedToSeconds('30:15:00')).toBe(30 * 3600 + 15 * 60);
   });
 
+  // A timing system that writes hundredths used to have its whole field discarded:
+  // every chip time failed to parse, so the contest reported nought finishers.
+  it('drops the hundredths some timing systems write, as the official time does', () => {
+    expect(parseElapsedToSeconds('2:31:30.52')).toBe(2 * 3600 + 31 * 60 + 30);
+    expect(parseElapsedToSeconds('2:31:30.71')).toBe(2 * 3600 + 31 * 60 + 30);
+    expect(parseElapsedToSeconds('50:00.00')).toBe(50 * 60);
+  });
+
+  it('reads a decimal comma, as a European export writes it', () => {
+    expect(parseElapsedToSeconds('2:31:30,52')).toBe(2 * 3600 + 31 * 60 + 30);
+  });
+
   it('rejects nonsense', () => {
     expect(parseElapsedToSeconds('')).toBeNull();
     expect(parseElapsedToSeconds('abc')).toBeNull();
     expect(parseElapsedToSeconds('1:75:00')).toBeNull();
+    expect(parseElapsedToSeconds('1:00:60.5')).toBeNull();
+    expect(parseElapsedToSeconds('2:31:30.')).toBeNull();
   });
 });
 
