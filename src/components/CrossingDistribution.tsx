@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import type { LeadArrival, PipelineResult, PipelineStation } from '../lib/pipeline';
 import { secondsToClockTime } from '../lib/time';
 
@@ -21,7 +21,7 @@ function formatHm(seconds: number): string {
   return secondsToClockTime(seconds).slice(0, 5);
 }
 
-const ROW_HEIGHT = 46;
+const ROW_HEIGHT = 52;
 const AXIS_HEIGHT = 26;
 const RIGHT_PAD = 12;
 const LABEL_GUTTER = 24;
@@ -29,23 +29,57 @@ const MIN_LABEL_WIDTH = 96;
 const MAX_LABEL_WIDTH = 280;
 /** Approximate advance of the 12px label face; SVG text cannot wrap or ellipsize itself. */
 const LABEL_CHAR_PX = 6.2;
+/** Top strip of each row kept clear for lead markers, so a glyph never sits on a bar. */
+const MARKER_BAND = 13;
+/** Below this gap two glyphs would overlap, so the later one is drawn as a bare line. */
+const MIN_GLYPH_GAP_PX = 12;
+
+/**
+ * How far the timeline is stretched. 1 fits the card; the upper end gives roughly a
+ * finger's width per 15-minute bin, which is what it takes to read a single increment.
+ */
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 10;
 
 function truncateToWidth(text: string, widthPx: number): string {
   const maxChars = Math.max(4, Math.floor(widthPx / LABEL_CHAR_PX));
   return text.length <= maxChars ? text : `${text.slice(0, maxChars - 1)}…`;
 }
 
-interface HoverState {
-  station: string;
-  binIndex: number;
+/** Where a tooltip should sit, in coordinates of the chart's outer box. */
+interface Anchor {
   x: number;
   y: number;
 }
 
+interface BinHover extends Anchor {
+  kind: 'bin';
+  station: string;
+  binIndex: number;
+}
+
+interface LeadHover extends Anchor {
+  kind: 'lead';
+  lead: LeadArrival;
+  station: string;
+}
+
+type Hover = BinHover | LeadHover;
+
 export function CrossingDistribution({ result }: Props) {
-  const [hover, setHover] = useState<HoverState | null>(null);
+  const [hover, setHover] = useState<Hover | null>(null);
   const [showTable, setShowTable] = useState(false);
   const [sharedScale, setSharedScale] = useState(true);
+  const [zoom, setZoom] = useState(MIN_ZOOM);
+
+  /**
+   * Tooltips are positioned against this box rather than against the scrolling strip
+   * inside it. An absolutely positioned child of a scroll container adds to what that
+   * container can scroll, so a tooltip near the foot of the chart used to grow the
+   * scroll height, and reaching for it moved the pointer off the bar that summoned it —
+   * the tooltip vanished, the height collapsed, and the view jumped back up.
+   */
+  const boxRef = useRef<HTMLDivElement>(null);
 
   const { stations, courseOrder, timeRangeSeconds, binMinutes } = result;
 
@@ -69,6 +103,14 @@ export function CrossingDistribution({ result }: Props) {
     return <p className="hint">No modeled arrivals to plot.</p>;
   }
 
+  /** Pins the tooltip to the pointer, in the outer box's own coordinates. */
+  function anchorFrom(event: ReactMouseEvent): Anchor {
+    const box = boxRef.current?.getBoundingClientRect();
+    return box
+      ? { x: event.clientX - box.left, y: event.clientY - box.top }
+      : { x: event.clientX, y: event.clientY };
+  }
+
   // Sized to the longest name so labels never run into the plot, but capped so a
   // verbose timing map cannot squeeze the chart out of the card.
   const longestLabel = Math.max(0, ...stations.map((s) => s.schedule.name.length));
@@ -78,7 +120,7 @@ export function CrossingDistribution({ result }: Props) {
   );
   const labelTextWidth = labelWidth - LABEL_GUTTER;
 
-  const plotWidth = Math.max(560, binCount * 7);
+  const plotWidth = Math.max(640, binCount * 9) * zoom;
   const chartWidth = labelWidth + plotWidth + RIGHT_PAD;
   const chartHeight = stations.length * ROW_HEIGHT + AXIS_HEIGHT;
 
@@ -90,16 +132,19 @@ export function CrossingDistribution({ result }: Props) {
   const xForSeconds = (seconds: number) =>
     labelWidth + ((seconds - timeRangeSeconds.start) / spanSeconds) * plotWidth;
 
-  // Hour ticks across the shared axis.
+  // Hour ticks across the shared axis, thinning to the quarter hour once stretched far
+  // enough that every bin edge has room for its own time.
+  const tickStep = binWidth >= 46 ? 900 : binWidth >= 16 ? 1800 : 3600;
   const ticks: number[] = [];
-  const firstHour = Math.ceil(timeRangeSeconds.start / 3600) * 3600;
-  for (let t = firstHour; t <= timeRangeSeconds.end; t += 3600) ticks.push(t);
+  const firstTick = Math.ceil(timeRangeSeconds.start / tickStep) * tickStep;
+  for (let t = firstTick; t <= timeRangeSeconds.end; t += tickStep) ticks.push(t);
 
-  const hovered = hover ? stations.find((s) => s.schedule.name === hover.station) : undefined;
-  const hoveredBin = hovered && hover ? hovered.distribution[hover.binIndex] : undefined;
+  const hoveredStation =
+    hover?.kind === 'bin' ? stations.find((s) => s.schedule.name === hover.station) : undefined;
+  const hoveredBin = hoveredStation && hover?.kind === 'bin' ? hoveredStation.distribution[hover.binIndex] : undefined;
 
   return (
-    <div className="viz-root">
+    <div className="viz-root" ref={boxRef}>
       <div className="chart-legend">
         {courseOrder.map((courseName, i) => (
           <span key={courseName} className="legend-item">
@@ -114,7 +159,7 @@ export function CrossingDistribution({ result }: Props) {
         {hasLeads && (
           <span className="legend-item" title="The fastest finisher of each sex, on each distance">
             <span className="legend-lead">♂♀</span>
-            First man / woman
+            First man / woman, coloured by distance
           </span>
         )}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: '0.6rem', alignItems: 'center' }}>
@@ -136,6 +181,33 @@ export function CrossingDistribution({ result }: Props) {
           </button>
         </span>
       </div>
+
+      {!showTable && (
+        <div className="chart-controls">
+          <label className="zoom-control">
+            <span className="muted small">Stretch</span>
+            <input
+              type="range"
+              min={MIN_ZOOM}
+              max={MAX_ZOOM}
+              step={0.5}
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              aria-label="Stretch the timeline"
+            />
+            <span className="muted small tabular">{zoom.toFixed(1)}×</span>
+          </label>
+          {zoom > MIN_ZOOM && (
+            <button className="secondary" onClick={() => setZoom(MIN_ZOOM)}>
+              Fit
+            </button>
+          )}
+          <span className="hint" style={{ margin: 0 }}>
+            {Math.round(binWidth)}px per {binMinutes}-minute window. Drag the chart sideways to move
+            along the day.
+          </span>
+        </div>
+      )}
 
       {!showTable && (
         <p className="hint" style={{ margin: '-0.35rem 0 0.85rem' }}>
@@ -174,8 +246,13 @@ export function CrossingDistribution({ result }: Props) {
             {stations.map((station, rowIndex) => {
               const rowTop = rowIndex * ROW_HEIGHT;
               const baseline = rowTop + ROW_HEIGHT - 6;
-              const usableHeight = ROW_HEIGHT - 14;
+              const usableHeight = ROW_HEIGHT - 14 - MARKER_BAND;
               const scaleMax = sharedScale ? globalMax : rowMax[rowIndex];
+              const leads = leadsFor(station);
+              // A glyph is only drawn where the previous one has cleared the space.
+              // Stretching the timeline pulls them apart, which is what the slider is
+              // for; until then the hairline still says a leader passed through here.
+              let lastGlyphX = -Infinity;
 
               return (
                 <g key={station.schedule.name}>
@@ -201,16 +278,21 @@ export function CrossingDistribution({ result }: Props) {
                     return (
                       <g
                         key={binIndex}
-                        onMouseEnter={() =>
-                          setHover({ station: station.schedule.name, binIndex, x: x + binWidth / 2, y: rowTop })
+                        onMouseMove={(e) =>
+                          setHover({
+                            kind: 'bin',
+                            station: station.schedule.name,
+                            binIndex,
+                            ...anchorFrom(e),
+                          })
                         }
                       >
                         {/* Hit target is wider than the mark so thin columns stay hoverable. */}
                         <rect
                           x={x - 2}
-                          y={rowTop}
+                          y={rowTop + MARKER_BAND}
                           width={Math.max(binWidth + 4, 8)}
-                          height={ROW_HEIGHT}
+                          height={ROW_HEIGHT - MARKER_BAND}
                           fill="transparent"
                         />
                         {bin.byCourse.map((count, courseIndex) => {
@@ -246,23 +328,38 @@ export function CrossingDistribution({ result }: Props) {
                     );
                   })}
 
-                  {/* The head of the field, drawn over the bars: the lead athletes
-                      arrive before the bulk of the distribution and would otherwise be
-                      lost in a column one runner tall. */}
-                  {leadsFor(station).map((lead) => {
+                  {/* The head of the field, drawn over the bars: the lead athletes arrive
+                      before the bulk of the distribution and would otherwise be lost in a
+                      column one runner tall. Coloured by distance, so a row carrying four
+                      races says which leader is which. */}
+                  {leads.map((lead) => {
                     const lx = xForSeconds(lead.seconds);
                     if (lx < labelWidth || lx > labelWidth + plotWidth) return null;
+                    const colour = slotVar(Math.max(0, courseOrder.indexOf(lead.courseName)));
+                    const showGlyph = lx - lastGlyphX >= MIN_GLYPH_GAP_PX;
+                    if (showGlyph) lastGlyphX = lx;
+
                     return (
-                      <g key={`${lead.courseName}-${lead.sex}-${lead.passIndex}`} className="lead-marker">
-                        <line x1={lx} x2={lx} y1={rowTop + 4} y2={baseline} />
-                        <text x={lx} y={rowTop + 4} textAnchor="middle">
-                          <title>
-                            {`First ${lead.sex === 'M' ? 'man' : 'woman'} on ${lead.courseName} — ${formatHm(
-                              lead.seconds
-                            )} at ${lead.kmFromStart.toFixed(1)} km`}
-                          </title>
-                          {lead.sex === 'M' ? '♂' : '♀'}
-                        </text>
+                      <g
+                        key={`${lead.courseName}-${lead.sex}-${lead.passIndex}`}
+                        className="lead-marker"
+                        onMouseMove={(e) =>
+                          setHover({ kind: 'lead', lead, station: station.schedule.name, ...anchorFrom(e) })
+                        }
+                      >
+                        <rect
+                          x={lx - 6}
+                          y={rowTop}
+                          width={12}
+                          height={ROW_HEIGHT - 6}
+                          fill="transparent"
+                        />
+                        <line x1={lx} x2={lx} y1={rowTop + MARKER_BAND} y2={baseline} stroke={colour} />
+                        {showGlyph && (
+                          <text x={lx} y={rowTop + 6} textAnchor="middle" fill={colour}>
+                            {lead.sex === 'M' ? '♂' : '♀'}
+                          </text>
+                        )}
                       </g>
                     );
                   })}
@@ -270,48 +367,113 @@ export function CrossingDistribution({ result }: Props) {
               );
             })}
           </svg>
-
-          {hover && hoveredBin && hovered && (
-            <div
-              className="chart-tooltip"
-              style={{ left: hover.x + 12, top: hover.y + 4 }}
-              role="status"
-            >
-              <strong>{hovered.schedule.name}</strong>
-              <span className="muted small">
-                {formatHm(hoveredBin.binStartSeconds)}–{formatHm(hoveredBin.binEndSeconds)}
-              </span>
-              <table className="tooltip-table">
-                <tbody>
-                  {hoveredBin.byCourse.map((count, i) =>
-                    count > 0 ? (
-                      <tr key={i}>
-                        <td>
-                          <span className="legend-swatch" style={{ background: slotVar(i) }} /> {courseOrder[i]}
-                        </td>
-                        <td className="num">{count.toLocaleString()}</td>
-                      </tr>
-                    ) : null
-                  )}
-                  <tr className="tooltip-total">
-                    <td>Total</td>
-                    <td className="num">{hoveredBin.total.toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td>Rate</td>
-                    <td className="num">
-                      {Math.round(hoveredBin.total * (60 / binMinutes)).toLocaleString()}/hr
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              {hover.binIndex === hovered.peakBinIndex && <span className="peak-note">Peak window</span>}
-            </div>
-          )}
         </div>
+      )}
+
+      {!showTable && hover?.kind === 'bin' && hoveredBin && hoveredStation && (
+        <ChartTooltip anchor={hover} box={boxRef.current}>
+          <strong>{hoveredStation.schedule.name}</strong>
+          <span className="muted small">
+            {formatHm(hoveredBin.binStartSeconds)}–{formatHm(hoveredBin.binEndSeconds)}
+          </span>
+          <table className="tooltip-table">
+            <tbody>
+              {hoveredBin.byCourse.map((count, i) =>
+                count > 0 ? (
+                  <tr key={i}>
+                    <td>
+                      <span className="legend-swatch" style={{ background: slotVar(i) }} /> {courseOrder[i]}
+                    </td>
+                    <td className="num">{count.toLocaleString()}</td>
+                  </tr>
+                ) : null
+              )}
+              <tr className="tooltip-total">
+                <td>Total</td>
+                <td className="num">{hoveredBin.total.toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td>Rate</td>
+                <td className="num">
+                  {Math.round(hoveredBin.total * (60 / binMinutes)).toLocaleString()}/hr
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          {hover.binIndex === hoveredStation.peakBinIndex && <span className="peak-note">Peak window</span>}
+        </ChartTooltip>
+      )}
+
+      {!showTable && hover?.kind === 'lead' && (
+        <ChartTooltip anchor={hover} box={boxRef.current}>
+          <strong>{hover.station}</strong>
+          <span className="muted small">
+            {hover.lead.sex === 'M' ? 'First man' : 'First woman'} through this point
+          </span>
+          <table className="tooltip-table">
+            <tbody>
+              <tr>
+                <td>
+                  <span
+                    className="legend-swatch"
+                    style={{ background: slotVar(Math.max(0, courseOrder.indexOf(hover.lead.courseName))) }}
+                  />{' '}
+                  {hover.lead.courseName}
+                </td>
+                <td className="num">{formatHm(hover.lead.seconds)}</td>
+              </tr>
+              <tr>
+                <td>At</td>
+                <td className="num">{hover.lead.kmFromStart.toFixed(1)} km</td>
+              </tr>
+            </tbody>
+          </table>
+        </ChartTooltip>
       )}
     </div>
   );
+}
+
+/**
+ * A tooltip held inside the chart's own box. It flips to the other side of the pointer
+ * near an edge rather than being clipped, and never sits inside the scrolling strip.
+ */
+function ChartTooltip({
+  anchor,
+  box,
+  children,
+}: {
+  anchor: Anchor;
+  box: HTMLDivElement | null;
+  children: React.ReactNode;
+}) {
+  const width = box?.clientWidth ?? 0;
+  const height = box?.clientHeight ?? 0;
+  const flipX = width > 0 && anchor.x > width - 210;
+  const flipY = height > 0 && anchor.y > height - 170;
+
+  return (
+    <div
+      className="chart-tooltip"
+      role="status"
+      style={{
+        left: flipX ? undefined : anchor.x + 14,
+        right: flipX ? Math.max(4, width - anchor.x + 14) : undefined,
+        top: flipY ? undefined : anchor.y + 8,
+        bottom: flipY ? Math.max(4, height - anchor.y + 8) : undefined,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Lead markers for a row, earliest first. Tolerates a race saved before the field
+ * existed, which would otherwise throw on reopening.
+ */
+function leadsFor(station: PipelineStation): LeadArrival[] {
+  return [...(station.leadArrivals ?? [])].sort((a, b) => a.seconds - b.seconds);
 }
 
 /** The WCAG-clean twin of the chart: every plotted value reachable as text. */
@@ -355,15 +517,7 @@ function DistributionTable({ result }: { result: PipelineResult }) {
 /** The earliest lead arrival of one sex at a station, across every distance through it. */
 function firstLeadLabel(station: PipelineStation, sex: LeadArrival['sex']): string {
   const first = leadsFor(station).find((l) => l.sex === sex);
-  return first ? formatHm(first.seconds) : '—';
-}
-
-/**
- * Lead markers for a row, earliest first. Tolerates a race saved before the field
- * existed, which would otherwise throw on reopening.
- */
-function leadsFor(station: PipelineStation): LeadArrival[] {
-  return [...(station.leadArrivals ?? [])].sort((a, b) => a.seconds - b.seconds);
+  return first ? `${formatHm(first.seconds)} ${first.courseName}` : '—';
 }
 
 function peakBin(station: PipelineStation) {

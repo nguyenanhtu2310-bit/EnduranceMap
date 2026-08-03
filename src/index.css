@@ -559,24 +559,61 @@ tr.drop-target td {
 
 /*
  * The head of the field. Drawn as a hairline rather than a bar because it marks one
- * athlete at an instant, not a count over a window — it must not read as volume.
+ * athlete at an instant, not a count over a window — it must not read as volume. The
+ * colour is set per marker from the distance's own series slot, so neither the stroke
+ * nor the fill may be declared here: a stylesheet rule would beat the attribute and
+ * every leader would come out the same colour.
  */
+.lead-marker {
+  cursor: pointer;
+}
+
 .lead-marker line {
-  stroke: var(--color-text);
-  stroke-width: 1;
+  stroke-width: 1.5;
   stroke-dasharray: 2 2;
-  opacity: 0.55;
+  opacity: 0.75;
 }
 
 .lead-marker text {
-  fill: var(--color-text);
   font-size: 11px;
   dominant-baseline: middle;
+}
+
+.lead-marker:hover line {
+  opacity: 1;
+  stroke-dasharray: none;
+  stroke-width: 2;
 }
 
 .legend-lead {
   color: var(--color-text);
   letter-spacing: -1px;
+}
+
+/* — chart controls — */
+
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 0 0 0.6rem;
+}
+
+.zoom-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.zoom-control input[type='range'] {
+  width: 190px;
+  accent-color: var(--color-accent, #3987e5);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  min-width: 2.6em;
 }
 
 .axis-text {
@@ -621,9 +658,15 @@ tr.drop-target td {
   border-radius: 1px;
 }
 
+/*
+ * Anchored to the chart's outer box, never to the scrolling strip inside it: an
+ * absolutely positioned child of a scroll container counts towards what that container
+ * can scroll, which made the view snap back as soon as you reached for the tooltip.
+ */
 .chart-tooltip {
   position: absolute;
   pointer-events: none;
+  max-width: 260px;
   background: var(--color-bg);
   box-shadow: var(--shadow-md);
   border-radius: var(--radius-md);
