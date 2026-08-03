@@ -282,10 +282,18 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
     }
   }
 
+  /** Minutes between the modelled tail and the proposed cut-off, as on screen. */
+  const marginMinutes = (suggested: string, modeled: string): number | null => {
+    const a = parseClockTimeToSeconds(suggested);
+    const b = parseClockTimeToSeconds(modeled);
+    return a === null || b === null ? null : Math.round((a - b) / 60);
+  };
+
   const cutoffRows = !sections.cutoffs ? '' : result.cutoffTable
     .map((row) => {
       const isFinal =
         parseClockTimeToSeconds(row.suggestedClockTime) === finalCutoffByStation.get(row.stationName);
+      const margin = marginMinutes(row.suggestedClockTime, row.modeledLastArrivalClockTime);
       return `<tr${isFinal ? ' class="final-row"' : ''}>
         <td>${esc(row.stationName)}</td>
         <td>${esc(row.courseName)}</td>
@@ -294,6 +302,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         <td class="num ${isFinal ? 'cot-final' : 'cot-other'}"><strong>${hm(row.suggestedClockTime)}</strong>${
           isFinal ? '<span class="final-tag">final</span>' : ''
         }</td>
+        <td class="num muted">${margin === null ? '–' : `+${margin} min`}</td>
         <td class="num${row.mapIsTighter ? ' risk' : ''}">${row.mapClockTime ? hm(row.mapClockTime) : '–'}</td>
       </tr>`;
     })
@@ -510,7 +519,8 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   <table>
     <thead><tr>
       <th>Station</th><th>Distance</th><th class="num">Km</th>
-      <th class="num">Slowest arrival</th><th class="num">Proposed cut-off</th><th class="num">Provided</th>
+      <th class="num">Slowest arrival</th><th class="num">Proposed cut-off</th>
+      <th class="num">Margin</th><th class="num">Provided COT</th>
     </tr></thead>
     <tbody>${cutoffRows}</tbody>
   </table>`

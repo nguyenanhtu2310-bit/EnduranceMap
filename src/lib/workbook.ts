@@ -6,7 +6,7 @@ import {
   type AmenityRules,
   type AmenitySet,
 } from './amenities';
-import { formatDuration, windowSeconds } from './time';
+import { formatDuration, parseClockTimeToSeconds, windowSeconds } from './time';
 import type { ReportSections } from './report';
 import type { Sheet, CellValue } from './xlsx';
 
@@ -168,19 +168,37 @@ function amenitiesSheet(result: PipelineResult, options: WorkbookOptions): Sheet
   return { name: 'Course amenities', rows };
 }
 
+/** Minutes between the modelled tail and the proposed cut-off, as on screen. */
+function marginMinutes(suggested: string, modeled: string): number | null {
+  const a = parseClockTimeToSeconds(suggested);
+  const b = parseClockTimeToSeconds(modeled);
+  return a === null || b === null ? null : Math.round((a - b) / 60);
+}
+
 function cutoffSheet(result: PipelineResult): Sheet {
   const rows: CellValue[][] = [
-    ['Distance', 'Station', 'Km', 'On the map', 'Proposed', 'Last modelled arrival', 'Map is tighter'],
+    [
+      'Distance',
+      'Station',
+      'Km',
+      'Slowest arrival',
+      'Proposed cut-off',
+      'Margin (min)',
+      'Provided COT',
+      'Provided is tighter',
+    ],
   ];
 
   for (const row of result.cutoffTable) {
+    const margin = marginMinutes(row.suggestedClockTime, row.modeledLastArrivalClockTime);
     rows.push([
       row.courseName,
       row.stationName,
       Number(row.kmFromStart.toFixed(2)),
-      row.mapClockTime ? hm(row.mapClockTime) : '',
-      hm(row.suggestedClockTime),
       hm(row.modeledLastArrivalClockTime),
+      hm(row.suggestedClockTime),
+      margin === null ? '' : margin,
+      row.mapClockTime ? hm(row.mapClockTime) : '',
       row.mapIsTighter ? 'yes' : '',
     ]);
   }
@@ -193,9 +211,9 @@ function summarySheet(result: PipelineResult, options: WorkbookOptions): Sheet {
   const rows: CellValue[][] = [
     ['Race', options.raceName || 'Untitled race'],
     ['Generated', new Date().toISOString().slice(0, 16).replace('T', ' ')],
-    ['Positions', result.stations.length],
+    ['Stations', result.stations.length],
     [],
-    ['Distance', 'Measured km', 'Start', 'Positions on course'],
+    ['Distance', 'Measured km', 'Start', 'Stations on course'],
   ];
 
   for (const course of coursesOf(result)) {
