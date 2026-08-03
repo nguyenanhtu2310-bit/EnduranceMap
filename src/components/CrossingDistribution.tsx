@@ -21,7 +21,8 @@ function formatHm(seconds: number): string {
   return secondsToClockTime(seconds).slice(0, 5);
 }
 
-const ROW_HEIGHT = 52;
+/** Everything in a row below the marker band: the bars, the baseline and its padding. */
+const ROW_BODY = 38;
 const AXIS_HEIGHT = 26;
 const RIGHT_PAD = 12;
 const LABEL_GUTTER = 24;
@@ -29,10 +30,30 @@ const MIN_LABEL_WIDTH = 96;
 const MAX_LABEL_WIDTH = 280;
 /** Approximate advance of the 12px label face; SVG text cannot wrap or ellipsize itself. */
 const LABEL_CHAR_PX = 6.2;
-/** Top strip of each row kept clear for lead markers, so a glyph never sits on a bar. */
-const MARKER_BAND = 13;
-/** Below this gap two glyphs would overlap, so the later one is drawn as a bare line. */
-const MIN_GLYPH_GAP_PX = 12;
+/** Horizontal room one ♂/♀ needs before the next would touch it. */
+const GLYPH_WIDTH_PX = 12;
+/** Vertical spacing between stacked glyph lanes. */
+const LANE_STEP = 11;
+/** Clearance above the first lane and below the last, so nothing touches a bar. */
+const BAND_PADDING = 8;
+
+/**
+ * Stacks the markers of one row so every glyph is drawn.
+ *
+ * Markers arrive in time order. Each takes the topmost lane whose last glyph has
+ * cleared, so two leaders a minute apart sit one above the other rather than one of
+ * them going unlabelled — which is what a bare hairline was: a mark whose whole point,
+ * saying which leader it is, had been dropped to save room.
+ */
+function assignLanes(xs: number[]): number[] {
+  const lastInLane: number[] = [];
+  return xs.map((x) => {
+    let lane = 0;
+    while (lastInLane[lane] !== undefined && x - lastInLane[lane] < GLYPH_WIDTH_PX) lane++;
+    lastInLane[lane] = x;
+    return lane;
+  });
+}
 
 /**
  * How far the timeline is stretched. 1 fits the card; the upper end gives roughly a
@@ -122,7 +143,6 @@ export function CrossingDistribution({ result }: Props) {
 
   const plotWidth = Math.max(640, binCount * 9) * zoom;
   const chartWidth = labelWidth + plotWidth + RIGHT_PAD;
-  const chartHeight = stations.length * ROW_HEIGHT + AXIS_HEIGHT;
 
   const spanSeconds = timeRangeSeconds.end - timeRangeSeconds.start || 1;
   const binWidth = plotWidth / binCount;
@@ -131,6 +151,15 @@ export function CrossingDistribution({ result }: Props) {
 
   const xForSeconds = (seconds: number) =>
     labelWidth + ((seconds - timeRangeSeconds.start) / spanSeconds) * plotWidth;
+
+  // Rows are only as tall as the busiest one needs. Stretching the timeline pulls
+  // markers apart, so the band shrinks back as lanes empty and the bars regain the room.
+  const rowLeads = stations.map((s) => leadsFor(s));
+  const rowLanes = rowLeads.map((leads) => assignLanes(leads.map((l) => xForSeconds(l.seconds))));
+  const laneCount = Math.max(1, ...rowLanes.map((lanes) => Math.max(0, ...lanes) + 1));
+  const markerBand = hasLeads ? BAND_PADDING + laneCount * LANE_STEP : 0;
+  const rowHeight = ROW_BODY + markerBand;
+  const chartHeight = stations.length * rowHeight + AXIS_HEIGHT;
 
   // Hour ticks across the shared axis, thinning to the quarter hour once stretched far
   // enough that every bin edge has room for its own time.
@@ -159,7 +188,7 @@ export function CrossingDistribution({ result }: Props) {
         {hasLeads && (
           <span className="legend-item" title="The fastest finisher of each sex, on each distance">
             <span className="legend-lead">♂♀</span>
-            First man / woman, coloured by distance
+            First Male / Female, coloured by distance
           </span>
         )}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: '0.6rem', alignItems: 'center' }}>
@@ -244,19 +273,16 @@ export function CrossingDistribution({ result }: Props) {
             ))}
 
             {stations.map((station, rowIndex) => {
-              const rowTop = rowIndex * ROW_HEIGHT;
-              const baseline = rowTop + ROW_HEIGHT - 6;
-              const usableHeight = ROW_HEIGHT - 14 - MARKER_BAND;
+              const rowTop = rowIndex * rowHeight;
+              const baseline = rowTop + rowHeight - 6;
+              const usableHeight = ROW_BODY - 14;
               const scaleMax = sharedScale ? globalMax : rowMax[rowIndex];
-              const leads = leadsFor(station);
-              // A glyph is only drawn where the previous one has cleared the space.
-              // Stretching the timeline pulls them apart, which is what the slider is
-              // for; until then the hairline still says a leader passed through here.
-              let lastGlyphX = -Infinity;
+              const leads = rowLeads[rowIndex];
+              const lanes = rowLanes[rowIndex];
 
               return (
                 <g key={station.schedule.name}>
-                  <text x={0} y={rowTop + ROW_HEIGHT / 2} className="row-label" dominantBaseline="middle">
+                  <text x={0} y={rowTop + rowHeight / 2} className="row-label" dominantBaseline="middle">
                     <title>{station.schedule.name}</title>
                     {truncateToWidth(station.schedule.name, labelTextWidth)}
                   </text>
@@ -290,9 +316,9 @@ export function CrossingDistribution({ result }: Props) {
                         {/* Hit target is wider than the mark so thin columns stay hoverable. */}
                         <rect
                           x={x - 2}
-                          y={rowTop + MARKER_BAND}
+                          y={rowTop + markerBand}
                           width={Math.max(binWidth + 4, 8)}
-                          height={ROW_HEIGHT - MARKER_BAND}
+                          height={rowHeight - markerBand}
                           fill="transparent"
                         />
                         {bin.byCourse.map((count, courseIndex) => {
@@ -332,12 +358,12 @@ export function CrossingDistribution({ result }: Props) {
                       before the bulk of the distribution and would otherwise be lost in a
                       column one runner tall. Coloured by distance, so a row carrying four
                       races says which leader is which. */}
-                  {leads.map((lead) => {
+                  {leads.map((lead, leadIndex) => {
                     const lx = xForSeconds(lead.seconds);
                     if (lx < labelWidth || lx > labelWidth + plotWidth) return null;
                     const colour = slotVar(Math.max(0, courseOrder.indexOf(lead.courseName)));
-                    const showGlyph = lx - lastGlyphX >= MIN_GLYPH_GAP_PX;
-                    if (showGlyph) lastGlyphX = lx;
+                    // Its lane's own height, so the line still joins glyph to baseline.
+                    const glyphY = rowTop + BAND_PADDING / 2 + lanes[leadIndex] * LANE_STEP + 5;
 
                     return (
                       <g
@@ -349,17 +375,15 @@ export function CrossingDistribution({ result }: Props) {
                       >
                         <rect
                           x={lx - 6}
-                          y={rowTop}
+                          y={glyphY - 6}
                           width={12}
-                          height={ROW_HEIGHT - 6}
+                          height={baseline - glyphY + 6}
                           fill="transparent"
                         />
-                        <line x1={lx} x2={lx} y1={rowTop + MARKER_BAND} y2={baseline} stroke={colour} />
-                        {showGlyph && (
-                          <text x={lx} y={rowTop + 6} textAnchor="middle" fill={colour}>
-                            {lead.sex === 'M' ? '♂' : '♀'}
-                          </text>
-                        )}
+                        <line x1={lx} x2={lx} y1={glyphY + 6} y2={baseline} stroke={colour} />
+                        <text x={lx} y={glyphY} textAnchor="middle" fill={colour}>
+                          {lead.sex === 'M' ? '♂' : '♀'}
+                        </text>
                       </g>
                     );
                   })}
@@ -488,8 +512,8 @@ function DistributionTable({ result }: { result: PipelineResult }) {
             <th className="num">Runners in window</th>
             <th className="num">Rate /hr</th>
             <th>Busiest distance</th>
-            {hasLeads && <th className="num">First man</th>}
-            {hasLeads && <th className="num">First woman</th>}
+            {hasLeads && <th className="num">First Male</th>}
+            {hasLeads && <th className="num">First Female</th>}
           </tr>
         </thead>
         <tbody>

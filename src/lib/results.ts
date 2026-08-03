@@ -345,7 +345,7 @@ export function parseResultsCsv(text: string, options: ResultsParseOptions = {})
 
     if (implausibleLeaders > 0) {
       profileWarnings.push(
-        `${implausibleLeaders} finisher(s) in "${contest}" are timed faster than any human runs — they are left out of the first man/woman markers.`
+        `${implausibleLeaders} finisher(s) in "${contest}" are timed faster than any human runs — they are left out of the First Male / Female markers.`
       );
     }
 
