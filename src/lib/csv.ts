@@ -1,8 +1,41 @@
 import { parseClockTimeToSeconds } from './time';
 import { DEFAULT_PACE_BOUNDS, type PaceBounds } from './config';
 
-/** Minimal RFC4180-ish CSV parser: handles quoted fields, embedded commas/quotes, and CRLF/LF. */
-function parseCsvRows(text: string): string[][] {
+/**
+ * Works out what separates the columns.
+ *
+ * A spreadsheet saved in much of Europe and Asia writes semicolons, because the comma is
+ * the decimal point there. A file like that parsed as comma-separated collapses into a
+ * single column whose name is the whole header line, and the error it produces —
+ * "expected one of Contest / Race / Event" against a header that plainly says Contest —
+ * blames the file rather than the assumption.
+ *
+ * Counted outside quotes on the header line, so a separator inside a field name cannot
+ * win the vote.
+ */
+function detectDelimiter(text: string): string {
+  const header = text.split(/\r?\n/, 1)[0] ?? '';
+  const counts = new Map<string, number>([[',', 0], [';', 0], ['\t', 0], ['|', 0]]);
+
+  let inQuotes = false;
+  for (let i = 0; i < header.length; i++) {
+    const c = header[i];
+    if (c === '"') {
+      inQuotes = !inQuotes;
+    } else if (!inQuotes && counts.has(c)) {
+      counts.set(c, counts.get(c)! + 1);
+    }
+  }
+
+  let best = ',';
+  for (const [candidate, count] of counts) {
+    if (count > (counts.get(best) ?? 0)) best = candidate;
+  }
+  return best;
+}
+
+/** Minimal RFC4180-ish parser: handles quoted fields, embedded separators/quotes, and CRLF/LF. */
+function parseCsvRows(text: string, delimiter = ','): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';
@@ -37,7 +70,7 @@ function parseCsvRows(text: string): string[][] {
 
     if (c === '"') {
       inQuotes = true;
-    } else if (c === ',') {
+    } else if (c === delimiter) {
       pushField();
     } else if (c === '\r') {
       // ignore; \n (handled below) closes the row
@@ -64,9 +97,12 @@ function parseCsvRows(text: string): string[][] {
 function unwrapDoubleEncoded(rows: string[][]): string[][] {
   if (rows.length === 0) return rows;
   if (!rows.every((row) => row.length === 1)) return rows;
-  if (!rows[0][0].includes(',')) return rows;
 
-  const reparsed = parseCsvRows(rows.map((row) => row[0]).join('\n'));
+  const joined = rows.map((row) => row[0]).join('\n');
+  const inner = detectDelimiter(joined);
+  if (!rows[0][0].includes(inner)) return rows;
+
+  const reparsed = parseCsvRows(joined, inner);
   return reparsed[0]?.length > 1 ? reparsed : rows;
 }
 
@@ -74,7 +110,8 @@ function unwrapDoubleEncoded(rows: string[][]): string[][] {
 export function parseCsv(text: string): Record<string, string>[] {
   // Timing exports are commonly UTF-8 with a BOM; left in place it becomes part of the
   // first header name, so "Contest" silently stops matching.
-  const rows = unwrapDoubleEncoded(parseCsvRows(text.replace(/^﻿/, '')));
+  const body = text.replace(/^﻿/, '');
+  const rows = unwrapDoubleEncoded(parseCsvRows(body, detectDelimiter(body)));
   if (rows.length === 0) return [];
 
   // A stray quote survives a malformed header such as `"Contest"""`, which real

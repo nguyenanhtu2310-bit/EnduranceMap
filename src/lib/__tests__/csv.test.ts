@@ -110,3 +110,33 @@ describe('matchSplitsToCheckpoints', () => {
     expect(results[1].medianPaceMinPerKm).toBeNull();
   });
 });
+
+describe('however the columns are separated', () => {
+  it('reads a semicolon-separated export', () => {
+    // A spreadsheet saved where the comma is the decimal point writes semicolons.
+    const rows = parseCsv('"Contest";"ChipTime";"Run Pace"\n"FULL MARATHON";"2:39:16";"3:44"');
+    expect(Object.keys(rows[0])).toEqual(['Contest', 'ChipTime', 'Run Pace']);
+    expect(rows[0]['Contest']).toBe('FULL MARATHON');
+  });
+
+  it.each([
+    [',', 'comma'],
+    [';', 'semicolon'],
+    ['\t', 'tab'],
+    ['|', 'pipe'],
+  ])('reads %s-separated (%s)', (d) => {
+    const rows = parseCsv(`Contest${d}ChipTime\n10K${d}0:42:00`);
+    expect(rows[0]).toEqual({ Contest: '10K', ChipTime: '0:42:00' });
+  });
+
+  it('does not let a separator inside a field name win the vote', () => {
+    // One comma in a quoted heading against three real semicolons.
+    const rows = parseCsv('"Contest";"Time, net";"Pace";"Status"\n"5K";"0:25:00";"5:00";""');
+    expect(Object.keys(rows[0])).toEqual(['Contest', 'Time, net', 'Pace', 'Status']);
+  });
+
+  it('still reads a comma file whose fields contain semicolons', () => {
+    const rows = parseCsv('Contest,Note\n10K,"first; second"');
+    expect(rows[0]['Note']).toBe('first; second');
+  });
+});

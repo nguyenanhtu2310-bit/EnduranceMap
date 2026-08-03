@@ -169,6 +169,10 @@ export const PACE_COLUMN_NAMES = [
   'Avg Pace',
   'Finish Pace',
   'FinishPace',
+  // A running race's export often heads its overall pace "Run Pace" — there is only one
+  // leg, so it is the same figure by another name.
+  'Run Pace',
+  'RunPace',
   'Pace',
 ];
 
