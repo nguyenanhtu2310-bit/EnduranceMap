@@ -30,10 +30,12 @@ const MIN_LABEL_WIDTH = 96;
 const MAX_LABEL_WIDTH = 280;
 /** Approximate advance of the 12px label face; SVG text cannot wrap or ellipsize itself. */
 const LABEL_CHAR_PX = 6.2;
-/** Horizontal room one ♂/♀ needs before the next would touch it. */
-const GLYPH_WIDTH_PX = 12;
-/** Vertical spacing between stacked glyph lanes. */
+/** Glyph face at full height, and the floor below which ♂/♀ stops being a shape. */
+const GLYPH_PX = 11;
+const MIN_GLYPH_PX = 7;
+/** Vertical spacing between stacked glyph lanes, and its floor. */
 const LANE_STEP = 11;
+const MIN_LANE_STEP = 8;
 /** Clearance above the first lane and below the last, so nothing touches a bar. */
 const BAND_PADDING = 8;
 
@@ -45,11 +47,11 @@ const BAND_PADDING = 8;
  * them going unlabelled — which is what a bare hairline was: a mark whose whole point,
  * saying which leader it is, had been dropped to save room.
  */
-function assignLanes(xs: number[]): number[] {
+function assignLanes(xs: number[], glyphWidth: number): number[] {
   const lastInLane: number[] = [];
   return xs.map((x) => {
     let lane = 0;
-    while (lastInLane[lane] !== undefined && x - lastInLane[lane] < GLYPH_WIDTH_PX) lane++;
+    while (lastInLane[lane] !== undefined && x - lastInLane[lane] < glyphWidth) lane++;
     lastInLane[lane] = x;
     return lane;
   });
@@ -61,6 +63,15 @@ function assignLanes(xs: number[]): number[] {
  */
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 10;
+
+/**
+ * How tall each row is drawn, as a multiple of its natural height. A timing map with a
+ * hundred points makes a chart taller than any screen, and the whole of it is what goes
+ * into a briefing — so the rows compress. Glyphs and lanes shrink with the rows but stop
+ * at a floor, past which the marks stop being readable and the saving is not worth it.
+ */
+const MIN_HEIGHT = 0.4;
+const MAX_HEIGHT = 1.5;
 
 function truncateToWidth(text: string, widthPx: number): string {
   const maxChars = Math.max(4, Math.floor(widthPx / LABEL_CHAR_PX));
@@ -92,6 +103,7 @@ export function CrossingDistribution({ result }: Props) {
   const [showTable, setShowTable] = useState(false);
   const [sharedScale, setSharedScale] = useState(true);
   const [zoom, setZoom] = useState(MIN_ZOOM);
+  const [height, setHeight] = useState(1);
 
   /**
    * Tooltips are positioned against this box rather than against the scrolling strip
@@ -152,13 +164,24 @@ export function CrossingDistribution({ result }: Props) {
   const xForSeconds = (seconds: number) =>
     labelWidth + ((seconds - timeRangeSeconds.start) / spanSeconds) * plotWidth;
 
+  // Everything vertical scales together, so compressing the rows never leaves a glyph
+  // sitting on a bar. Each has a floor: past it the marks stop being legible and the
+  // height saved is not worth what it costs to read.
+  const glyphPx = Math.max(MIN_GLYPH_PX, Math.round(GLYPH_PX * height));
+  const laneStep = Math.max(MIN_LANE_STEP, Math.round(LANE_STEP * height));
+  const bandPadding = Math.max(4, Math.round(BAND_PADDING * height));
+  const rowBody = Math.max(16, Math.round(ROW_BODY * height));
+  const baselinePad = Math.max(3, Math.round(6 * height));
+
   // Rows are only as tall as the busiest one needs. Stretching the timeline pulls
   // markers apart, so the band shrinks back as lanes empty and the bars regain the room.
   const rowLeads = stations.map((s) => leadsFor(s));
-  const rowLanes = rowLeads.map((leads) => assignLanes(leads.map((l) => xForSeconds(l.seconds))));
+  const rowLanes = rowLeads.map((leads) =>
+    assignLanes(leads.map((l) => xForSeconds(l.seconds)), glyphPx + 1)
+  );
   const laneCount = Math.max(1, ...rowLanes.map((lanes) => Math.max(0, ...lanes) + 1));
-  const markerBand = hasLeads ? BAND_PADDING + laneCount * LANE_STEP : 0;
-  const rowHeight = ROW_BODY + markerBand;
+  const markerBand = hasLeads ? bandPadding + laneCount * laneStep : 0;
+  const rowHeight = rowBody + markerBand;
   const chartHeight = stations.length * rowHeight + AXIS_HEIGHT;
 
   // Hour ticks across the shared axis, thinning to the quarter hour once stretched far
@@ -226,14 +249,33 @@ export function CrossingDistribution({ result }: Props) {
             />
             <span className="muted small tabular">{zoom.toFixed(1)}×</span>
           </label>
-          {zoom > MIN_ZOOM && (
-            <button className="secondary" onClick={() => setZoom(MIN_ZOOM)}>
+          <label className="zoom-control">
+            <span className="muted small">Height</span>
+            <input
+              type="range"
+              min={MIN_HEIGHT}
+              max={MAX_HEIGHT}
+              step={0.1}
+              value={height}
+              onChange={(e) => setHeight(Number(e.target.value))}
+              aria-label="Row height"
+            />
+            <span className="muted small tabular">{height.toFixed(1)}×</span>
+          </label>
+          {(zoom !== MIN_ZOOM || height !== 1) && (
+            <button
+              className="secondary"
+              onClick={() => {
+                setZoom(MIN_ZOOM);
+                setHeight(1);
+              }}
+            >
               Fit
             </button>
           )}
           <span className="hint" style={{ margin: 0 }}>
-            {Math.round(binWidth)}px per {binMinutes}-minute window. Drag the chart sideways to move
-            along the day.
+            {Math.round(binWidth)}px per {binMinutes}-minute window, {chartHeight}px tall. Drag the
+            chart sideways to move along the day.
           </span>
         </div>
       )}
@@ -274,8 +316,8 @@ export function CrossingDistribution({ result }: Props) {
 
             {stations.map((station, rowIndex) => {
               const rowTop = rowIndex * rowHeight;
-              const baseline = rowTop + rowHeight - 6;
-              const usableHeight = ROW_BODY - 14;
+              const baseline = rowTop + rowHeight - baselinePad;
+              const usableHeight = Math.max(6, rowBody - baselinePad * 2);
               const scaleMax = sharedScale ? globalMax : rowMax[rowIndex];
               const leads = rowLeads[rowIndex];
               const lanes = rowLanes[rowIndex];
@@ -363,7 +405,8 @@ export function CrossingDistribution({ result }: Props) {
                     if (lx < labelWidth || lx > labelWidth + plotWidth) return null;
                     const colour = slotVar(Math.max(0, courseOrder.indexOf(lead.courseName)));
                     // Its lane's own height, so the line still joins glyph to baseline.
-                    const glyphY = rowTop + BAND_PADDING / 2 + lanes[leadIndex] * LANE_STEP + 5;
+                    const glyphY =
+                      rowTop + bandPadding / 2 + lanes[leadIndex] * laneStep + glyphPx / 2;
 
                     return (
                       <g
@@ -373,15 +416,23 @@ export function CrossingDistribution({ result }: Props) {
                           setHover({ kind: 'lead', lead, station: station.schedule.name, ...anchorFrom(e) })
                         }
                       >
+                        {/* The hit target keeps a full-size reach whatever the rows are
+                            squashed to, so a compressed chart is still hoverable. */}
                         <rect
                           x={lx - 6}
-                          y={glyphY - 6}
+                          y={glyphY - GLYPH_PX / 2}
                           width={12}
-                          height={baseline - glyphY + 6}
+                          height={Math.max(8, baseline - glyphY + GLYPH_PX / 2)}
                           fill="transparent"
                         />
-                        <line x1={lx} x2={lx} y1={glyphY + 6} y2={baseline} stroke={colour} />
-                        <text x={lx} y={glyphY} textAnchor="middle" fill={colour}>
+                        <line x1={lx} x2={lx} y1={glyphY + glyphPx / 2} y2={baseline} stroke={colour} />
+                        <text
+                          x={lx}
+                          y={glyphY}
+                          textAnchor="middle"
+                          fill={colour}
+                          style={{ fontSize: `${glyphPx}px` }}
+                        >
                           {lead.sex === 'M' ? '♂' : '♀'}
                         </text>
                       </g>
