@@ -739,6 +739,11 @@ export function parseMultisportResultsCsv(
     });
   }
 
+  // Longest race first, to match the single-sport panel and the pace band beside it.
+  // An event carrying six contests is read from the hardest down.
+  const totalKm = (p: MultisportProfile) => p.legs.reduce((km, leg) => km + leg.distanceKm, 0);
+  profiles.sort((a, b) => totalKm(b) - totalKm(a) || a.label.localeCompare(b.label));
+
   const dropped = startedRows - profiles.reduce((n, p) => n + p.usable, 0);
   if (dropped > 0) {
     warnings.push(

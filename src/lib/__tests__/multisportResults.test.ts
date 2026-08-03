@@ -398,3 +398,23 @@ describe('a transition the timing system wrote as zero', () => {
     expect(profiles[0].athletes[0].legSeconds[1]).toBe(0);
   });
 });
+
+describe('contest order', () => {
+  // Written shortest first, which is how an export usually falls out of the timing
+  // system — the panel should still read from the longest race down.
+  const mixed =
+    '"Contest","Swim","T1","Bike","T2","Run"\n' +
+    '"Sprint","0:15:00","0:02:00","0:40:00","0:01:30","0:25:00"\n' +
+    '"Sprint","0:16:00","0:02:10","0:42:00","0:01:40","0:27:00"\n' +
+    '"IM70.3","0:35:00","0:04:00","2:45:00","0:03:00","1:45:00"\n' +
+    '"IM70.3","0:38:00","0:04:30","2:55:00","0:03:20","1:55:00"\n';
+
+  it('puts the longest race on top and the shortest at the bottom', () => {
+    const { profiles } = parseMultisportResultsCsv(mixed);
+    const totals = profiles.map((p) => p.legs.reduce((km, leg) => km + leg.distanceKm, 0));
+    expect(profiles.map((p) => p.label)).toEqual(['IM70.3', 'Sprint']);
+    for (let i = 1; i < totals.length; i++) {
+      expect(totals[i]).toBeLessThanOrEqual(totals[i - 1]);
+    }
+  });
+});

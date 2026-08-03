@@ -465,7 +465,16 @@ export default function App() {
       }
       const detected = listPlacemarkFolders(parsed.placemarks);
       setKml({ text, fileName });
-      setRows(courses.map((c) => seedRow(c.name, c.totalKm)));
+      // Longest distance on top, shortest at the bottom, rather than whatever order the
+      // routes happened to be drawn in. The long course sets the day's outer envelope —
+      // first start, last finish — so it is the one the plan is read down from. The
+      // course list itself keeps its map order, since that is what the multisport leg
+      // bindings are picked from and there a swim belongs beside its own run.
+      setRows(
+        [...courses]
+          .sort((a, b) => b.totalKm - a.totalKm)
+          .map((c) => seedRow(c.name, c.totalKm))
+      );
       setCourses(courses);
       setFolders(detected);
       setSelectedFolders(defaultSelection(detected));
