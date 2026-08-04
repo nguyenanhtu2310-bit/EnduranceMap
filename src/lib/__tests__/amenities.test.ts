@@ -134,14 +134,14 @@ describe('report sections', () => {
 
     const scheduleOnly = buildReportHtml(result, {
       ...base,
-      sections: { schedule: true, perDistance: false, splits: false, distribution: false, cutoffs: false },
+      sections: { schedule: true, perDistance: false, splits: false, distribution: false, stationTraffic: false, cutoffs: false },
     });
     expect(scheduleOnly).toContain('Station operating schedule');
     expect(scheduleOnly).not.toContain('Cut-off times');
 
     const cutoffsOnly = buildReportHtml(result, {
       ...base,
-      sections: { schedule: false, perDistance: false, splits: false, distribution: false, cutoffs: true },
+      sections: { schedule: false, perDistance: false, splits: false, distribution: false, stationTraffic: false, cutoffs: true },
     });
     expect(cutoffsOnly).not.toContain('Station operating schedule');
   });

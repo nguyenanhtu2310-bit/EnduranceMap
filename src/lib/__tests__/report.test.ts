@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_AMENITY_RULES } from '../amenities';
 import { runPipeline, type DistanceInput } from '../pipeline';
 import { parseClockTimeToSeconds, secondsToClockTime } from '../time';
-import { buildReportHtml } from '../report';
+import { ALL_REPORT_SECTIONS, buildReportHtml } from '../report';
+import { buildStationTraffic } from '../stationTraffic';
 import { buildReportSheets } from '../workbook';
 
 const kml = readFileSync(resolve(process.cwd(), 'src/test/fixtures/sample.kml'), 'utf-8');
@@ -331,8 +332,62 @@ describe('the spreadsheet covers the same five sections', () => {
       raceName: 'Fixture race',
       rules: DEFAULT_AMENITY_RULES,
       overrides: {},
-      sections: { schedule: false, perDistance: false, splits: false, distribution: true, cutoffs: false },
+      sections: { schedule: false, perDistance: false, splits: false, distribution: true, stationTraffic: false, cutoffs: false },
     });
     expect(only.map((s) => s.name)).toEqual(['Summary', 'Crossing distribution']);
+  });
+});
+
+describe('traffic at each point', () => {
+  const withLeaders = runPipeline(kml, [
+    {
+      ...inputs[0],
+      leaders: [
+        { sex: 'M', startOffsetSeconds: 0, paceMinPerKm: 4, finishSeconds: 40 * 60 },
+        { sex: 'F', startOffsetSeconds: 30, paceMinPerKm: 5, finishSeconds: 50 * 60 },
+      ],
+    },
+  ]);
+  const base = { raceName: 'Fixture race', rules: DEFAULT_AMENITY_RULES, overrides: {} };
+  const withTraffic = buildReportHtml(withLeaders, {
+    ...base,
+    sections: { ...ALL_REPORT_SECTIONS, stationTraffic: true },
+  });
+
+  it('prints one block per point', () => {
+    expect((withTraffic.match(/class="station-block"/g) ?? []).length).toBe(withLeaders.stations.length);
+  });
+
+  it('writes the figure on every bar, since a printout cannot be hovered', () => {
+    const block = withTraffic.slice(withTraffic.indexOf('class="station-block"'));
+    const svg = block.slice(block.indexOf('<svg'), block.indexOf('</svg>'));
+    const bars = (svg.match(/<rect /g) ?? []).length;
+    const numbers = [...svg.matchAll(/<text[^>]*font-size="9"[^>]*>([\d,]+)<\/text>/g)].length;
+    expect(bars).toBeGreaterThan(0);
+    expect(numbers).toBe(bars);
+  });
+
+  it('repeats the figures as a table, one row per distance', () => {
+    const at = withTraffic.indexOf('<h2>Traffic at each point</h2>');
+    const table = withTraffic.slice(at, withTraffic.indexOf('</table>', at));
+    expect(table).toContain('<th>Distance</th>');
+    expect(table).toContain('<th class="num">Total</th>');
+    expect(table).toContain('<strong>All</strong>');
+  });
+
+  it('stays out of the report unless it is asked for', () => {
+    // A hundred points would be a hundred charts, so it is off by default.
+    expect(ALL_REPORT_SECTIONS.stationTraffic).toBe(false);
+    expect(buildReportHtml(withLeaders, base)).not.toContain('Traffic at each point');
+  });
+
+  it('shows a point only in the windows it is working', () => {
+    // The shared grid spans the whole race; a point idle till 06:00 must not print
+    // three hours of empty columns for a crew to read past.
+    const station = withLeaders.stations.find((s) => s.distribution.some((b) => b.total > 0))!;
+    const view = buildStationTraffic(station, withLeaders.courseOrder)!;
+    expect(view.active.length).toBeLessThanOrEqual(station.distribution.length);
+    expect(view.active[0].total).toBeGreaterThan(0);
+    expect(view.active[view.active.length - 1].total).toBeGreaterThan(0);
   });
 });

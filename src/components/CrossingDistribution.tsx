@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import type { LeadArrival, PipelineResult, PipelineStation } from '../lib/pipeline';
 import { secondsToClockTime } from '../lib/time';
+import { StationTraffic } from './StationTraffic';
 import {
   assignLeadLanes,
   firstLeadOfSex,
@@ -95,7 +96,13 @@ type Hover = BinHover | LeadHover;
 
 export function CrossingDistribution({ result }: Props) {
   const [hover, setHover] = useState<Hover | null>(null);
-  const [showTable, setShowTable] = useState(false);
+  /**
+   * 'chart' is the race day at a glance; 'stations' is the same data one point at a
+   * time, the way a crew standing at that point needs it. 'table' is the accessible
+   * twin of the overview.
+   */
+  const [view, setView] = useState<'chart' | 'table' | 'stations'>('chart');
+  const [openStations, setOpenStations] = useState<Record<string, boolean>>({});
   const [sharedScale, setSharedScale] = useState(true);
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [height, setHeight] = useState(MIN_HEIGHT);
@@ -193,7 +200,7 @@ export function CrossingDistribution({ result }: Props) {
     <div className="viz-root" ref={boxRef}>
       <div className="chart-legend">
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: '0.6rem', alignItems: 'center' }}>
-          {!showTable && (
+          {view === 'chart' && (
             <button
               className="secondary"
               onClick={() => setSharedScale((v) => !v)}
@@ -206,13 +213,20 @@ export function CrossingDistribution({ result }: Props) {
               {sharedScale ? 'Scale: shared' : 'Scale: per station'}
             </button>
           )}
-          <button className="secondary" onClick={() => setShowTable((v) => !v)}>
-            {showTable ? 'Show chart' : 'Show table'}
+          <button className="secondary" onClick={() => setView((v) => (v === 'table' ? 'chart' : 'table'))}>
+            {view === 'table' ? 'Show chart' : 'Show table'}
+          </button>
+          <button
+            className="secondary"
+            onClick={() => setView((v) => (v === 'stations' ? 'chart' : 'stations'))}
+            title="One chart per point, with the figures a crew works from"
+          >
+            {view === 'stations' ? 'Show overview' : 'Per station'}
           </button>
         </span>
       </div>
 
-      {!showTable && (
+      {view === 'chart' && (
         <div className="chart-controls">
           <label className="zoom-control">
             <span className="muted small">Stretch</span>
@@ -258,7 +272,7 @@ export function CrossingDistribution({ result }: Props) {
         </div>
       )}
 
-      {!showTable && (
+      {view === 'chart' && (
         <p className="hint" style={{ margin: '-0.35rem 0 0.85rem' }}>
           {sharedScale
             ? 'All rows share one height scale, so bar heights are comparable between stations. Quiet stations look flat because they genuinely see fewer runners.'
@@ -269,7 +283,7 @@ export function CrossingDistribution({ result }: Props) {
       {/* The key sits directly above the plot, under the sliders, because a screenshot
           of the chart has to carry the distances it is coloured by — cropping to the
           bars alone leaves four unexplained colours. */}
-      {!showTable && (
+      {view === 'chart' && (
         <div className="chart-legend chart-key">
           {courseOrder.map((courseName, i) => (
             <span key={courseName} className="legend-item">
@@ -290,9 +304,55 @@ export function CrossingDistribution({ result }: Props) {
         </div>
       )}
 
-      {showTable ? (
-        <DistributionTable result={result} />
-      ) : (
+      {view === 'table' && <DistributionTable result={result} />}
+
+      {view === 'stations' && (
+        <div className="station-list">
+          <p className="hint">
+            One point at a time, with every figure printed on the bar. Open the point a crew is
+            working and hand them the page — this is the view a finish-line team plans from.
+          </p>
+          {stations.map((station) => {
+            const open = openStations[station.schedule.name] ?? false;
+            const busiest = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
+            return (
+              <div className="station-detail" key={station.schedule.name}>
+                <button
+                  type="button"
+                  className="section-toggle"
+                  aria-expanded={open}
+                  onClick={() =>
+                    setOpenStations((current) => ({
+                      ...current,
+                      [station.schedule.name]: !open,
+                    }))
+                  }
+                >
+                  <span className="section-caret" aria-hidden="true">
+                    {open ? '▾' : '▸'}
+                  </span>
+                  <h3>{station.schedule.name}</h3>
+                  <span className="section-summary muted small">
+                    {busiest
+                      ? `busiest ${formatHm(busiest.binStartSeconds)} — ${busiest.total.toLocaleString()} through`
+                      : 'no arrivals'}
+                  </span>
+                </button>
+                {open && (
+                  <StationTraffic
+                    station={station}
+                    courseOrder={courseOrder}
+                    binMinutes={binMinutes}
+                    colourFor={slotVar}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {view === 'chart' && (
         <div className="table-scroll chart-scroll">
           <svg
             width={chartWidth}
@@ -447,7 +507,7 @@ export function CrossingDistribution({ result }: Props) {
         </div>
       )}
 
-      {!showTable && hover?.kind === 'bin' && hoveredBin && hoveredStation && (
+      {view === 'chart' && hover?.kind === 'bin' && hoveredBin && hoveredStation && (
         <ChartTooltip anchor={hover} box={boxRef.current}>
           <strong>{hoveredStation.schedule.name}</strong>
           <span className="muted small">
@@ -475,7 +535,7 @@ export function CrossingDistribution({ result }: Props) {
         </ChartTooltip>
       )}
 
-      {!showTable && hover?.kind === 'lead' && (
+      {view === 'chart' && hover?.kind === 'lead' && (
         <ChartTooltip anchor={hover} box={boxRef.current}>
           <strong>{hover.station}</strong>
           <span className="muted small">{sexLabel(hover.lead.sex)}</span>

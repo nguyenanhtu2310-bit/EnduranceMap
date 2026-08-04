@@ -16,6 +16,7 @@ import {
   sexLabel,
 } from './leadMarkers';
 import { peakRunnersPerWindow } from './schedule';
+import { buildStationTraffic, courseTotal, type StationTrafficView } from './stationTraffic';
 import { SPORTSTATS_LOGO_DATA_URI } from '../assets/sportstatsLogo';
 
 /** Which parts of the plan to print. An organiser rarely needs all of it at once. */
@@ -24,6 +25,8 @@ export interface ReportSections {
   perDistance: boolean;
   splits: boolean;
   distribution: boolean;
+  /** One chart per point, with every figure printed — the sheet a crew is handed. */
+  stationTraffic: boolean;
   cutoffs: boolean;
 }
 
@@ -32,6 +35,11 @@ export const REPORT_SECTIONS: { key: keyof ReportSections; label: string; hint: 
   { key: 'perDistance', label: 'Course amenities', hint: 'Stops, gaps and amenities per race' },
   { key: 'splits', label: 'Split calculation', hint: 'Every point by distance, with km on each route' },
   { key: 'distribution', label: 'Crossing time distribution', hint: 'Peak window and load per station' },
+  {
+    key: 'stationTraffic',
+    label: 'Traffic at each point',
+    hint: 'A chart and table per point, for the crew working it — long',
+  },
   { key: 'cutoffs', label: 'Cut-off times', hint: 'Proposed cut-offs against modelled arrivals' },
 ];
 
@@ -40,6 +48,9 @@ export const ALL_REPORT_SECTIONS: ReportSections = {
   perDistance: true,
   splits: true,
   distribution: true,
+  // Off by default: a hundred-point map turns this into a hundred charts, which is a
+  // briefing pack rather than a plan. Ticked when the crew sheets are being produced.
+  stationTraffic: false,
   cutoffs: true,
 };
 
@@ -200,6 +211,55 @@ function buildDistributionSvg(result: PipelineResult, series: string[], ink: { l
   });
 
   return `<svg viewBox="0 0 ${width} ${height}" width="100%" role="img" aria-label="Runner arrivals over time at each station" style="max-width:${width}px">${parts.join('')}</svg>`;
+}
+
+/**
+ * One point's traffic as the crew reads it: a bar per distance per window, each bar
+ * carrying its own figure, and the same figures repeated as a table underneath.
+ *
+ * The organiser at Da Nang briefed his finish team from a photograph of exactly this,
+ * printed off a spreadsheet. Printing it here means the numbers come from the plan
+ * rather than from a chart someone rebuilt by hand.
+ */
+function buildStationTrafficSvg(
+  view: StationTrafficView,
+  series: string[],
+  ink: { label: string; axis: string; base: string }
+): string {
+  const BAR_GAP = 2;
+  const GROUP_GAP = 14;
+  const PLOT_H = 170;
+  const TOP_BAND = 16;
+  const AXIS_BAND = 20;
+
+  const barW = Math.max(7, 30 - view.present.length * 4);
+  const groupW = view.present.length * (barW + BAR_GAP) + GROUP_GAP;
+  const width = 4 + view.active.length * groupW;
+  const height = TOP_BAND + PLOT_H + AXIS_BAND;
+  const baseline = TOP_BAND + PLOT_H;
+
+  const parts: string[] = [
+    `<line x1="4" y1="${baseline}" x2="${width}" y2="${baseline}" stroke="${ink.base}" stroke-width="1"/>`,
+  ];
+
+  view.active.forEach((bin, binIndex) => {
+    const groupLeft = 4 + binIndex * groupW + GROUP_GAP / 2;
+    view.present.forEach(({ index }, slot) => {
+      const count = bin.byCourse[index] ?? 0;
+      if (count === 0) return;
+      const h = (count / view.max) * PLOT_H;
+      const x = groupLeft + slot * (barW + BAR_GAP);
+      parts.push(
+        `<rect x="${x.toFixed(1)}" y="${(baseline - h).toFixed(1)}" width="${barW}" height="${Math.max(h, 1).toFixed(1)}" fill="${series[index % series.length]}"/>` +
+          `<text x="${(x + barW / 2).toFixed(1)}" y="${(baseline - h - 4).toFixed(1)}" text-anchor="middle" fill="${ink.label}" font-size="9">${count.toLocaleString()}</text>`
+      );
+    });
+    parts.push(
+      `<text x="${(groupLeft + (view.present.length * (barW + BAR_GAP)) / 2).toFixed(1)}" y="${baseline + 14}" text-anchor="middle" fill="${ink.axis}" font-size="10">${secondsToClockTime(bin.binStartSeconds).slice(0, 5)}</text>`
+    );
+  });
+
+  return `<svg viewBox="0 0 ${width} ${height}" width="100%" role="img" aria-label="Arrivals per window" style="max-width:${width}px">${parts.join('')}</svg>`;
 }
 
 /**
@@ -441,6 +501,63 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         </tr></thead><tbody>${body}</tbody></table>`;
       })();
 
+  const stationTrafficSection = !sections.stationTraffic
+    ? ''
+    : (() => {
+        const series = dark ? DARK_SERIES : LIGHT_SERIES;
+        const ink = dark
+          ? { label: '#f3f8ff', axis: 'rgba(243,248,255,0.4)', base: 'rgba(243,248,255,0.22)' }
+          : { label: '#16221f', axis: '#7b8a87', base: '#c7d0cd' };
+
+        const blocks = result.stations
+          .map((station) => {
+            const view = buildStationTraffic(station, result.courseOrder);
+            if (!view) return '';
+
+            const head = view.active
+              .map((bin) => `<th class="num">${secondsToClockTime(bin.binStartSeconds).slice(0, 5)}</th>`)
+              .join('');
+            const body = view.present
+              .map(({ name, index }) => {
+                const cells = view.active
+                  .map((bin) => `<td class="num">${bin.byCourse[index] ? bin.byCourse[index].toLocaleString() : ''}</td>`)
+                  .join('');
+                return `<tr><td><span class="swatch" style="background:${series[index % series.length]}"></span>${esc(name)}</td>${cells}<td class="num"><strong>${courseTotal(view, index).toLocaleString()}</strong></td></tr>`;
+              })
+              .join('');
+            const totals = view.active
+              .map((bin) => `<td class="num"><strong>${bin.total ? bin.total.toLocaleString() : ''}</strong></td>`)
+              .join('');
+            const allThrough = view.active.reduce((sum, bin) => sum + bin.total, 0);
+
+            const man = firstLeadOfSex(station, 'M');
+            const woman = firstLeadOfSex(station, 'F');
+            const lead = [
+              man ? `${sexGlyph('M')} ${secondsToClockTime(man.seconds).slice(0, 5)}` : '',
+              woman ? `${sexGlyph('F')} ${secondsToClockTime(woman.seconds).slice(0, 5)}` : '',
+            ]
+              .filter(Boolean)
+              .join(' &middot; ');
+
+            return `<div class="station-block">
+              <h3>${esc(station.schedule.name)}</h3>
+              <p class="note">${secondsToClockTime(view.active[0].binStartSeconds).slice(0, 5)}–${secondsToClockTime(
+                view.active[view.active.length - 1].binEndSeconds
+              ).slice(0, 5)}, in ${result.binMinutes}-minute windows. Busiest ${view.busiest.toLocaleString()} through in one window, ${allThrough.toLocaleString()} in all.${
+                lead ? ` First through: ${lead}.` : ''
+              }</p>
+              ${buildStationTrafficSvg(view, series, ink)}
+              <table><thead><tr><th>Distance</th>${head}<th class="num">Total</th></tr></thead>
+              <tbody>${body}<tr class="total"><td><strong>All</strong></td>${totals}<td class="num"><strong>${allThrough.toLocaleString()}</strong></td></tr></tbody></table>
+            </div>`;
+          })
+          .join('');
+
+        return `<h2>Traffic at each point</h2>
+        <p class="note">One point at a time, with every figure printed on the bar — the page a crew works from. Distances stand side by side rather than stacked, so each race can be counted on its own.</p>
+        ${blocks}`;
+      })();
+
   const sources = [
     options.sourceFileName ? `Course map: ${esc(options.sourceFileName)}` : '',
     options.resultsFileName ? `Pace from: ${esc(options.resultsFileName)}` : 'Pace from entered bands',
@@ -508,6 +625,8 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   .cot-final { color: var(--accent); }
   .cot-other { color: var(--muted); }
   .final-row td { background: ${dark ? 'rgba(7, 188, 2, 0.07)' : '#f2faf5'}; }
+  .station-block { margin: 18px 0 26px; page-break-inside: avoid; }
+  .station-block h3 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
   .final-tag {
     display: inline-block; margin-right: 6px; padding: 1px 5px; border-radius: 4px;
     background: ${dark ? 'rgba(7, 188, 2, 0.16)' : '#dff2e5'};
@@ -580,6 +699,8 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   ${splitTable}
 
   ${distributionTable}
+
+  ${stationTrafficSection}
 
   ${
     cutoffRows

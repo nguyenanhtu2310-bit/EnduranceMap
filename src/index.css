@@ -664,6 +664,43 @@ tr.drop-target td {
   margin-top: 0.3rem;
 }
 
+/* — per-station traffic — */
+
+.station-detail {
+  border-top: 1px solid var(--color-divider);
+  padding: 0.6rem 0;
+}
+
+.station-detail .section-toggle h3 {
+  margin: 0;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+.station-traffic {
+  margin: 0.7rem 0 0.3rem;
+}
+
+/*
+ * Every bar states its own number, the way the crew's spreadsheet chart does. A tooltip
+ * is no use to someone reading a printout at a checkpoint.
+ */
+.bar-value {
+  fill: var(--color-text);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.traffic-table {
+  font-size: 0.8rem;
+}
+
+.traffic-table th,
+.traffic-table td {
+  padding: 0.3rem 0.45rem;
+  white-space: nowrap;
+}
+
 .zoom-control {
   display: inline-flex;
   align-items: center;
