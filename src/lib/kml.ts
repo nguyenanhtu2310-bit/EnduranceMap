@@ -138,7 +138,10 @@ export function parseKml(xmlText: string, options: KmlParseOptions = {}): KmlPar
   const result: KmlParseResult = { courses: [], segments: [], placemarks: [], warnings: [] };
 
   const documentEl = doc.getElementsByTagName('Document')[0] ?? doc.documentElement;
-  walkFolder(documentEl, '', courseFolder, result);
+  // Exporting a single layer from Google My Maps gives no folders at all: the layer's
+  // name lands on the Document and its placemarks sit directly inside. Seeding the walk
+  // with that name lets a one-layer export be read the same as a layer of a whole map.
+  walkFolder(documentEl, getChildText(documentEl, 'name')?.trim() ?? '', courseFolder, result);
 
   if (result.courses.length === 0) {
     const seen = Array.from(new Set(result.segments.map((s) => s.folder))).filter(Boolean);

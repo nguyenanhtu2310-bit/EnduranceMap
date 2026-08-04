@@ -89,3 +89,40 @@ describe('parseKml + snapPlacemarks on the sample course', () => {
     expect(cot4.label.cutoffs[0]).toMatchObject({ km: 9, raceDistanceKm: 10, cutoffClock: '7:15 AM' });
   });
 });
+
+describe('a single layer exported on its own', () => {
+  // Exporting one layer from Google My Maps produces no <Folder> at all: the layer's
+  // name lands on the <Document> and its placemarks sit directly inside it. Read as a
+  // whole-map export, such a file has no course folder and yields nothing.
+  const singleLayer = `<?xml version="1.0" encoding="UTF-8"?>
+    <kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+      <name>RACE ROUTE</name>
+      <Placemark><name>10km</name><LineString><coordinates>
+        109.19,12.24,0 109.20,12.24,0 109.21,12.25,0
+      </coordinates></LineString></Placemark>
+    </Document></kml>`;
+
+  it('reads its courses from the document name', () => {
+    const parsed = parseKml(singleLayer);
+    expect(parsed.warnings).toEqual([]);
+    expect(parsed.courses.map((c) => c.name)).toEqual(['10km']);
+  });
+
+  it('still reads a whole-map export, where the name is on a folder', () => {
+    const wholeMap = `<?xml version="1.0" encoding="UTF-8"?>
+      <kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+        <name>My race map</name>
+        <Folder><name>RACE ROUTE</name>
+          <Placemark><name>10km</name><LineString><coordinates>
+            109.19,12.24,0 109.20,12.24,0
+          </coordinates></LineString></Placemark>
+        </Folder>
+        <Folder><name>STATION</name>
+          <Placemark><name>CP1</name><Point><coordinates>109.195,12.24,0</coordinates></Point></Placemark>
+        </Folder>
+      </Document></kml>`;
+    const parsed = parseKml(wholeMap);
+    expect(parsed.courses.map((c) => c.name)).toEqual(['10km']);
+    expect(parsed.placemarks.map((p) => p.folder)).toEqual(['STATION']);
+  });
+});
