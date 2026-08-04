@@ -1,4 +1,5 @@
 import type { FolderSummary } from '../lib/pipeline';
+import { useT } from '../lib/i18n';
 
 interface Props {
   folders: FolderSummary[];
@@ -24,6 +25,7 @@ export function FolderPicker({
   skipNames,
   onSkipNamesChange,
 }: Props) {
+  const t = useT();
   function toggle(folder: string) {
     onChange(selected.includes(folder) ? selected.filter((f) => f !== folder) : [...selected, folder]);
   }
@@ -55,13 +57,14 @@ export function FolderPicker({
         </button>
       </div>
       <p className="hint" style={{ margin: '0.85rem 0 0' }}>
-        Only the folders you tick get scheduled. Cut-off times are still read from the whole map, so a station
-        that shares a spot with a cut-off point keeps that closing time even when the cut-off folder is unticked.
+        {t(
+          'Only the folders you tick get scheduled. Cut-off times are still read from the whole map, so a station that shares a spot with a cut-off point keeps that closing time even when the cut-off folder is unticked.'
+        )}
       </p>
 
       <div className="renumber-row">
         <label className="field" style={{ margin: 0, flex: '1 1 22rem' }}>
-          Skip points whose name contains
+          {t('Skip points whose name contains')}
           <input
             type="text"
             value={skipNames}
@@ -80,7 +83,7 @@ export function FolderPicker({
       <div className="renumber-row">
         <label className={renumber ? 'folder-item on' : 'folder-item'} style={{ flex: '0 1 auto' }}>
           <input type="checkbox" checked={renumber} onChange={(e) => onRenumberChange(e.target.checked)} />
-          <span className="folder-name">Number stations along the course</span>
+          <span className="folder-name">{t('Number stations along the course')}</span>
         </label>
         {renumber && (
           <label className="field" style={{ margin: 0 }}>

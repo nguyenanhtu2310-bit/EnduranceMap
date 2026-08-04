@@ -1,3 +1,4 @@
+import { useT } from '../lib/i18n';
 import type { Course } from '../lib/snap';
 import { passKey, type PipelineResult, type PipelineStation } from '../lib/pipeline';
 import type { CrossingOverride, RaceOverrides } from '../lib/overrides';
@@ -46,6 +47,7 @@ function cellFor(station: PipelineStation, courseName: string): Cell {
 }
 
 export function TimingMatrix({ result, notes, onNoteChange, overrides, onCrossingEdit }: Props) {
+  const t = useT();
   const courses = orderedCourses(result);
   const startByCourse = new Map(result.distanceInputs.map((d) => [d.courseName, d.startTimeClock]));
 
@@ -61,8 +63,8 @@ export function TimingMatrix({ result, notes, onNoteChange, overrides, onCrossin
       <table className="matrix">
         <thead>
           <tr>
-            <th>Timing point</th>
-            <th>Operating</th>
+            <th>{t('Timing point')}</th>
+            <th>{t('Operating')}</th>
             {courses.map((course) => (
               <th key={course.name}>{course.name}</th>
             ))}

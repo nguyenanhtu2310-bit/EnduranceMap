@@ -1,4 +1,5 @@
 import { passKey, type PipelineResult } from '../lib/pipeline';
+import { useT } from '../lib/i18n';
 import type { CrossingOverride, RaceOverrides } from '../lib/overrides';
 import { EditableCell } from './EditableCell';
 import { parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
@@ -27,6 +28,7 @@ function marginMinutes(suggested: string, modeled: string): number | null {
 }
 
 export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }: Props) {
+  const t = useT();
   const rows = result.cutoffTable;
 
   if (rows.length === 0) {
@@ -61,9 +63,10 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
   return (
     <>
       <p className="hint">
-        Proposed from the slowest modelled runner plus {graceMinutes} minutes, rounded up to the next quarter
-        hour. Rounding up rather than to nearest keeps a cut-off from landing earlier than the calculation
-        intended.
+        {t('Proposed from the slowest modelled runner plus {n} minutes, then rounded up. Rounding up rather than to nearest keeps a cut-off from landing earlier than the calculation intended.').replace(
+          '{n}',
+          String(graceMinutes)
+        )}
         {tighter > 0 && (
           <>
             {' '}
@@ -76,13 +79,13 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
         <table>
           <thead>
             <tr>
-              <th>Station</th>
-              <th>Distance</th>
-              <th className="num">Km</th>
-              <th className="num">Slowest arrival</th>
-              <th className="num">Proposed cut-off</th>
-              <th className="num">Margin</th>
-              <th className="num">Provided</th>
+              <th>{t('Station')}</th>
+              <th>{t('Distance')}</th>
+              <th className="num">{t('Km')}</th>
+              <th className="num">{t('Slowest arrival')}</th>
+              <th className="num">{t('Proposed cut-off')}</th>
+              <th className="num">{t('Margin')}</th>
+              <th className="num">{t('Provided COT')}</th>
             </tr>
           </thead>
           <tbody>

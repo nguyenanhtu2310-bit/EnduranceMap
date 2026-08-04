@@ -1,5 +1,6 @@
 import type { DistanceInput } from '../lib/pipeline';
 import { TimeInput } from './TimeInput';
+import { useT } from '../lib/i18n';
 
 export interface DistanceFormRow extends Omit<DistanceInput, 'runnerCount'> {
   /** Kept as a string so the field can be cleared while typing. */
@@ -21,6 +22,7 @@ const NUMERIC_FIELDS = [
 ] as const;
 
 export function PaceBandForm({ rows, onChange, drivenByResults }: Props) {
+  const t = useT();
   function update(index: number, patch: Partial<DistanceFormRow>) {
     onChange(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   }
@@ -30,16 +32,16 @@ export function PaceBandForm({ rows, onChange, drivenByResults }: Props) {
       <table>
         <thead>
           <tr>
-            <th>Distance</th>
-            <th className="num">Measured</th>
-            <th>Start</th>
-            <th className="num" title="Minutes over which the whole field crosses the start line">
-              Spread (min)
+            <th>{t('Distance')}</th>
+            <th className="num">{t('Measured')}</th>
+            <th>{t('Start')}</th>
+            <th className="num" title={t('Minutes over which the whole field crosses the start line')}>
+              {t('Spread (min)')}
             </th>
-            <th className="num">Runners</th>
+            <th className="num">{t('Runners')}</th>
             {NUMERIC_FIELDS.map((f) => (
-              <th key={f.key} className="num" title={f.title}>
-                {f.label}
+              <th key={f.key} className="num" title={t(f.title)}>
+                {t(f.label)}
               </th>
             ))}
             <th className="num" title="Cut-off time provided by the organizer — leave blank if not provided yet">
@@ -53,7 +55,7 @@ export function PaceBandForm({ rows, onChange, drivenByResults }: Props) {
               <td>
                 <strong>{row.courseName}</strong>
                 {drivenByResults?.has(row.courseName) && (
-                  <span className="colocated">from results file</span>
+                  <span className="colocated">{t('from results file')}</span>
                 )}
               </td>
               <td className="num muted">{row.measuredKm.toFixed(2)} km</td>
@@ -106,9 +108,9 @@ export function PaceBandForm({ rows, onChange, drivenByResults }: Props) {
         </tbody>
       </table>
       <p className="hint" style={{ margin: '0.75rem 0 0' }}>
-        Paces are minutes per km. Fastest and slowest anchor the P1 and P99 arrivals; spread is how long the
-        field takes to clear the start line. COT is the finish cut-off the organizer has set for that distance
-        — leave it blank if it has not been provided yet, and the tool proposes one instead.
+        {t(
+          'Paces are minutes per km. Fastest and slowest anchor the P1 and P99 arrivals; spread is how long the field takes to clear the start line. COT is the finish cut-off the organizer has set for that distance — leave it blank if it has not been provided yet, and the tool proposes one instead.'
+        )}
       </p>
     </div>
   );

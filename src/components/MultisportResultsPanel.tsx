@@ -1,6 +1,7 @@
 import { summarizeMultisportProfile, type MultisportProfile } from '../lib/multisportResults';
 import type { MultisportRace } from '../lib/multisport';
 import type { DistanceSource } from '../lib/distances';
+import { useT } from '../lib/i18n';
 
 /**
  * How the leg distances were arrived at. A multisport file rarely states them outright,
@@ -55,6 +56,7 @@ export function MultisportResultsPanel({
   onClear,
   onDistanceChange,
 }: Props) {
+  const t = useT();
   return (
     <>
       <div className="file-line">
@@ -72,12 +74,12 @@ export function MultisportResultsPanel({
         <table>
           <thead>
             <tr>
-              <th>Race in file</th>
-              <th className="num">Starters</th>
-              <th className="num">Usable</th>
-              <th>Legs</th>
-              <th className="num">Rolling start</th>
-              <th>Use for</th>
+              <th>{t('Race in file')}</th>
+              <th className="num">{t('Starters')}</th>
+              <th className="num">{t('Usable')}</th>
+              <th>{t('Legs')}</th>
+              <th className="num">{t('Rolling start')}</th>
+              <th>{t('Use for')}</th>
             </tr>
           </thead>
           <tbody>
@@ -111,18 +113,18 @@ export function MultisportResultsPanel({
                           .map((l) => `${l.label} ${l.distanceKm} km`)
                           .join(' · ')}
                         <span className={`colocated source-${profile.distanceSource}`}>
-                          {DISTANCE_SOURCES[profile.distanceSource]}
+                          {t(DISTANCE_SOURCES[profile.distanceSource])}
                         </span>
                       </summary>
                       <table className="inner">
                         <thead>
                           <tr>
-                            <th>Leg</th>
-                            <th className="num">Distance</th>
-                            <th className="num">P1</th>
-                            <th className="num">P50</th>
-                            <th className="num">P99</th>
-                            <th className="num">Typical rate</th>
+                            <th>{t('Leg')}</th>
+                            <th className="num">{t('Distance')}</th>
+                            <th className="num">{t('P1')}</th>
+                            <th className="num">{t('P50')}</th>
+                            <th className="num">{t('P99')}</th>
+                            <th className="num">{t('Typical rate')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -138,7 +140,7 @@ export function MultisportResultsPanel({
                                     min={0}
                                     step={0.05}
                                     value={s.leg.distanceKm || ''}
-                                    title={DISTANCE_SOURCES[profile.distanceSource]}
+                                    title={t(DISTANCE_SOURCES[profile.distanceSource])}
                                     onChange={(e) =>
                                       onDistanceChange(
                                         profile.key,

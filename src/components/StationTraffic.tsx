@@ -2,6 +2,7 @@ import type { PipelineStation } from '../lib/pipeline';
 import { secondsToClockTime } from '../lib/time';
 import { firstLeadOfSex, leadsForStation } from '../lib/leadMarkers';
 import { buildStationTraffic, courseTotal } from '../lib/stationTraffic';
+import { useT } from '../lib/i18n';
 
 interface Props {
   station: PipelineStation;
@@ -30,6 +31,7 @@ const LEFT_PAD = 4;
  * photograph cannot be hovered.
  */
 export function StationTraffic({ station, courseOrder, binMinutes, colourFor }: Props) {
+  const t = useT();
   const view = buildStationTraffic(station, courseOrder);
   if (!view) return <p className="hint">No modeled arrivals at this point.</p>;
   const { active, present, max } = view;
@@ -46,33 +48,33 @@ export function StationTraffic({ station, courseOrder, binMinutes, colourFor }: 
   return (
     <div className="station-traffic">
       <dl className="traffic-facts">
-        <dt>Operating time</dt>
+        <dt>{t('Operating time')}</dt>
         <dd>
           {hm(active[0].binStartSeconds)} – {hm(active[active.length - 1].binEndSeconds)}
         </dd>
 
-        <dt>Total visits</dt>
+        <dt>{t('Total visits')}</dt>
         <dd>{view.total.toLocaleString()}</dd>
 
-        <dt>Busiest</dt>
+        <dt>{t('Busiest')}</dt>
         <dd>
-          <strong>{view.busiestBin.total.toLocaleString()}</strong> at{' '}
+          <strong>{view.busiestBin.total.toLocaleString()}</strong> {t('at')}{' '}
           {hm(view.busiestBin.binStartSeconds)} – {hm(view.busiestBin.binEndSeconds)}
         </dd>
 
         {leadsForStation(station).length > 0 && (
           <>
-            <dt>First through</dt>
+            <dt>{t('First through')}</dt>
             <dd>
               {leadMan && (
                 <>
-                  Male <span className="lead-time">{hm(leadMan.seconds)}</span>
+                  {t('Male')} <span className="lead-time">{hm(leadMan.seconds)}</span>
                 </>
               )}
               {leadMan && leadWoman && ' · '}
               {leadWoman && (
                 <>
-                  Female <span className="lead-time">{hm(leadWoman.seconds)}</span>
+                  {t('Female')} <span className="lead-time">{hm(leadWoman.seconds)}</span>
                 </>
               )}
             </dd>
@@ -145,13 +147,13 @@ export function StationTraffic({ station, courseOrder, binMinutes, colourFor }: 
         <table className="traffic-table">
           <thead>
             <tr>
-              <th>Distance</th>
+              <th>{t('Distance')}</th>
               {active.map((bin) => (
                 <th key={bin.binStartSeconds} className="num">
                   {hm(bin.binStartSeconds)}
                 </th>
               ))}
-              <th className="num">Total</th>
+              <th className="num">{t('Total')}</th>
             </tr>
           </thead>
           <tbody>
@@ -172,7 +174,7 @@ export function StationTraffic({ station, courseOrder, binMinutes, colourFor }: 
             ))}
             <tr className="tooltip-total">
               <td>
-                <strong>All</strong>
+                <strong>{t('All')}</strong>
               </td>
               {active.map((bin) => (
                 <td key={bin.binStartSeconds} className="num">

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { Course } from '../lib/snap';
 import { summarizeProfile, type ContestProfile } from '../lib/results';
 import type { DistanceSource } from '../lib/distances';
+import { useT } from '../lib/i18n';
 
 /**
  * How the distance was arrived at, worst evidence last. Shown against every contest
@@ -42,6 +43,7 @@ export function ResultsPanel({
   onClear,
   onError,
 }: Props) {
+  const t = useT();
   const [isOver, setIsOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -93,7 +95,7 @@ export function ResultsPanel({
         </span>
         <span style={{ display: 'inline-flex', gap: '0.6rem' }}>
           <button className="secondary" onClick={() => inputRef.current?.click()}>
-            Choose a different file
+            {t('Choose a different file')}
           </button>
           <button className="secondary" onClick={onClear}>
             Remove
@@ -112,12 +114,12 @@ export function ResultsPanel({
         <table>
           <thead>
             <tr>
-              <th>Contest in file</th>
-              <th className="num">Finishers</th>
-              <th className="num">Distance</th>
-              <th className="num">Pace P1 / P50 / P99</th>
-              <th className="num">Start spread</th>
-              <th>Use for</th>
+              <th>{t('Contest in file')}</th>
+              <th className="num">{t('Finishers')}</th>
+              <th className="num">{t('Distance')}</th>
+              <th className="num">{t('Pace P1 / P50 / P99')}</th>
+              <th className="num">{t('Start spread')}</th>
+              <th>{t('Use for')}</th>
             </tr>
           </thead>
           <tbody>
@@ -142,7 +144,7 @@ export function ResultsPanel({
                         step={0.1}
                         value={profile.distanceKm || ''}
                         placeholder="km"
-                        title={DISTANCE_SOURCES[profile.distanceSource]}
+                        title={t(DISTANCE_SOURCES[profile.distanceSource])}
                         onChange={(e) => onDistanceChange(profile.contest, Number(e.target.value))}
                       />
                     ) : profile.distanceKm > 0 ? (
@@ -151,7 +153,7 @@ export function ResultsPanel({
                       '—'
                     )}
                     <span className={`colocated source-${profile.distanceSource}`}>
-                      {DISTANCE_SOURCES[profile.distanceSource]}
+                      {t(DISTANCE_SOURCES[profile.distanceSource])}
                     </span>
                   </td>
                   <td className="num">

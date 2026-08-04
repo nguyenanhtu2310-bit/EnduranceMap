@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useT } from '../lib/i18n';
 
 interface Props {
   fileName?: string;
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export function KmlDropzone({ fileName, onLoad, onError }: Props) {
+  const t = useT();
   const [isOver, setIsOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -30,7 +32,7 @@ export function KmlDropzone({ fileName, onLoad, onError }: Props) {
           <span className="tag ok">Loaded</span> <strong className="loaded-file">{fileName}</strong>
         </span>
         <button className="secondary" onClick={() => inputRef.current?.click()}>
-          Choose a different file
+          {t('Choose a different file')}
         </button>
         <input
           ref={inputRef}
@@ -59,7 +61,7 @@ export function KmlDropzone({ fileName, onLoad, onError }: Props) {
       }}
     >
       <p style={{ margin: 0 }}>
-        Drop a race KML here, or <strong>browse</strong>
+        {t('Drop a race KML here, or')} <strong>{t('browse')}</strong>
       </p>
       <p className="hint" style={{ margin: '0.4rem 0 0' }}>
         Everything is parsed in your browser — nothing is uploaded anywhere.

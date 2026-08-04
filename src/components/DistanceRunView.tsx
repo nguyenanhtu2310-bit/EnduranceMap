@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { isEndZoneStop, passKey, type PipelineResult, type PipelineStation } from '../lib/pipeline';
+import { useT } from '../lib/i18n';
 import type { CrossingOverride, RaceOverrides } from '../lib/overrides';
 import { EditableCell } from './EditableCell';
 import { parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
@@ -93,6 +94,7 @@ export function DistanceRunView({
   raceOverrides,
   onCrossingEdit,
 }: Props) {
+  const t = useT();
   const courses = [...result.courses]
     .filter((c) => result.courseOrder.includes(c.name))
     // Legs are raced in order; separate distances read best longest first.
@@ -145,16 +147,16 @@ export function DistanceRunView({
             <thead>
               <tr>
                 <th className="num">#</th>
-                <th>Point</th>
-                <th className="num">At km</th>
-                <th className="num">Gap from previous</th>
-                <th className="num">Open</th>
-                <th className="num">Close</th>
-                <th className="num">Cut-off</th>
-                <th>Activity</th>
+                <th>{t('Point')}</th>
+                <th className="num">{t('At km')}</th>
+                <th className="num">{t('Gap from previous')}</th>
+                <th className="num">{t('Open')}</th>
+                <th className="num">{t('Close')}</th>
+                <th className="num">{t('Cut-off')}</th>
+                <th>{t('Activity')}</th>
                 {amenities.map((a) => (
-                  <th key={a.key} className="amenity-col" title={a.label}>
-                    {a.label}
+                  <th key={a.key} className="amenity-col" title={t(a.label)}>
+                    {t(a.label)}
                   </th>
                 ))}
                 {onRemovePass && <th aria-label="Remove" />}
@@ -214,7 +216,7 @@ export function DistanceRunView({
                         instead of the tagged row's number being shunted left. */}
                     {stop.gapKm === longestGap && stop.gapKm > 0 && (
                       <span className="tag over" style={{ marginRight: '0.4rem' }}>
-                        longest
+                        {t('longest')}
                       </span>
                     )}
                     {stop.gapKm.toFixed(1)}
@@ -296,7 +298,7 @@ export function DistanceRunView({
                 <td className="num">
                   {finalGap === longestGap && finalGap > 0 && (
                     <span className="tag over" style={{ marginRight: '0.4rem' }}>
-                      longest
+                      {t('longest')}
                     </span>
                   )}
                   {finalGap.toFixed(1)}
@@ -313,7 +315,7 @@ export function DistanceRunView({
               <tr className="total-row">
                 <td />
                 <td className="row-head">Total</td>
-                <td className="num">{courseStops.length} on course</td>
+                <td className="num">{courseStops.length} {t('on course')}</td>
                 <td className="num" />
                 <td className="num" />
                 <td className="num" />

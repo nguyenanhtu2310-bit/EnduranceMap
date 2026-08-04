@@ -1,3 +1,5 @@
+import { useT } from '../lib/i18n';
+
 export interface Settings {
   setupBufferMinutes: number;
   teardownBufferMinutes: number;
@@ -38,13 +40,14 @@ const FIELDS: { key: keyof Settings; label: string; hint: string; step?: number 
 ];
 
 export function SettingsPanel({ settings, onChange }: Props) {
+  const t = useT();
   return (
     <>
       <div className="settings-grid">
         {FIELDS.map((field) => (
           <div key={field.key}>
-            <label className="field" htmlFor={field.key} title={field.hint}>
-              {field.label}
+            <label className="field" htmlFor={field.key} title={t(field.hint)}>
+              {t(field.label)}
             </label>
             <input
               id={field.key}
@@ -58,9 +61,10 @@ export function SettingsPanel({ settings, onChange }: Props) {
         ))}
       </div>
       <p className="hint" style={{ margin: '0.85rem 0 0' }}>
-        Activity thresholds are per-station peak crossings per hour. A mass city race puts thousands per hour
-        through its early stations, so raise these well above trail-race levels or everything reads High.
-      </p>
+            {t(
+              'Activity thresholds are per-station peak crossings per hour. A mass-start road race and a trail race with a rolling start need very different numbers.'
+            )}
+          </p>
     </>
   );
 }

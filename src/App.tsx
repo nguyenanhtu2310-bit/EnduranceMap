@@ -51,6 +51,7 @@ import { SettingsPanel, type Settings } from './components/SettingsPanel';
 import { ResultSection } from './components/ResultSection';
 import { StationTrafficList } from './components/StationTrafficList';
 import { seriesVar } from './lib/series';
+import { useLanguage } from './lib/i18n';
 import { ResultsPanel } from './components/ResultsPanel';
 import { MultisportResultsPanel } from './components/MultisportResultsPanel';
 import { StationScheduleTable } from './components/StationScheduleTable';
@@ -257,6 +258,7 @@ const RACE_FILE_FIELDS = [
 const RACE_FILE_VERSION = 2;
 
 export default function App() {
+  const { lang, setLang, t } = useLanguage();
   const [kml, setKml] = useState<LoadedKml | null>(null);
   const [rows, setRows] = useState<DistanceFormRow[]>([]);
 
@@ -317,7 +319,7 @@ export default function App() {
   const snapshotsRef = useRef(new Map<string, RaceSnapshot>());
   const raceFileRef = useRef<HTMLInputElement>(null);
 
-  const liveLabel = raceName.trim() || kml?.fileName.replace(/\.kml$/i, '') || 'Untitled race';
+  const liveLabel = raceName.trim() || kml?.fileName.replace(/\.kml$/i, '') || t('Untitled race');
 
   /**
    * A note belongs to the physical station, not to the row it was typed in, so editing
@@ -870,18 +872,34 @@ export default function App() {
           </span>
         ))}
         <button className="secondary" onClick={() => newTab()}>
-          + New race
+          + {t('New race')}
         </button>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: '0.5rem' }}>
-          <button className="secondary" onClick={saveRaceFile} title="Save this race to a file on your machine">
-            Save race
+          {/* Left of Save race: a small organiser working in Vietnamese should find the
+              switch before they need anything else on this bar. */}
+          <span className="lang-switch" role="group" aria-label="Language">
+            {(['vi', 'en'] as const).map((code) => (
+              <button
+                key={code}
+                type="button"
+                className={`lang-option${lang === code ? ' is-on' : ''}`}
+                aria-pressed={lang === code}
+                onClick={() => setLang(code)}
+                title={code === 'vi' ? 'Chuyển sang tiếng Việt' : 'Switch to English'}
+              >
+                {code === 'vi' ? 'VIE' : 'ENG'}
+              </button>
+            ))}
+          </span>
+          <button className="secondary" onClick={saveRaceFile} title={t('Save this race to a file on your machine')}>
+            {t('Save race')}
           </button>
           <button
             className="secondary"
             onClick={() => raceFileRef.current?.click()}
             title="Open a saved .race.json file"
           >
-            Open…
+            {t('Open…')}
           </button>
           <input
             ref={raceFileRef}
@@ -907,17 +925,21 @@ export default function App() {
       </div>
 
       <header>
-        <h1>Race CP Operations Calculator</h1>
-        <p>Turn a course map into a checkpoint operating schedule.</p>
+        <h1>{t('Race CP Operations Calculator')}</h1>
+        <p>{t('Turn a course map into a checkpoint operating schedule.')}</p>
       </header>
 
       {error && <div className="error">{error}</div>}
 
       <section className="card">
         <h2>
-          <span className="step">1</span>Course map
+          <span className="step">1</span>{t('Course map')}
         </h2>
-        <p className="hint">Choose an exported KML from Google My Maps. Make sure all the race routes are placed in one layer, and each CP type on its own separate layer.</p>
+        <p className="hint">
+          {t(
+            'Choose an exported KML from Google My Maps. Make sure all the race routes are placed in one layer, and each CP type on its own separate layer.'
+          )}
+        </p>
         <KmlDropzone fileName={kml?.fileName} onLoad={loadKml} onError={setError} />
       </section>
 
@@ -925,9 +947,9 @@ export default function App() {
         <>
           <section className="card">
             <h2>
-              <span className="step">2</span>CP type
+              <span className="step">2</span>{t('CP type')}
             </h2>
-            <p className="hint">Choose the layer that contains the type of CP you want to calculate.</p>
+            <p className="hint">{t('Choose the layer that contains the type of CP you want to calculate.')}</p>
             <FolderPicker
               folders={folders}
               selected={selectedFolders}
@@ -943,7 +965,7 @@ export default function App() {
 
           <section className="card">
             <h2>
-              <span className="step">3</span>Pace distribution
+              <span className="step">3</span>{t('Pace distribution')}
             </h2>
             <p className="hint">
               Optional. Choose a CSV finish-line result from a comparable race to replace the estimated pace
@@ -976,7 +998,7 @@ export default function App() {
 
           <section className="card">
             <h2>
-              <span className="step">4</span>Race details and pace band
+              <span className="step">4</span>{t('Race details and pace band')}
             </h2>
             <p className="hint">
               {multisport
@@ -1007,14 +1029,14 @@ export default function App() {
 
           <section className="card">
             <h2>
-              <span className="step">5</span>Operating details
+              <span className="step">5</span>{t('Operating details')}
             </h2>
             <SettingsPanel settings={settings} onChange={setSettings} />
           </section>
 
           <div className="actions" style={{ marginBottom: '1.75rem', justifyContent: 'center' }}>
             <button className="cta" onClick={() => calculate()} disabled={cannotCalculate}>
-              CALCULATE
+              {t('CALCULATE')}
             </button>
             {selectedFolders.length === 0 && (
               <span className="hint" style={{ margin: 0 }}>
@@ -1040,18 +1062,18 @@ export default function App() {
       {result && (
         <>
           <section className="card">
-            <h2>Export</h2>
+            <h2>{t('Export')}</h2>
             <p className="hint">
-              One report in two finishes. The dark one keeps the brand theme, for reading on a screen or
-              hosting behind a link; the print one is the same content ink-on-white for paper and email.
-              Both are single self-contained files that open offline.
-            </p>
+            {t(
+              'One report in two finishes. The dark one keeps the brand theme, for reading on a screen or hosting behind a link; the print one is the same content ink-on-white for paper and email. Both are single self-contained files that open offline.'
+            )}
+          </p>
             <div className="folder-list" style={{ marginBottom: '1rem' }}>
               {REPORT_SECTIONS.map((section) => (
                 <label
                   key={section.key}
                   className={reportSections[section.key] ? 'folder-item on' : 'folder-item'}
-                  title={section.hint}
+                  title={t(section.hint)}
                 >
                   <input
                     type="checkbox"
@@ -1060,7 +1082,7 @@ export default function App() {
                       setReportSections({ ...reportSections, [section.key]: e.target.checked })
                     }
                   />
-                  <span className="folder-name">{section.label}</span>
+                  <span className="folder-name">{t(section.label)}</span>
                 </label>
               ))}
             </div>
@@ -1084,7 +1106,7 @@ export default function App() {
                 disabled={!Object.values(reportSections).some(Boolean)}
                 title="The same report in the brand's dark theme — for screens, and for hosting behind a link"
               >
-                Download dark report
+                {t('Download dark report')}
               </button>
               <button
                 className="secondary"
@@ -1095,7 +1117,7 @@ export default function App() {
                 disabled={!Object.values(reportSections).some(Boolean)}
                 title="Ink-on-white document for printing or emailing"
               >
-                Download print report
+                {t('Download print report')}
               </button>
               <button
                 className="secondary"
@@ -1114,7 +1136,7 @@ export default function App() {
                 disabled={!Object.values(reportSections).some(Boolean)}
                 title="One sheet per section — opens in Excel, Numbers or Google Sheets"
               >
-                Download spreadsheet
+                {t('Download spreadsheet')}
               </button>
               {!Object.values(reportSections).some(Boolean) && (
                 <span className="hint" style={{ margin: 0 }}>
@@ -1139,12 +1161,12 @@ export default function App() {
               organiser usually arrives wanting one of them. */}
           <div className="actions result-actions">
             <button className="secondary" onClick={() => setAllSections(!allOpen)}>
-              {allOpen ? 'Collapse all sections' : 'Expand all sections'}
+              {allOpen ? t('Collapse all sections') : t('Expand all sections')}
             </button>
           </div>
 
           <ResultSection
-            title="Station operating schedule"
+            title={t('Station operating schedule')}
             summary={`${result.stations.length} stations`}
             open={openSections.schedule}
             onToggle={() => toggleSection('schedule')}
@@ -1218,15 +1240,16 @@ export default function App() {
           </ResultSection>
 
           <ResultSection
-            title="Course amenities"
+            title={t('Course amenities')}
             summary={`${result.courses.length} distances`}
             open={openSections.amenities}
             onToggle={() => toggleSection('amenities')}
           >
             <p className="hint">
-              The points a runner meets in order, with the gap from the previous one and what each one stocks
-              — the view for spacing water and aid.
-            </p>
+            {t(
+              'The points a runner meets in order, with the gap from the previous one and what each one stocks — the view for spacing water and aid.'
+            )}
+          </p>
             {removedPasses.length > 0 && (
               <div className="actions" style={{ marginBottom: '0.85rem' }}>
                 <span className="hint" style={{ margin: 0 }}>
@@ -1275,15 +1298,16 @@ export default function App() {
           </ResultSection>
 
           <ResultSection
-            title="Split calculation"
+            title={t('Split calculation')}
             summary="Every point, by distance"
             open={openSections.splits}
             onToggle={() => toggleSection('splits')}
           >
             <p className="hint">
-              Every point each distance runs through, with the kilometre it falls at on that distance's own
-              route and the hours the position is staffed.
-            </p>
+            {t(
+              "Every point each distance runs through, with the kilometre it falls at on that distance's own route and the hours the position is staffed."
+            )}
+          </p>
             <TimingMatrix
               result={result}
               notes={stationNotes}
@@ -1294,7 +1318,7 @@ export default function App() {
           </ResultSection>
 
           <ResultSection
-            title="Crossing time distribution"
+            title={t('Crossing time distribution')}
             summary="The race day on one clock"
             open={openSections.distribution}
             onToggle={() => toggleSection('distribution')}
@@ -1308,21 +1332,21 @@ export default function App() {
           </ResultSection>
 
           <ResultSection
-            title="Traffic at each station"
+            title={t('Traffic at each station')}
             summary={`${result.stations.length} stations, one page each`}
             open={openSections.traffic}
             onToggle={() => toggleSection('traffic')}
           >
             <p className="hint">
-              One station at a time, with every figure printed on the bar — the page a crew works
-              from. Distances stand side by side rather than stacked, so each race can be counted on
-              its own.
-            </p>
+            {t(
+              'One station at a time, with every figure printed on the bar — the page a crew works from. Distances stand side by side rather than stacked, so each race can be counted on its own.'
+            )}
+          </p>
             <StationTrafficList result={result} colourFor={seriesVar} />
           </ResultSection>
 
           <ResultSection
-            title="Cut-off times"
+            title={t('Cut-off times')}
             summary={`${result.cutoffTable.length} proposals`}
             open={openSections.cutoffs}
             onToggle={() => toggleSection('cutoffs')}

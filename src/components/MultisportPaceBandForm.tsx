@@ -8,6 +8,7 @@ import {
 } from '../lib/multisport';
 import type { Course } from '../lib/snap';
 import { TimeInput } from './TimeInput';
+import { useT } from '../lib/i18n';
 
 interface Props {
   plan: MultisportPlan;
@@ -77,6 +78,7 @@ export function MultisportPaceBandForm({
   onAddRace,
   onRemoveRace,
 }: Props) {
+  const t = useT();
   const courseByName = new Map(courses.map((c) => [c.name, c]));
 
   function updateRace(raceId: string, patch: Partial<MultisportRace>) {
@@ -161,13 +163,13 @@ export function MultisportPaceBandForm({
             <table>
               <thead>
                 <tr>
-                  <th>Leg</th>
-                  <th className="num">Distance (km)</th>
-                  <th>Route on the map</th>
-                  <th className="num">Fastest</th>
-                  <th className="num">Typical</th>
-                  <th className="num">Slowest</th>
-                  <th>Unit</th>
+                  <th>{t('Leg')}</th>
+                  <th className="num">{t('Distance (km)')}</th>
+                  <th>{t('Route on the map')}</th>
+                  <th className="num">{t('Fastest')}</th>
+                  <th className="num">{t('Typical')}</th>
+                  <th className="num">{t('Slowest')}</th>
+                  <th>{t('Unit')}</th>
                 </tr>
               </thead>
               <tbody>

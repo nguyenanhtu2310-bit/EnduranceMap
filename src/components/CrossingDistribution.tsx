@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useT } from '../lib/i18n';
 import type { LeadArrival, PipelineResult, PipelineStation } from '../lib/pipeline';
 import { secondsToClockTime } from '../lib/time';
 import { seriesVar as slotVar } from '../lib/series';
@@ -84,6 +85,7 @@ interface LeadHover extends Anchor {
 type Hover = BinHover | LeadHover;
 
 export function CrossingDistribution({ result }: Props) {
+  const t = useT();
   const [hover, setHover] = useState<Hover | null>(null);
   /** 'chart' is the race day at a glance; 'table' is its accessible twin. */
   const [view, setView] = useState<'chart' | 'table'>('chart');
@@ -194,11 +196,11 @@ export function CrossingDistribution({ result }: Props) {
                   : 'Each row fills its own height, so quiet stations stay readable'
               }
             >
-              {sharedScale ? 'Scale: shared' : 'Scale: per station'}
+              {sharedScale ? t('Scale: shared') : t('Scale: per station')}
             </button>
           )}
           <button className="secondary" onClick={() => setView((v) => (v === 'table' ? 'chart' : 'table'))}>
-            {view === 'table' ? 'Show chart' : 'Show table'}
+            {view === 'table' ? t('Show chart') : t('Show table')}
           </button>
         </span>
       </div>
@@ -206,7 +208,7 @@ export function CrossingDistribution({ result }: Props) {
       {view === 'chart' && (
         <div className="chart-controls">
           <label className="zoom-control">
-            <span className="muted small">Stretch</span>
+            <span className="muted small">{t('Stretch')}</span>
             <input
               type="range"
               min={MIN_ZOOM}
@@ -219,7 +221,7 @@ export function CrossingDistribution({ result }: Props) {
             <span className="muted small tabular">{zoom.toFixed(1)}×</span>
           </label>
           <label className="zoom-control">
-            <span className="muted small">Height</span>
+            <span className="muted small">{t('Height')}</span>
             <input
               type="range"
               min={MIN_HEIGHT}
@@ -239,7 +241,7 @@ export function CrossingDistribution({ result }: Props) {
                 setHeight(MIN_HEIGHT);
               }}
             >
-              Fit
+              {t('Fit')}
             </button>
           )}
           <span className="hint" style={{ margin: 0 }}>
@@ -252,8 +254,8 @@ export function CrossingDistribution({ result }: Props) {
       {view === 'chart' && (
         <p className="hint" style={{ margin: '-0.35rem 0 0.85rem' }}>
           {sharedScale
-            ? 'All rows share one height scale, so bar heights are comparable between stations. Quiet stations look flat because they genuinely see fewer runners.'
-            : 'Each row is scaled to its own busiest window — the shape of each station’s load is readable, but heights are no longer comparable between stations.'}
+            ? t('All rows share one height scale, so bar heights are comparable between stations. Quiet stations look flat because they genuinely see fewer runners.')
+            : t('Each row is scaled to its own busiest window — the shape of each station’s load is readable, but heights are no longer comparable between stations.')}
         </p>
       )}
 
@@ -270,12 +272,12 @@ export function CrossingDistribution({ result }: Props) {
           ))}
           <span className="legend-item">
             <span className="legend-swatch peak-swatch" />
-            Peak {binMinutes}-min window
+            {t('Peak {n}-min window').replace('{n}', String(binMinutes))}
           </span>
           {hasLeads && (
             <span className="legend-item" title="The fastest finisher of each sex, on each distance">
               <span className="legend-lead">♂♀</span>
-              First Male / Female, coloured by distance
+              {t('First Male / Female, coloured by distance')}
             </span>
           )}
         </div>
