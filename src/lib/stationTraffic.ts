@@ -16,8 +16,10 @@ export interface StationTrafficView {
   present: { name: string; index: number }[];
   /** Tallest single bar, which the bars are scaled against. */
   max: number;
-  /** Busiest window's total, for the caption. */
-  busiest: number;
+  /** The busiest window itself — a crew needs the hour, not just the number. */
+  busiestBin: StackedBin;
+  /** Everyone through this point across its working day. */
+  total: number;
 }
 
 export function buildStationTraffic(
@@ -42,7 +44,8 @@ export function buildStationTraffic(
     active,
     present,
     max: Math.max(1, ...active.map((b) => Math.max(...b.byCourse))),
-    busiest: Math.max(...active.map((b) => b.total)),
+    busiestBin: active.reduce((busiest, bin) => (bin.total > busiest.total ? bin : busiest), active[0]),
+    total: active.reduce((sum, bin) => sum + bin.total, 0),
   };
 }
 

@@ -25,7 +25,7 @@ export interface ReportSections {
   perDistance: boolean;
   splits: boolean;
   distribution: boolean;
-  /** One chart per point, with every figure printed — the sheet a crew is handed. */
+  /** One chart per station, with every figure printed — the sheet a crew is handed. */
   stationTraffic: boolean;
   cutoffs: boolean;
 }
@@ -37,8 +37,8 @@ export const REPORT_SECTIONS: { key: keyof ReportSections; label: string; hint: 
   { key: 'distribution', label: 'Crossing time distribution', hint: 'Peak window and load per station' },
   {
     key: 'stationTraffic',
-    label: 'Traffic at each point',
-    hint: 'A chart and table per point, for the crew working it — long',
+    label: 'Traffic at each station',
+    hint: 'A chart and table per station, for the crew working it — long',
   },
   { key: 'cutoffs', label: 'Cut-off times', hint: 'Proposed cut-offs against modelled arrivals' },
 ];
@@ -48,7 +48,7 @@ export const ALL_REPORT_SECTIONS: ReportSections = {
   perDistance: true,
   splits: true,
   distribution: true,
-  // Off by default: a hundred-point map turns this into a hundred charts, which is a
+  // Off by default: a hundred-station map turns this into a hundred charts, which is a
   // briefing pack rather than a plan. Ticked when the crew sheets are being produced.
   stationTraffic: false,
   cutoffs: true,
@@ -533,19 +533,25 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
             const man = firstLeadOfSex(station, 'M');
             const woman = firstLeadOfSex(station, 'F');
             const lead = [
-              man ? `${sexGlyph('M')} ${secondsToClockTime(man.seconds).slice(0, 5)}` : '',
-              woman ? `${sexGlyph('F')} ${secondsToClockTime(woman.seconds).slice(0, 5)}` : '',
+              man ? `Male <span class="lead-time">${secondsToClockTime(man.seconds).slice(0, 5)}</span>` : '',
+              woman ? `Female <span class="lead-time">${secondsToClockTime(woman.seconds).slice(0, 5)}</span>` : '',
             ]
               .filter(Boolean)
               .join(' &middot; ');
+            const clock = (seconds: number) => secondsToClockTime(seconds).slice(0, 5);
 
             return `<div class="station-block">
               <h3>${esc(station.schedule.name)}</h3>
-              <p class="note">${secondsToClockTime(view.active[0].binStartSeconds).slice(0, 5)}–${secondsToClockTime(
-                view.active[view.active.length - 1].binEndSeconds
-              ).slice(0, 5)}, in ${result.binMinutes}-minute windows. Busiest ${view.busiest.toLocaleString()} through in one window, ${allThrough.toLocaleString()} in all.${
-                lead ? ` First through: ${lead}.` : ''
-              }</p>
+              <dl class="traffic-facts">
+                <dt>Operating time</dt><dd>${clock(view.active[0].binStartSeconds)} &ndash; ${clock(
+                  view.active[view.active.length - 1].binEndSeconds
+                )}</dd>
+                <dt>Total visits</dt><dd>${allThrough.toLocaleString()}</dd>
+                <dt>Busiest</dt><dd><strong>${view.busiestBin.total.toLocaleString()}</strong> at ${clock(
+                  view.busiestBin.binStartSeconds
+                )} &ndash; ${clock(view.busiestBin.binEndSeconds)}</dd>
+                ${lead ? `<dt>First through</dt><dd>${lead}</dd>` : ''}
+              </dl>
               ${buildStationTrafficSvg(view, series, ink)}
               <table><thead><tr><th>Distance</th>${head}<th class="num">Total</th></tr></thead>
               <tbody>${body}<tr class="total"><td><strong>All</strong></td>${totals}<td class="num"><strong>${allThrough.toLocaleString()}</strong></td></tr></tbody></table>
@@ -553,8 +559,8 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
           })
           .join('');
 
-        return `<h2>Traffic at each point</h2>
-        <p class="note">One point at a time, with every figure printed on the bar — the page a crew works from. Distances stand side by side rather than stacked, so each race can be counted on its own.</p>
+        return `<h2>Traffic at each station</h2>
+        <p class="note">One station at a time, with every figure printed on the bar — the page a crew works from. Distances stand side by side rather than stacked, so each race can be counted on its own.</p>
         ${blocks}`;
       })();
 
@@ -626,6 +632,11 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   .cot-other { color: var(--muted); }
   .final-row td { background: ${dark ? 'rgba(7, 188, 2, 0.07)' : '#f2faf5'}; }
   .station-block { margin: 18px 0 26px; page-break-inside: avoid; }
+  .traffic-facts { display: grid; grid-template-columns: max-content 1fr; gap: 1px 14px;
+    margin: 4px 0 10px; font-size: 12px; }
+  .traffic-facts dt { color: var(--muted); }
+  .traffic-facts dd { margin: 0; }
+  .lead-time { color: ${dark ? '#39ff88' : '#0a8f3c'}; font-weight: 600; }
   .station-block h3 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
   .final-tag {
     display: inline-block; margin-right: 6px; padding: 1px 5px; border-radius: 4px;

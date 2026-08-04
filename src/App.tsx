@@ -49,6 +49,8 @@ import {
 import { autoMapMultisport, buildCourseRestriction, buildLegDistanceInputs } from './lib/multisportInputs';
 import { SettingsPanel, type Settings } from './components/SettingsPanel';
 import { ResultSection } from './components/ResultSection';
+import { StationTrafficList } from './components/StationTrafficList';
+import { seriesVar } from './lib/series';
 import { ResultsPanel } from './components/ResultsPanel';
 import { MultisportResultsPanel } from './components/MultisportResultsPanel';
 import { StationScheduleTable } from './components/StationScheduleTable';
@@ -82,7 +84,13 @@ import {
 import { DEFAULT_START_SPREAD_MINUTES } from './lib/paceModel';
 
 /** The five sections of the RESULT part, in the order they are produced. */
-type ResultSectionKey = 'schedule' | 'amenities' | 'splits' | 'distribution' | 'cutoffs';
+type ResultSectionKey =
+  | 'schedule'
+  | 'amenities'
+  | 'splits'
+  | 'distribution'
+  | 'traffic'
+  | 'cutoffs';
 
 interface LoadedKml {
   text: string;
@@ -262,6 +270,7 @@ export default function App() {
     amenities: true,
     splits: true,
     distribution: true,
+    traffic: true,
     cutoffs: true,
   });
 
@@ -277,6 +286,7 @@ export default function App() {
       amenities: open,
       splits: open,
       distribution: open,
+      traffic: open,
       cutoffs: open,
     });
   }
@@ -1295,6 +1305,20 @@ export default function App() {
               busiest window.
             </p>
             <CrossingDistribution result={result} />
+          </ResultSection>
+
+          <ResultSection
+            title="Traffic at each station"
+            summary={`${result.stations.length} stations, one page each`}
+            open={openSections.traffic}
+            onToggle={() => toggleSection('traffic')}
+          >
+            <p className="hint">
+              One station at a time, with every figure printed on the bar — the page a crew works
+              from. Distances stand side by side rather than stacked, so each race can be counted on
+              its own.
+            </p>
+            <StationTrafficList result={result} colourFor={seriesVar} />
           </ResultSection>
 
           <ResultSection

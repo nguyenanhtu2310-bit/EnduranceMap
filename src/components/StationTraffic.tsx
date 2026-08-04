@@ -1,6 +1,6 @@
 import type { PipelineStation } from '../lib/pipeline';
 import { secondsToClockTime } from '../lib/time';
-import { firstLeadOfSex, leadsForStation, sexGlyph } from '../lib/leadMarkers';
+import { firstLeadOfSex, leadsForStation } from '../lib/leadMarkers';
 import { buildStationTraffic, courseTotal } from '../lib/stationTraffic';
 
 interface Props {
@@ -45,18 +45,40 @@ export function StationTraffic({ station, courseOrder, binMinutes, colourFor }: 
 
   return (
     <div className="station-traffic">
-      <p className="hint" style={{ margin: '0 0 0.5rem' }}>
-        {hm(active[0].binStartSeconds)}–{hm(active[active.length - 1].binEndSeconds)}, in{' '}
-        {binMinutes}-minute windows. Busiest {view.busiest.toLocaleString()}{' '}
-        through in one window.
+      <dl className="traffic-facts">
+        <dt>Operating time</dt>
+        <dd>
+          {hm(active[0].binStartSeconds)} – {hm(active[active.length - 1].binEndSeconds)}
+        </dd>
+
+        <dt>Total visits</dt>
+        <dd>{view.total.toLocaleString()}</dd>
+
+        <dt>Busiest</dt>
+        <dd>
+          <strong>{view.busiestBin.total.toLocaleString()}</strong> at{' '}
+          {hm(view.busiestBin.binStartSeconds)} – {hm(view.busiestBin.binEndSeconds)}
+        </dd>
+
         {leadsForStation(station).length > 0 && (
           <>
-            {' '}First through: {leadMan && `${sexGlyph('M')} ${hm(leadMan.seconds)}`}
-            {leadMan && leadWoman && ' · '}
-            {leadWoman && `${sexGlyph('F')} ${hm(leadWoman.seconds)}`}.
+            <dt>First through</dt>
+            <dd>
+              {leadMan && (
+                <>
+                  Male <span className="lead-time">{hm(leadMan.seconds)}</span>
+                </>
+              )}
+              {leadMan && leadWoman && ' · '}
+              {leadWoman && (
+                <>
+                  Female <span className="lead-time">{hm(leadWoman.seconds)}</span>
+                </>
+              )}
+            </dd>
           </>
         )}
-      </p>
+      </dl>
 
       <div className="chart-legend chart-key">
         {present.map(({ name, index }) => (

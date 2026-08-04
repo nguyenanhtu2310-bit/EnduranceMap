@@ -682,6 +682,29 @@ tr.drop-target td {
 }
 
 /*
+ * The four things a crew chief needs before they read the bars: how long they are
+ * standing there, how many they will see, when the wave lands, and when the leaders
+ * come through. A label-and-value grid rather than a sentence, so the eye can jump
+ * straight to the one being asked about.
+ */
+.traffic-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.15rem 1rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.traffic-facts dt {
+  color: var(--color-muted);
+}
+
+.traffic-facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
  * Every bar states its own number, the way the crew's spreadsheet chart does. A tooltip
  * is no use to someone reading a printout at a checkpoint.
  */

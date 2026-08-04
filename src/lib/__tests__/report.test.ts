@@ -338,7 +338,7 @@ describe('the spreadsheet covers the same five sections', () => {
   });
 });
 
-describe('traffic at each point', () => {
+describe('traffic at each station', () => {
   const withLeaders = runPipeline(kml, [
     {
       ...inputs[0],
@@ -354,7 +354,7 @@ describe('traffic at each point', () => {
     sections: { ...ALL_REPORT_SECTIONS, stationTraffic: true },
   });
 
-  it('prints one block per point', () => {
+  it('prints one block per station', () => {
     expect((withTraffic.match(/class="station-block"/g) ?? []).length).toBe(withLeaders.stations.length);
   });
 
@@ -368,7 +368,7 @@ describe('traffic at each point', () => {
   });
 
   it('repeats the figures as a table, one row per distance', () => {
-    const at = withTraffic.indexOf('<h2>Traffic at each point</h2>');
+    const at = withTraffic.indexOf('<h2>Traffic at each station</h2>');
     const table = withTraffic.slice(at, withTraffic.indexOf('</table>', at));
     expect(table).toContain('<th>Distance</th>');
     expect(table).toContain('<th class="num">Total</th>');
@@ -378,10 +378,10 @@ describe('traffic at each point', () => {
   it('stays out of the report unless it is asked for', () => {
     // A hundred points would be a hundred charts, so it is off by default.
     expect(ALL_REPORT_SECTIONS.stationTraffic).toBe(false);
-    expect(buildReportHtml(withLeaders, base)).not.toContain('Traffic at each point');
+    expect(buildReportHtml(withLeaders, base)).not.toContain('Traffic at each station');
   });
 
-  it('shows a point only in the windows it is working', () => {
+  it('shows a station only in the windows it is working', () => {
     // The shared grid spans the whole race; a point idle till 06:00 must not print
     // three hours of empty columns for a crew to read past.
     const station = withLeaders.stations.find((s) => s.distribution.some((b) => b.total > 0))!;

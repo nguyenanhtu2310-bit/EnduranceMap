@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import type { LeadArrival, PipelineResult, PipelineStation } from '../lib/pipeline';
 import { secondsToClockTime } from '../lib/time';
-import { StationTraffic } from './StationTraffic';
+import { seriesVar as slotVar } from '../lib/series';
 import {
   assignLeadLanes,
   firstLeadOfSex,
@@ -12,17 +12,6 @@ import {
 
 interface Props {
   result: PipelineResult;
-}
-
-/**
- * Categorical slots in fixed order — a distance keeps its colour no matter how many
- * others are on screen, so filtering never repaints the survivors. Values are the
- * validated reference palette; the CSS variables are declared in index.css.
- */
-const SERIES_SLOTS = 8;
-
-function slotVar(index: number): string {
-  return `var(--series-${(index % SERIES_SLOTS) + 1})`;
 }
 
 function formatHm(seconds: number): string {
@@ -96,13 +85,8 @@ type Hover = BinHover | LeadHover;
 
 export function CrossingDistribution({ result }: Props) {
   const [hover, setHover] = useState<Hover | null>(null);
-  /**
-   * 'chart' is the race day at a glance; 'stations' is the same data one point at a
-   * time, the way a crew standing at that point needs it. 'table' is the accessible
-   * twin of the overview.
-   */
-  const [view, setView] = useState<'chart' | 'table' | 'stations'>('chart');
-  const [openStations, setOpenStations] = useState<Record<string, boolean>>({});
+  /** 'chart' is the race day at a glance; 'table' is its accessible twin. */
+  const [view, setView] = useState<'chart' | 'table'>('chart');
   const [sharedScale, setSharedScale] = useState(true);
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [height, setHeight] = useState(MIN_HEIGHT);
@@ -216,13 +200,6 @@ export function CrossingDistribution({ result }: Props) {
           <button className="secondary" onClick={() => setView((v) => (v === 'table' ? 'chart' : 'table'))}>
             {view === 'table' ? 'Show chart' : 'Show table'}
           </button>
-          <button
-            className="secondary"
-            onClick={() => setView((v) => (v === 'stations' ? 'chart' : 'stations'))}
-            title="One chart per point, with the figures a crew works from"
-          >
-            {view === 'stations' ? 'Show overview' : 'Per station'}
-          </button>
         </span>
       </div>
 
@@ -305,52 +282,6 @@ export function CrossingDistribution({ result }: Props) {
       )}
 
       {view === 'table' && <DistributionTable result={result} />}
-
-      {view === 'stations' && (
-        <div className="station-list">
-          <p className="hint">
-            One point at a time, with every figure printed on the bar. Open the point a crew is
-            working and hand them the page — this is the view a finish-line team plans from.
-          </p>
-          {stations.map((station) => {
-            const open = openStations[station.schedule.name] ?? false;
-            const busiest = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
-            return (
-              <div className="station-detail" key={station.schedule.name}>
-                <button
-                  type="button"
-                  className="section-toggle"
-                  aria-expanded={open}
-                  onClick={() =>
-                    setOpenStations((current) => ({
-                      ...current,
-                      [station.schedule.name]: !open,
-                    }))
-                  }
-                >
-                  <span className="section-caret" aria-hidden="true">
-                    {open ? '▾' : '▸'}
-                  </span>
-                  <h3>{station.schedule.name}</h3>
-                  <span className="section-summary muted small">
-                    {busiest
-                      ? `busiest ${formatHm(busiest.binStartSeconds)} — ${busiest.total.toLocaleString()} through`
-                      : 'no arrivals'}
-                  </span>
-                </button>
-                {open && (
-                  <StationTraffic
-                    station={station}
-                    courseOrder={courseOrder}
-                    binMinutes={binMinutes}
-                    colourFor={slotVar}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       {view === 'chart' && (
         <div className="table-scroll chart-scroll">
