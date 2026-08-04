@@ -1,10 +1,24 @@
 import { useMemo, useState } from 'react';
 import type { PipelineStation } from '../lib/pipeline';
 import { peakRunnersPerWindow, type ActivityLevel } from '../lib/schedule';
+import { secondsToClockTime } from '../lib/time';
+import { useT } from '../lib/i18n';
 import { DEFAULT_HISTOGRAM_BIN_MINUTES } from '../lib/config';
 import type { RaceOverrides, StationOverride } from '../lib/overrides';
 import { EditableCell } from './EditableCell';
 import { formatDuration, windowSeconds } from '../lib/time';
+
+/**
+ * When the busiest window falls, beside how many arrive in it. The count says how much
+ * to send; the clock says when to have it there, and reading it off a chart in another
+ * section was a step the schedule could take for itself.
+ */
+function peakWindow(station: PipelineStation): string {
+  const bin = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
+  if (!bin) return '—';
+  const hm = (seconds: number) => secondsToClockTime(seconds).slice(0, 5);
+  return `${hm(bin.binStartSeconds)}–${hm(bin.binEndSeconds)}`;
+}
 
 interface Props {
   stations: PipelineStation[];
@@ -66,6 +80,7 @@ export function StationScheduleTable({
   overrides,
   onStationEdit,
 }: Props) {
+  const t = useT();
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>('course');
@@ -102,14 +117,14 @@ export function StationScheduleTable({
   return (
     <>
       <div className="sort-bar">
-        <span className="sort-label">Order</span>
+        <span className="sort-label">{t('Order')}</span>
         <button
           type="button"
           className={sort === 'course' ? 'sort-chip on' : 'sort-chip'}
           onClick={() => setSort('course')}
           title={onReorder ? 'The order stations are met on course — drag to rearrange' : 'The order stations are met on course'}
         >
-          On course
+          {t('On course')}
         </button>
         {(['open', 'close', 'duration'] as const).map((key) => (
           <button
@@ -117,9 +132,9 @@ export function StationScheduleTable({
             type="button"
             className={sort === key ? 'sort-chip on' : 'sort-chip'}
             onClick={() => setSort(sort === key ? 'course' : key)}
-            title={SORT_LABELS[key]}
+            title={t(SORT_LABELS[key])}
           >
-            {SORT_LABELS[key]}
+            {t(SORT_LABELS[key])}
           </button>
         ))}
         {sorted && onReorder && <span className="hint sort-note">Dragging is off while sorted.</span>}
@@ -130,13 +145,14 @@ export function StationScheduleTable({
         <thead>
           <tr>
             {onReorder && <th aria-label="Drag to reorder" />}
-            <th>Station</th>
-            <th>Crossings</th>
-            <th className="num">Open</th>
-            <th className="num">Close</th>
-            <th className="num">Duration</th>
-            <th className="num">Peak /{binMinutes} min</th>
-            <th>Activity</th>
+            <th>{t('Station')}</th>
+            <th>{t('Crossings')}</th>
+            <th className="num">{t('Open')}</th>
+            <th className="num">{t('Close')}</th>
+            <th className="num">{t('Duration')}</th>
+            <th className="num">{t('Peak window')}</th>
+            <th className="num">{t('Peak')} /{binMinutes} {t('min')}</th>
+            <th>{t('Activity')}</th>
             {onRemove && <th aria-label="Remove" />}
           </tr>
         </thead>
@@ -255,6 +271,7 @@ export function StationScheduleTable({
                   return seconds > 0 ? formatDuration(seconds) : '—';
                 })()}
               </td>
+              <td className="num">{peakWindow(station)}</td>
               <td className="num">
                 {peakRunnersPerWindow(station.schedule.peakRunnersPerHour, binMinutes).toLocaleString()}
               </td>

@@ -42,7 +42,7 @@ function coursesOf(result: PipelineResult) {
 function scheduleSheet(result: PipelineResult, options: WorkbookOptions): Sheet {
   const notes = options.notes ?? {};
   const rows: CellValue[][] = [
-    ['Station', 'Map name', 'Note', 'Open', 'Close', 'Duration', `Peak /${result.binMinutes} min`, 'Activity', 'Cut-off risk', 'Crossings'],
+    ['Station', 'Map name', 'Note', 'Open', 'Close', 'Duration', 'Peak window', `Peak /${result.binMinutes} min`, 'Activity', 'Cut-off risk', 'Crossings'],
   ];
 
   for (const station of result.stations) {
@@ -54,6 +54,12 @@ function scheduleSheet(result: PipelineResult, options: WorkbookOptions): Sheet 
       hm(station.schedule.openClockTime),
       hm(station.schedule.closeClockTime),
       seconds && seconds > 0 ? formatDuration(seconds) : '',
+      (() => {
+        const bin = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
+        return bin
+          ? `${hm(secondsToClockTime(bin.binStartSeconds))}–${hm(secondsToClockTime(bin.binEndSeconds))}`
+          : '';
+      })(),
       peakRunnersPerWindow(station.schedule.peakRunnersPerHour, result.binMinutes),
       station.schedule.activityLevel,
       station.schedule.cutoffExceeded ? 'yes' : '',

@@ -302,6 +302,12 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
           const seconds = windowSeconds(station.schedule.openClockTime, station.schedule.closeClockTime);
           return seconds && seconds > 0 ? formatDuration(seconds) : '–';
         })()}</td>
+        <td class="num">${(() => {
+          const bin = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
+          return bin
+            ? `${secondsToClockTime(bin.binStartSeconds).slice(0, 5)}–${secondsToClockTime(bin.binEndSeconds).slice(0, 5)}`
+            : '–';
+        })()}</td>
         <td class="num">${peakRunnersPerWindow(station.schedule.peakRunnersPerHour, result.binMinutes).toLocaleString()}</td>
         <td><span class="tag ${station.schedule.activityLevel}">${station.schedule.activityLevel}</span></td>
         ${station.schedule.cutoffExceeded ? '<td class="risk">Over cut-off</td>' : '<td></td>'}
@@ -698,7 +704,8 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   <table>
     <thead><tr>
       <th>Station</th><th>Crossings</th><th class="num">Open</th><th class="num">Close</th>
-      <th class="num">Duration</th><th class="num">Peak /${result.binMinutes} min</th><th>Activity</th><th></th>
+      <th class="num">Duration</th><th class="num">Peak window</th>
+      <th class="num">Peak /${result.binMinutes} min</th><th>Activity</th><th></th>
     </tr></thead>
     <tbody>${scheduleRows}</tbody>
   </table>`

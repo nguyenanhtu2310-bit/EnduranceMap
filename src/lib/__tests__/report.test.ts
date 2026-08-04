@@ -216,6 +216,7 @@ describe('the report presents the same columns as the screen', () => {
       'Open',
       'Close',
       'Duration',
+      'Peak window',
       'Peak /15 min',
       'Activity',
     ]);
