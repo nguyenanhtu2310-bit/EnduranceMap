@@ -28,6 +28,7 @@ import {
   downloadReport,
   type ReportSections,
 } from './lib/report';
+import { buildCrewSheetsHtml } from './lib/crewSheets';
 import { buildReportSheets } from './lib/workbook';
 import { downloadXlsx } from './lib/xlsx';
 import { FolderPicker } from './components/FolderPicker';
@@ -1137,6 +1138,18 @@ export default function App() {
                 title="One sheet per section — opens in Excel, Numbers or Google Sheets"
               >
                 {t('Download spreadsheet')}
+              </button>
+              <button
+                className="secondary"
+                onClick={() => {
+                  const name = raceName.trim() || kml?.fileName.replace(/\.kml$/i, '') || 'Race';
+                  const html = buildCrewSheetsHtml(result, { raceName: name, t });
+                  const base = name.replace(/[^\w\d -]+/g, '').trim() || 'race';
+                  downloadReport(html, `${base} - crew sheets.html`);
+                }}
+                title={t('One A4 landscape page per station, ready to print and hand out')}
+              >
+                {t('Download crew sheets')}
               </button>
               {!Object.values(reportSections).some(Boolean) && (
                 <span className="hint" style={{ margin: 0 }}>

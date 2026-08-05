@@ -16,7 +16,8 @@ import {
   sexLabel,
 } from './leadMarkers';
 import { peakRunnersPerWindow } from './schedule';
-import { buildStationTraffic, courseTotal, type StationTrafficView } from './stationTraffic';
+import { buildStationTraffic, courseTotal } from './stationTraffic';
+import { buildStationTrafficSvg } from './stationTrafficSvg';
 import { SPORTSTATS_LOGO_DATA_URI } from '../assets/sportstatsLogo';
 
 /** Which parts of the plan to print. An organiser rarely needs all of it at once. */
@@ -213,54 +214,6 @@ function buildDistributionSvg(result: PipelineResult, series: string[], ink: { l
   return `<svg viewBox="0 0 ${width} ${height}" width="100%" role="img" aria-label="Runner arrivals over time at each station" style="max-width:${width}px">${parts.join('')}</svg>`;
 }
 
-/**
- * One point's traffic as the crew reads it: a bar per distance per window, each bar
- * carrying its own figure, and the same figures repeated as a table underneath.
- *
- * The organiser at Da Nang briefed his finish team from a photograph of exactly this,
- * printed off a spreadsheet. Printing it here means the numbers come from the plan
- * rather than from a chart someone rebuilt by hand.
- */
-function buildStationTrafficSvg(
-  view: StationTrafficView,
-  series: string[],
-  ink: { label: string; axis: string; base: string }
-): string {
-  const BAR_GAP = 2;
-  const GROUP_GAP = 14;
-  const PLOT_H = 170;
-  const TOP_BAND = 16;
-  const AXIS_BAND = 20;
-
-  const barW = Math.max(7, 30 - view.present.length * 4);
-  const groupW = view.present.length * (barW + BAR_GAP) + GROUP_GAP;
-  const width = 4 + view.active.length * groupW;
-  const height = TOP_BAND + PLOT_H + AXIS_BAND;
-  const baseline = TOP_BAND + PLOT_H;
-
-  const parts: string[] = [
-    `<line x1="4" y1="${baseline}" x2="${width}" y2="${baseline}" stroke="${ink.base}" stroke-width="1"/>`,
-  ];
-
-  view.active.forEach((bin, binIndex) => {
-    const groupLeft = 4 + binIndex * groupW + GROUP_GAP / 2;
-    view.present.forEach(({ index }, slot) => {
-      const count = bin.byCourse[index] ?? 0;
-      if (count === 0) return;
-      const h = (count / view.max) * PLOT_H;
-      const x = groupLeft + slot * (barW + BAR_GAP);
-      parts.push(
-        `<rect x="${x.toFixed(1)}" y="${(baseline - h).toFixed(1)}" width="${barW}" height="${Math.max(h, 1).toFixed(1)}" fill="${series[index % series.length]}"/>` +
-          `<text x="${(x + barW / 2).toFixed(1)}" y="${(baseline - h - 4).toFixed(1)}" text-anchor="middle" fill="${ink.label}" font-size="9">${count.toLocaleString()}</text>`
-      );
-    });
-    parts.push(
-      `<text x="${(groupLeft + (view.present.length * (barW + BAR_GAP)) / 2).toFixed(1)}" y="${baseline + 14}" text-anchor="middle" fill="${ink.axis}" font-size="10">${secondsToClockTime(bin.binStartSeconds).slice(0, 5)}</text>`
-    );
-  });
-
-  return `<svg viewBox="0 0 ${width} ${height}" width="100%" role="img" aria-label="Arrivals per window" style="max-width:${width}px">${parts.join('')}</svg>`;
-}
 
 /**
  * Renders the whole plan as one self-contained HTML file — no scripts, no external

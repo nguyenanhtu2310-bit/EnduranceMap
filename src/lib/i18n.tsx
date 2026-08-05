@@ -101,6 +101,9 @@ const VI: Record<string, string> = {
   'Download dark report': 'Tải báo cáo nền tối',
   'Download print report': 'Tải báo cáo in',
   'Download spreadsheet': 'Tải file bảng tính',
+  'Download crew sheets': 'Tải phiếu trạm',
+  'One A4 landscape page per station, ready to print and hand out':
+    'Mỗi trạm một trang A4 ngang, in ra là phát được ngay',
   'Race name': 'Tên giải',
   'Select all': 'Chọn tất cả',
   Clear: 'Bỏ chọn',
