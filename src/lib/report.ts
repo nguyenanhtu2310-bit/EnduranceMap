@@ -440,7 +440,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
           .join('');
         return `<h2>Split calculation</h2>
         <p class="note">Kilometres are measured along each distance's own route, so one point reads differently per race.</p>
-        <table><thead><tr><th>Timing point</th><th class="num">Operating</th>${head}</tr></thead>
+        <table><thead><tr><th></th><th class="num">Operating</th>${head}</tr></thead>
         <tbody>${body}</tbody></table>`;
       })();
 

@@ -63,7 +63,7 @@ export function TimingMatrix({ result, notes, onNoteChange, overrides, onCrossin
       <table className="matrix">
         <thead>
           <tr>
-            <th>{t('Timing point')}</th>
+            <th aria-label={t('Timing point')} />
             <th>{t('Operating')}</th>
             {courses.map((course) => (
               <th key={course.name}>{course.name}</th>
