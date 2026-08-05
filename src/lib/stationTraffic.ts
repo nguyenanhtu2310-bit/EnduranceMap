@@ -1,5 +1,9 @@
-import type { PipelineStation } from './pipeline';
 import type { StackedBin } from './schedule';
+
+/** A station, or one half of a split start/finish — anything with binned arrivals. */
+interface HasDistribution {
+  distribution: StackedBin[];
+}
 
 /**
  * One station's traffic, prepared once for both the screen and the report.
@@ -23,7 +27,7 @@ export interface StationTrafficView {
 }
 
 export function buildStationTraffic(
-  station: PipelineStation,
+  station: HasDistribution,
   courseOrder: string[]
 ): StationTrafficView | null {
   const bins = station.distribution;

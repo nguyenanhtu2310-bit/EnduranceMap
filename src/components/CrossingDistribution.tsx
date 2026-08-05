@@ -1,8 +1,9 @@
 import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { useT } from '../lib/i18n';
-import type { LeadArrival, PipelineResult, PipelineStation } from '../lib/pipeline';
+import type { LeadArrival, PipelineResult } from '../lib/pipeline';
 import { secondsToClockTime } from '../lib/time';
 import { seriesVar as slotVar } from '../lib/series';
+import { splitStartFinish, trafficStationName, type TrafficStation } from '../lib/startFinish';
 import {
   assignLeadLanes,
   firstLeadOfSex,
@@ -102,7 +103,12 @@ export function CrossingDistribution({ result }: Props) {
    */
   const boxRef = useRef<HTMLDivElement>(null);
 
-  const { stations, courseOrder, timeRangeSeconds, binMinutes } = result;
+  const { courseOrder, timeRangeSeconds, binMinutes } = result;
+
+  // A line that starts two races and later finishes them is two jobs on one placemark,
+  // and one row mixing them describes neither. Split before anything is measured.
+  const stations = splitStartFinish(result);
+  const rowName = (s: TrafficStation) => trafficStationName(s, t);
 
   // Shared scale keeps rows comparable — a tall bar at station 3 means the same number
   // of runners as a tall bar at station 12. But when a late marathon-only station sees
@@ -134,7 +140,7 @@ export function CrossingDistribution({ result }: Props) {
 
   // Sized to the longest name so labels never run into the plot, but capped so a
   // verbose timing map cannot squeeze the chart out of the card.
-  const longestLabel = Math.max(0, ...stations.map((s) => s.schedule.name.length));
+  const longestLabel = Math.max(0, ...stations.map((s) => rowName(s).length));
   const labelWidth = Math.min(
     MAX_LABEL_WIDTH,
     Math.max(MIN_LABEL_WIDTH, Math.ceil(longestLabel * LABEL_CHAR_PX) + LABEL_GUTTER)
@@ -179,7 +185,7 @@ export function CrossingDistribution({ result }: Props) {
   for (let t = firstTick; t <= timeRangeSeconds.end; t += tickStep) ticks.push(t);
 
   const hoveredStation =
-    hover?.kind === 'bin' ? stations.find((s) => s.schedule.name === hover.station) : undefined;
+    hover?.kind === 'bin' ? stations.find((s) => rowName(s) === hover.station) : undefined;
   const hoveredBin = hoveredStation && hover?.kind === 'bin' ? hoveredStation.distribution[hover.binIndex] : undefined;
 
   return (
@@ -279,7 +285,9 @@ export function CrossingDistribution({ result }: Props) {
         </div>
       )}
 
-      {view === 'table' && <DistributionTable result={result} />}
+      {view === 'table' && (
+        <DistributionTable stations={stations} result={result} rowName={rowName} />
+      )}
 
       {view === 'chart' && (
         <div className="table-scroll chart-scroll">
@@ -314,10 +322,10 @@ export function CrossingDistribution({ result }: Props) {
               const lanes = rowLanes[rowIndex];
 
               return (
-                <g key={station.schedule.name}>
+                <g key={station.key}>
                   <text x={0} y={rowTop + rowHeight / 2} className="row-label" dominantBaseline="middle">
-                    <title>{station.schedule.name}</title>
-                    {truncateToWidth(station.schedule.name, labelTextWidth)}
+                    <title>{rowName(station)}</title>
+                    {truncateToWidth(rowName(station), labelTextWidth)}
                   </text>
 
                   <line
@@ -340,7 +348,7 @@ export function CrossingDistribution({ result }: Props) {
                         onMouseMove={(e) =>
                           setHover({
                             kind: 'bin',
-                            station: station.schedule.name,
+                            station: rowName(station),
                             binIndex,
                             ...anchorFrom(e),
                           })
@@ -404,7 +412,7 @@ export function CrossingDistribution({ result }: Props) {
                         key={`${lead.courseName}-${lead.sex}-${lead.passIndex}`}
                         className="lead-marker"
                         onMouseMove={(e) =>
-                          setHover({ kind: 'lead', lead, station: station.schedule.name, ...anchorFrom(e) })
+                          setHover({ kind: 'lead', lead, station: rowName(station), ...anchorFrom(e) })
                         }
                       >
                         {/* The hit target keeps a full-size reach whatever the rows are
@@ -438,7 +446,7 @@ export function CrossingDistribution({ result }: Props) {
 
       {view === 'chart' && hover?.kind === 'bin' && hoveredBin && hoveredStation && (
         <ChartTooltip anchor={hover} box={boxRef.current}>
-          <strong>{hoveredStation.schedule.name}</strong>
+          <strong>{rowName(hoveredStation)}</strong>
           <span className="muted small">
             {formatHm(hoveredBin.binStartSeconds)}–{formatHm(hoveredBin.binEndSeconds)}
           </span>
@@ -527,8 +535,16 @@ function ChartTooltip({
 }
 
 /** The WCAG-clean twin of the chart: every plotted value reachable as text. */
-function DistributionTable({ result }: { result: PipelineResult }) {
-  const hasLeads = result.stations.some((s) => leadsForStation(s).length > 0);
+function DistributionTable({
+  stations,
+  result,
+  rowName,
+}: {
+  stations: TrafficStation[];
+  result: PipelineResult;
+  rowName: (station: TrafficStation) => string;
+}) {
+  const hasLeads = stations.some((s) => leadsForStation(s).length > 0);
 
   return (
     <div className="table-scroll">
@@ -545,17 +561,17 @@ function DistributionTable({ result }: { result: PipelineResult }) {
           </tr>
         </thead>
         <tbody>
-          {result.stations.map((station) => (
-            <tr key={station.schedule.name}>
+          {stations.map((station) => (
+            <tr key={station.key}>
               <td>
-                <span className="station-name">{station.schedule.name}</span>
+                <span className="station-name">{rowName(station)}</span>
               </td>
               <td>{peakWindowLabel(station)}</td>
               <td className="num">{peakBin(station)?.total.toLocaleString() ?? '—'}</td>
               <td>{busiestCourse(station, result.courseOrder)}</td>
               <td>
-                <span className={`tag ${station.schedule.activityLevel}`}>
-                  {station.schedule.activityLevel}
+                <span className={`tag ${station.station.schedule.activityLevel}`}>
+                  {station.station.schedule.activityLevel}
                 </span>
               </td>
               {hasLeads && <td className="num">{firstLeadLabel(station, 'M')}</td>}
@@ -569,22 +585,22 @@ function DistributionTable({ result }: { result: PipelineResult }) {
 }
 
 /** The earliest lead arrival of one sex at a station, across every distance through it. */
-function firstLeadLabel(station: PipelineStation, sex: LeadArrival['sex']): string {
+function firstLeadLabel(station: TrafficStation, sex: LeadArrival['sex']): string {
   const first = firstLeadOfSex(station, sex);
   return first ? `${formatHm(first.seconds)} ${first.courseName}` : '—';
 }
 
-function peakBin(station: PipelineStation) {
+function peakBin(station: TrafficStation) {
   return station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
 }
 
-function peakWindowLabel(station: PipelineStation): string {
+function peakWindowLabel(station: TrafficStation): string {
   const bin = peakBin(station);
   if (!bin) return '—';
   return `${formatHm(bin.binStartSeconds)}–${formatHm(bin.binEndSeconds)}`;
 }
 
-function busiestCourse(station: PipelineStation, courseOrder: string[]): string {
+function busiestCourse(station: TrafficStation, courseOrder: string[]): string {
   const bin = peakBin(station);
   if (!bin) return '—';
   let best = -1;

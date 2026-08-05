@@ -1,11 +1,11 @@
-import type { PipelineStation } from '../lib/pipeline';
+import type { TrafficStation } from '../lib/startFinish';
 import { secondsToClockTime } from '../lib/time';
 import { firstLeadOfSex, leadsForStation } from '../lib/leadMarkers';
 import { buildStationTraffic, courseTotal } from '../lib/stationTraffic';
 import { useT } from '../lib/i18n';
 
 interface Props {
-  station: PipelineStation;
+  station: TrafficStation;
   courseOrder: string[];
   binMinutes: number;
   /** Colour for a distance's slot, shared with the overview chart. */
@@ -96,7 +96,7 @@ export function StationTraffic({ station, courseOrder, binMinutes, colourFor }: 
           width={width}
           height={height}
           role="img"
-          aria-label={`Arrivals per ${binMinutes} minutes at ${station.schedule.name}`}
+          aria-label={`Arrivals per ${binMinutes} minutes at ${station.name}`}
         >
           <line x1={LEFT_PAD} x2={width} y1={baseline} y2={baseline} className="baseline" />
 

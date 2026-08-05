@@ -77,6 +77,7 @@ const VI: Record<string, string> = {
   'Total visits': 'Tổng lượt qua',
   Busiest: 'Cao điểm',
   'First through': 'Người đầu tiên',
+  Finish: 'Về đích',
   at: 'lúc',
   Male: 'Nam',
   Female: 'Nữ',

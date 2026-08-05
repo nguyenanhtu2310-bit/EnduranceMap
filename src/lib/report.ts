@@ -18,6 +18,7 @@ import {
 import { peakRunnersPerWindow } from './schedule';
 import { buildStationTraffic, courseTotal } from './stationTraffic';
 import { buildStationTrafficSvg } from './stationTrafficSvg';
+import { splitStartFinish, trafficStationName, type TrafficStation } from './startFinish';
 import { SPORTSTATS_LOGO_DATA_URI } from '../assets/sportstatsLogo';
 
 /** Which parts of the plan to print. An organiser rarely needs all of it at once. */
@@ -134,8 +135,7 @@ const DARK_SERIES = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#5e
  * shared scale would flatten exactly the rows a reader opens the chart to see. The
  * table beneath carries the absolute numbers.
  */
-function buildDistributionSvg(result: PipelineResult, series: string[], ink: { label: string; axis: string; grid: string; base: string; peak: string }): string {
-  const stations = result.stations;
+function buildDistributionSvg(result: PipelineResult, series: string[], ink: { label: string; axis: string; grid: string; base: string; peak: string }, stations: TrafficStation[]): string {
   const binCount = stations[0]?.distribution.length ?? 0;
   if (binCount === 0) return '';
 
@@ -175,7 +175,8 @@ function buildDistributionSvg(result: PipelineResult, series: string[], ink: { l
     const baseline = top + ROW_H - 6;
     const usable = ROW_BODY - 14;
     const rowMax = Math.max(1, ...station.distribution.map((b) => b.total));
-    const label = station.schedule.name.length > 28 ? `${station.schedule.name.slice(0, 27)}…` : station.schedule.name;
+    const rowLabel = trafficStationName(station);
+    const label = rowLabel.length > 28 ? `${rowLabel.slice(0, 27)}…` : rowLabel;
 
     parts.push(`<text x="0" y="${top + ROW_H / 2 + 4}" fill="${ink.label}" font-size="12" font-weight="500">${esc(label)}</text>`);
     parts.push(`<line x1="${LABEL_W}" y1="${baseline}" x2="${LABEL_W + PLOT_W}" y2="${baseline}" stroke="${ink.base}" stroke-width="1"/>`);
@@ -400,8 +401,9 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   const distributionTable = !sections.distribution
     ? ''
     : (() => {
-        const anyLeads = result.stations.some((s) => leadsForStation(s).length > 0);
-        const body = result.stations
+        const entries = splitStartFinish(result);
+        const anyLeads = entries.some((s) => leadsForStation(s).length > 0);
+        const body = entries
           .map((station) => {
             const peak = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
             const window = peak
@@ -430,11 +432,11 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
                 : '–';
             };
             return `<tr>
-              <td>${esc(station.schedule.name)}</td>
+              <td>${esc(trafficStationName(station))}</td>
               <td class="num">${window}</td>
               <td class="num">${peak ? peak.total.toLocaleString() : '–'}</td>
               <td>${esc(busiest)}</td>
-              <td><span class="tag ${station.schedule.activityLevel}">${station.schedule.activityLevel}</span></td>
+              <td><span class="tag ${station.station.schedule.activityLevel}">${station.station.schedule.activityLevel}</span></td>
               ${anyLeads ? `<td class="num">${lead('M')}</td><td class="num">${lead('F')}</td>` : ''}
             </tr>`;
           })
@@ -446,7 +448,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         const legend = courses
           .map((c, i) => `<span class="key"><span class="swatch" style="background:${series[i % series.length]}"></span>${esc(c.name)}</span>`)
           .join('');
-        const svg = buildDistributionSvg(result, series, ink);
+        const svg = buildDistributionSvg(result, series, ink, entries);
         return `<h2>Crossing time distribution</h2>
         <p class="note">Runner arrivals per ${result.binMinutes} minutes on one shared clock, stacked by distance. Each row is scaled to its own peak; the table beneath carries the absolute numbers.</p>
         <div class="legend">${legend}<span class="key"><span class="swatch peak"></span>Peak window</span>${
@@ -468,7 +470,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
           ? { label: '#f3f8ff', axis: 'rgba(243,248,255,0.4)', base: 'rgba(243,248,255,0.22)' }
           : { label: '#16221f', axis: '#7b8a87', base: '#c7d0cd' };
 
-        const blocks = result.stations
+        const blocks = splitStartFinish(result)
           .map((station) => {
             const view = buildStationTraffic(station, result.courseOrder);
             if (!view) return '';
@@ -500,7 +502,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
             const clock = (seconds: number) => secondsToClockTime(seconds).slice(0, 5);
 
             return `<div class="station-block">
-              <h3>${esc(station.schedule.name)}</h3>
+              <h3>${esc(trafficStationName(station))}</h3>
               <dl class="traffic-facts">
                 <dt>Operating time</dt><dd>${clock(view.active[0].binStartSeconds)} &ndash; ${clock(
                   view.active[view.active.length - 1].binEndSeconds

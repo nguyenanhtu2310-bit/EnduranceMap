@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { PipelineResult } from '../lib/pipeline';
 import { secondsToClockTime } from '../lib/time';
 import { buildStationTraffic } from '../lib/stationTraffic';
+import { roleLabel, splitStartFinish } from '../lib/startFinish';
 import { StationTraffic } from './StationTraffic';
 import { useT } from '../lib/i18n';
 
@@ -24,7 +25,9 @@ export function StationTrafficList({ result, colourFor }: Props) {
   const t = useT();
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
-  if (result.stations.length === 0) {
+  const entries = splitStartFinish(result);
+
+  if (entries.length === 0) {
     return <p className="hint">No stations to describe.</p>;
   }
 
@@ -32,10 +35,10 @@ export function StationTrafficList({ result, colourFor }: Props) {
 
   // "All open" only once every station is, so the control offers the useful direction:
   // a half-opened list is nearly always on its way to being fully open.
-  const allOpen = result.stations.every((s) => open[s.schedule.name]);
+  const allOpen = entries.every((e) => open[e.key]);
 
   function setAll(next: boolean) {
-    setOpen(Object.fromEntries(result.stations.map((s) => [s.schedule.name, next])));
+    setOpen(Object.fromEntries(entries.map((e) => [e.key, next])));
   }
 
   return (
@@ -45,22 +48,26 @@ export function StationTrafficList({ result, colourFor }: Props) {
           {allOpen ? t('Collapse all stations') : t('Expand all stations')}
         </button>
       </div>
-      {result.stations.map((station) => {
-        const isOpen = open[station.schedule.name] ?? false;
-        const view = buildStationTraffic(station, result.courseOrder);
+      {entries.map((entry) => {
+        const isOpen = open[entry.key] ?? false;
+        const view = buildStationTraffic(entry, result.courseOrder);
+        const role = roleLabel(entry.role);
 
         return (
-          <div className="station-detail" key={station.schedule.name}>
+          <div className="station-detail" key={entry.key}>
             <button
               type="button"
               className="section-toggle"
               aria-expanded={isOpen}
-              onClick={() => setOpen((current) => ({ ...current, [station.schedule.name]: !isOpen }))}
+              onClick={() => setOpen((current) => ({ ...current, [entry.key]: !isOpen }))}
             >
               <span className="section-caret" aria-hidden="true">
                 {isOpen ? '▾' : '▸'}
               </span>
-              <h3>{station.schedule.name}</h3>
+              <h3>
+                {entry.name}
+                {role && <span className="role-tag">{t(role)}</span>}
+              </h3>
               <span className="section-summary muted small">
                 {view
                   ? `${view.total.toLocaleString()} visits · busiest ${view.busiestBin.total.toLocaleString()} at ${hm(
@@ -71,7 +78,7 @@ export function StationTrafficList({ result, colourFor }: Props) {
             </button>
             {isOpen && (
               <StationTraffic
-                station={station}
+                station={entry}
                 courseOrder={result.courseOrder}
                 binMinutes={result.binMinutes}
                 colourFor={colourFor}

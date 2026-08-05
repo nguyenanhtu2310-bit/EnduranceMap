@@ -1,4 +1,9 @@
-import type { LeadArrival, PipelineStation } from './pipeline';
+import type { LeadArrival } from './pipeline';
+
+/** Anything carrying lead markers: a station, or one half of a split start/finish. */
+interface HasLeads {
+  leadArrivals?: LeadArrival[];
+}
 
 /**
  * Layout shared by the on-screen chart and the printed one, so a report handed to an
@@ -9,7 +14,7 @@ import type { LeadArrival, PipelineStation } from './pipeline';
  * A station's lead markers, earliest first. Tolerates a race saved before the field
  * existed, which would otherwise throw on reopening.
  */
-export function leadsForStation(station: PipelineStation): LeadArrival[] {
+export function leadsForStation(station: HasLeads): LeadArrival[] {
   return [...(station.leadArrivals ?? [])].sort((a, b) => a.seconds - b.seconds);
 }
 
@@ -43,7 +48,7 @@ export function sexLabel(sex: LeadArrival['sex']): string {
 
 /** The earliest lead arrival of one sex at a station, across every distance through it. */
 export function firstLeadOfSex(
-  station: PipelineStation,
+  station: HasLeads,
   sex: LeadArrival['sex']
 ): LeadArrival | undefined {
   return leadsForStation(station).find((l) => l.sex === sex);

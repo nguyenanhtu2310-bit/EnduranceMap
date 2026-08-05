@@ -682,6 +682,19 @@ tr.drop-target td {
   font-size: 0.95rem;
 }
 
+/* Marks which half of a start/finish point a row is, without repeating the name. */
+.role-tag {
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .station-traffic {
   margin: 0.7rem 0 0.3rem;
 }

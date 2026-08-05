@@ -1,8 +1,9 @@
-import type { PipelineResult, PipelineStation } from './pipeline';
+import type { PipelineResult } from './pipeline';
 import { secondsToClockTime } from './time';
 import { firstLeadOfSex, leadsForStation } from './leadMarkers';
 import { buildStationTraffic, courseTotal } from './stationTraffic';
 import { TRAFFIC_BANDS, buildStationTrafficSvg, trafficSvgWidth } from './stationTrafficSvg';
+import { splitStartFinish, trafficStationName, type TrafficStation } from './startFinish';
 
 /** Translates a string, or hands it back unchanged. Supplied by the app's language. */
 export type Translate = (english: string) => string;
@@ -72,7 +73,10 @@ export function buildCrewSheetsHtml(result: PipelineResult, options: CrewSheetOp
   const t = options.t ?? ((english: string) => english);
   const wanted = options.only ? new Set(options.only) : null;
 
-  const stations = result.stations.filter((s) => !wanted || wanted.has(s.schedule.name));
+  // A start line and a finish line get a page each: different crews, different hours.
+  const stations = splitStartFinish(result).filter(
+    (s) => !wanted || wanted.has(s.name) || wanted.has(trafficStationName(s, t))
+  );
   const pages = stations.map((station) => sheet(station, result, t, options.raceName)).filter(Boolean);
   const generated = new Date().toISOString().slice(0, 16).replace('T', ' ');
 
@@ -157,7 +161,7 @@ ${pages.join('\n')}
 
 /** The single page for one station, or '' where nobody comes through it. */
 function sheet(
-  station: PipelineStation,
+  station: TrafficStation,
   result: PipelineResult,
   t: Translate,
   raceName: string
@@ -238,7 +242,7 @@ function sheet(
 
   return `<section class="sheet">
   <div class="sheet-head">
-    <h1>${esc(station.schedule.name)}</h1>
+    <h1>${esc(trafficStationName(station, t))}</h1>
     <div class="race">${esc(raceName)}</div>
   </div>
   <dl class="facts">${facts.join('')}</dl>
@@ -252,7 +256,7 @@ function sheet(
     </tbody>
   </table>
   <div class="foot">
-    <span>${esc(station.sourceNames.join(', '))}</span>
+    <span>${esc(station.station.sourceNames.join(', '))}</span>
     <span>${esc(t('Peak'))} /${result.binMinutes} ${esc(t('min'))}</span>
   </div>
 </section>`;

@@ -177,6 +177,46 @@ export interface GroupedStation {
   snaps: CourseSnap[];
 }
 
+
+/**
+ * What a placemark's own name says it is: the start of something, the finish of
+ * something, both, or neither.
+ *
+ * A name carrying both words — "SWIM START/FINISH" — is a point that genuinely does both
+ * jobs, and stays one point.
+ */
+type PointRole = 'start' | 'finish' | 'both' | 'none';
+
+const START_WORDS = /\b(start|xu[aâấ]t\s*ph[aáát]t)\b/i;
+const FINISH_WORDS = /\b(finish|fnish|v[eề]\s*[dđ][iíich]+|[dđ][iíich]{2,})\b/i;
+
+function pointRole(name: string): PointRole {
+  const isStart = START_WORDS.test(name);
+  const isFinish = FINISH_WORDS.test(name);
+  if (isStart && isFinish) return 'both';
+  if (isStart) return 'start';
+  if (isFinish) return 'finish';
+  return 'none';
+}
+
+/**
+ * Whether two placemarks close together are the same job or two different ones.
+ *
+ * A start line and a finish line are often within metres of each other — Quang Tri put a
+ * run start and a run finish twenty-four metres apart, across one intersection — and
+ * merging them produced a station that opened when the first wave set off and closed
+ * when the last athlete came home, with a peak belonging to neither. No distance
+ * threshold separates those safely: the same map has a finish drawn twice at the very
+ * same spot, and a swim start/finish typed twice eight metres apart, both of which
+ * genuinely are one point. What tells them apart is not how far apart they sit but what
+ * the organiser called them.
+ */
+function sameJob(a: string, b: string): boolean {
+  const left = pointRole(a);
+  const right = pointRole(b);
+  return !((left === 'start' && right === 'finish') || (left === 'finish' && right === 'start'));
+}
+
 /**
  * Merges placemarks that sit within `toleranceKm` of one another into a single logical
  * station. Race organizers sometimes draw a separate point per distance at what is
@@ -190,7 +230,12 @@ export function groupCoincidentPlacemarks(
   const groups: GroupedStation[] = [];
 
   for (const placemark of placemarks) {
-    const existing = groups.find((g) => g.members.some((m) => haversineKm(m.coord, placemark.coord) <= toleranceKm));
+    const existing = groups.find((g) =>
+      g.members.some(
+        (m) =>
+          haversineKm(m.coord, placemark.coord) <= toleranceKm && sameJob(m.name, placemark.name)
+      )
+    );
     if (existing) {
       existing.members.push(placemark);
     } else {
