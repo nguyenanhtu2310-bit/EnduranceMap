@@ -254,3 +254,38 @@ describe('buildCutoffTable', () => {
     expect(DEFAULT_CUTOFF_GRACE_MINUTES).toBe(5);
   });
 });
+
+describe('activity thresholds in window terms', () => {
+  // The settings panel shows and takes a per-window count while storing an hourly rate,
+  // so the number an operator types has to classify exactly what they expect from the
+  // peak column beside it.
+  const perHour = (perWindow: number, binMinutes: number) => perWindow * (60 / binMinutes);
+
+  it('tags a station on the count shown in its peak column', () => {
+    const thresholds = {
+      mediumRunnersPerHour: perHour(15, 15),
+      highRunnersPerHour: perHour(40, 15),
+    };
+    // A station whose busiest window holds 40 is High; 39 is not.
+    expect(classifyActivityLevel(perHour(40, 15), thresholds)).toBe('High');
+    expect(classifyActivityLevel(perHour(39, 15), thresholds)).toBe('Medium');
+    expect(classifyActivityLevel(perHour(14, 15), thresholds)).toBe('Low');
+  });
+
+  it('means the same load whatever the window is set to', () => {
+    // 40 through a quarter hour is the same crowd as 80 through a half hour, so a
+    // threshold typed at one bin width must not reclassify when the width changes.
+    const thresholds = { mediumRunnersPerHour: 60, highRunnersPerHour: perHour(40, 15) };
+    expect(classifyActivityLevel(perHour(40, 15), thresholds)).toBe('High');
+    expect(classifyActivityLevel(perHour(80, 30), thresholds)).toBe('High');
+    expect(classifyActivityLevel(perHour(79, 30), thresholds)).not.toBe('High');
+  });
+
+  it('round-trips a typed figure back to the same figure', () => {
+    for (const bin of [5, 10, 15, 30]) {
+      for (const typed of [5, 15, 40, 125]) {
+        expect(Math.round(perHour(typed, bin) / (60 / bin))).toBe(typed);
+      }
+    }
+  });
+});

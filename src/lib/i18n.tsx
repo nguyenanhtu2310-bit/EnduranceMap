@@ -149,8 +149,6 @@ const VI: Record<string, string> = {
   'Teardown buffer (min)': 'Thời gian dỡ trạm (phút)',
   'Cut-off grace (min)': 'Biên độ COT (phút)',
   'Histogram bin (min)': 'Khung thống kê (phút)',
-  'Medium at (/hr)': 'Trung bình từ (/giờ)',
-  'High at (/hr)': 'Cao từ (/giờ)',
 
   // — amenities —
   Water: 'Nước',
@@ -167,8 +165,14 @@ const VI: Record<string, string> = {
   // — hint paragraphs —
   'Only the folders you tick get scheduled. Cut-off times are still read from the whole map, so a station that shares a spot with a cut-off point keeps that closing time even when the cut-off folder is unticked.':
     'Chỉ những lớp bạn chọn mới được lên lịch. Thời gian giới hạn vẫn được đọc từ toàn bộ bản đồ, nên một trạm trùng vị trí với điểm COT vẫn giữ giờ đóng đó dù lớp COT không được chọn.',
-  'Activity thresholds are per-station peak crossings per hour. A mass-start road race and a trail race with a rolling start need very different numbers.':
-    'Ngưỡng mức độ tính theo lượt qua cao điểm mỗi giờ tại từng trạm. Giải đường nhựa xuất phát đồng loạt và giải trail xuất phát cuốn chiếu cần con số rất khác nhau.',
+  'Activity tags come from the busiest counting window at each station, the same figure the schedule and the report show. A mass-start road race and a trail race with a rolling start need very different numbers.':
+    'Mức độ được xác định từ khung cao điểm của từng trạm, đúng con số mà lịch vận hành và báo cáo hiển thị. Giải đường nhựa xuất phát đồng loạt và giải trail xuất phát cuốn chiếu cần con số rất khác nhau.',
+  'Medium at': 'Trung bình từ',
+  'High at': 'Cao từ',
+  'Runners through in the busiest window before a station is tagged Medium':
+    'Số VĐV qua trạm trong khung cao điểm để được gắn nhãn Trung bình',
+  'Runners through in the busiest window before a station is tagged High':
+    'Số VĐV qua trạm trong khung cao điểm để được gắn nhãn Cao',
   'One report in two finishes. The dark one keeps the brand theme, for reading on a screen or hosting behind a link; the print one is the same content ink-on-white for paper and email. Both are single self-contained files that open offline.':
     'Một báo cáo, hai kiểu trình bày. Bản nền tối giữ nhận diện thương hiệu, để xem trên màn hình hoặc chia sẻ qua link; bản in cùng nội dung nhưng nền trắng, dùng để in và gửi email. Cả hai đều là file độc lập, mở được khi không có mạng.',
   "Every point each distance runs through, with the kilometre it falls at on that distance's own route and the hours the position is staffed.":
