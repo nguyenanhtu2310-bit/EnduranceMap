@@ -96,6 +96,8 @@ const VI: Record<string, string> = {
   'Scale: per station': 'Thang đo: theo trạm',
   'Collapse all sections': 'Thu gọn tất cả',
   'Expand all sections': 'Mở rộng tất cả',
+  'Collapse all stations': 'Thu gọn tất cả trạm',
+  'Expand all stations': 'Mở rộng tất cả trạm',
   'Download dark report': 'Tải báo cáo nền tối',
   'Download print report': 'Tải báo cáo in',
   'Download spreadsheet': 'Tải file bảng tính',
@@ -172,7 +174,7 @@ const VI: Record<string, string> = {
   "Every point each distance runs through, with the kilometre it falls at on that distance's own route and the hours the position is staffed.":
     'Mọi điểm mà từng cự ly đi qua, kèm số km trên tuyến của chính cự ly đó và khung giờ trạm phải có người.',
   'The points a runner meets in order, with the gap from the previous one and what each one stocks — the view for spacing water and aid.':
-    'Các điểm VĐV gặp theo thứ tự, kèm khoảng cách từ điểm trước và những gì mỗi điểm có — dùng để bố trí nước và tiếp phẩm.',
+    'Các điểm VĐV gặp theo thứ tự, kèm khoảng cách từ điểm trước và những gì mỗi điểm có — dùng để bố trí nước và vật phẩm.',
   'One station at a time, with every figure printed on the bar — the page a crew works from. Distances stand side by side rather than stacked, so each race can be counted on its own.':
     'Từng trạm một, mọi con số in ngay trên cột — trang mà đội trạm dùng để làm việc. Các cự ly đứng cạnh nhau thay vì chồng lên nhau, để đếm riêng từng cự ly.',
   'All rows share one height scale, so bar heights are comparable between stations. Quiet stations look flat because they genuinely see fewer runners.':

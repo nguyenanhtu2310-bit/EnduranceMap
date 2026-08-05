@@ -3,6 +3,7 @@ import type { PipelineResult } from '../lib/pipeline';
 import { secondsToClockTime } from '../lib/time';
 import { buildStationTraffic } from '../lib/stationTraffic';
 import { StationTraffic } from './StationTraffic';
+import { useT } from '../lib/i18n';
 
 interface Props {
   result: PipelineResult;
@@ -20,6 +21,7 @@ interface Props {
  * knowing it lives behind a toggle on someone else's chart.
  */
 export function StationTrafficList({ result, colourFor }: Props) {
+  const t = useT();
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
   if (result.stations.length === 0) {
@@ -28,8 +30,21 @@ export function StationTrafficList({ result, colourFor }: Props) {
 
   const hm = (seconds: number) => secondsToClockTime(seconds).slice(0, 5);
 
+  // "All open" only once every station is, so the control offers the useful direction:
+  // a half-opened list is nearly always on its way to being fully open.
+  const allOpen = result.stations.every((s) => open[s.schedule.name]);
+
+  function setAll(next: boolean) {
+    setOpen(Object.fromEntries(result.stations.map((s) => [s.schedule.name, next])));
+  }
+
   return (
     <div className="station-list">
+      <div className="actions result-actions">
+        <button className="secondary" onClick={() => setAll(!allOpen)}>
+          {allOpen ? t('Collapse all stations') : t('Expand all stations')}
+        </button>
+      </div>
       {result.stations.map((station) => {
         const isOpen = open[station.schedule.name] ?? false;
         const view = buildStationTraffic(station, result.courseOrder);

@@ -244,10 +244,6 @@ export function CrossingDistribution({ result }: Props) {
               {t('Fit')}
             </button>
           )}
-          <span className="hint" style={{ margin: 0 }}>
-            {Math.round(binWidth)}px per {binMinutes}-minute window, {chartHeight}px tall. Drag the
-            chart sideways to move along the day.
-          </span>
         </div>
       )}
 

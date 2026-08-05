@@ -1337,11 +1337,7 @@ export default function App() {
             open={openSections.traffic}
             onToggle={() => toggleSection('traffic')}
           >
-            <p className="hint">
-            {t(
-              'One station at a time, with every figure printed on the bar — the page a crew works from. Distances stand side by side rather than stacked, so each race can be counted on its own.'
-            )}
-          </p>
+            
             <StationTrafficList result={result} colourFor={seriesVar} />
           </ResultSection>
 
