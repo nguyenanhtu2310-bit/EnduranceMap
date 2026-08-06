@@ -58,6 +58,8 @@ export function CourseProfileView({ course }: Props) {
   const skyline = bands.map((b, i) => `${x(i).toFixed(1)},${y(b.high).toFixed(1)}`).join(' ');
   const ground = `0,${PLOT_H} ${skyline} ${COLUMNS},${PLOT_H}`;
 
+  const xOfKm = (value: number) => (value / Math.max(0.001, course.totalKm)) * COLUMNS;
+
   const climbs = [...course.climbs]
     .filter((c) => c.changeMetres > 0)
     .sort((a, b) => b.changeMetres - a.changeMetres)
@@ -99,6 +101,31 @@ export function CourseProfileView({ course }: Props) {
         role="img"
         aria-label={`${course.name} ${t('elevation profile')}`}
       >
+        {/*
+          The climbs that decide the race, shaded on the ground they occupy. A profile
+          shows that a course goes up; it does not say which of the ups is the one a crew
+          and a medical team have to plan around.
+        */}
+        {climbs.map((climb) => {
+          const x1 = xOfKm(climb.startKm);
+          const x2 = xOfKm(climb.endKm);
+          const wide = x2 - x1 > 46;
+          return (
+            <g className="climb-band" key={`${climb.startKm}-${climb.endKm}`}>
+              <title>
+                {`${t('km')} ${climb.startKm.toFixed(1)}–${climb.endKm.toFixed(1)} · ` +
+                  `+${Math.round(climb.changeMetres)} m · ${climb.gradientPercent.toFixed(1)}%`}
+              </title>
+              <rect x={x1} y={0} width={Math.max(1, x2 - x1)} height={PLOT_H} />
+              {wide && (
+                <text x={(x1 + x2) / 2} y={PLOT_H - 5} textAnchor="middle">
+                  +{Math.round(climb.changeMetres)} m
+                </text>
+              )}
+            </g>
+          );
+        })}
+
         <polygon className="profile-fill" points={ground} />
         <polyline className="profile-line" points={skyline} fill="none" />
         <line className="profile-axis" x1={0} y1={PLOT_H} x2={COLUMNS} y2={PLOT_H} />
