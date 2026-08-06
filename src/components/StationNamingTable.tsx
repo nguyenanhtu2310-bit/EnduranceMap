@@ -1,10 +1,19 @@
 import type { PipelineResult } from '../lib/pipeline';
+import type { RaceOverrides, StationOverride } from '../lib/overrides';
+import { EditableCell } from './EditableCell';
 import { useT } from '../lib/i18n';
 
 interface Props {
   result: PipelineResult;
   /** Flips whether a station is treated as having a mat on it. */
   onToggleTimed: (mapName: string) => void;
+  /** Names the operator has typed over the computed ones. */
+  overrides: RaceOverrides;
+  onStationEdit: <K extends keyof StationOverride>(
+    mapName: string,
+    field: K,
+    value: StationOverride[K] | undefined
+  ) => void;
 }
 
 /** Anything past this is a match worth a second look before the plan is built on it. */
@@ -22,7 +31,7 @@ const LOOSE_MATCH_KM = 0.8;
  * from its mat and one that sat 0.79 km from it are not equally certain, and only the
  * operator standing on the ground can settle the second.
  */
-export function StationNamingTable({ result, onToggleTimed }: Props) {
+export function StationNamingTable({ result, onToggleTimed, overrides, onStationEdit }: Props) {
   const t = useT();
   const timed = result.stations.filter((s) => s.isTimed).length;
 
@@ -35,7 +44,7 @@ export function StationNamingTable({ result, onToggleTimed }: Props) {
       <p className="hint">
         {timed} {t('of')} {result.stations.length}{' '}
         {t(
-          'stations have a timing mat. The rest are staffed the same way but nobody is counted at them, so their traffic is modelled rather than measured.'
+          'stations have a timing mat. Only these carry through to the rest of the plan — untick one and it leaves every section below.'
         )}
       </p>
 
@@ -45,7 +54,7 @@ export function StationNamingTable({ result, onToggleTimed }: Props) {
             <tr>
               <th>{t('Station')}</th>
               <th>{t('Name on the map')}</th>
-              <th>{t('Name in results')}</th>
+              <th>{t('Name in RACERESULT')}</th>
               <th className="num">{t('Match')}</th>
               <th className="num">{t('Timed')}</th>
             </tr>
@@ -58,7 +67,13 @@ export function StationNamingTable({ result, onToggleTimed }: Props) {
               return (
                 <tr key={station.mapName}>
                   <td>
-                    <span className="station-name">{station.schedule.name}</span>
+                    <EditableCell
+                      computed={station.schedule.name}
+                      override={overrides.stations?.[station.mapName]?.name}
+                      type="text"
+                      title={t('Station name')}
+                      onChange={(value) => onStationEdit(station.mapName, 'name', value)}
+                    />
                   </td>
                   <td className={mapNames === station.mapName ? undefined : 'muted'}>{mapNames}</td>
                   <td>
@@ -94,7 +109,7 @@ export function StationNamingTable({ result, onToggleTimed }: Props) {
 
       <p className="hint" style={{ margin: '0.85rem 0 0' }}>
         {t(
-          'Names come from the timing configuration where a mat was found within reach of the pin. Correct anything that looks wrong — a match measured further than 0.8 km is flagged, and only you can say whether a station really has a mat on it.'
+          'Names come from the timing configuration where a mat was found within reach of the pin, and can be typed over. A match measured further than 0.8 km is flagged for a second look.'
         )}
       </p>
     </>

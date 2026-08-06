@@ -531,6 +531,16 @@ export function runPipeline(
   const stations: PipelineStation[] = [];
   const skipped: PipelineResult['skipped'] = [];
 
+  /*
+   * Names already handed out, so no two stations answer to the same one.
+   *
+   * A station's map name is its identity everywhere else in the tool — removals,
+   * cut-off overrides, typed-in names, the order the operator dragged them into — and a
+   * real map has three placemarks called "Điểm 6". Sharing an identity means a removal
+   * aimed at one silently takes the others with it, which is exactly what it did.
+   */
+  const usedNames = new Set<string>();
+
   for (const [groupIndex, group] of groups.entries()) {
     const selectedMembers = group.members.filter((m) => isSelectedFolder(m.folder));
     if (selectedMembers.length === 0) continue;
@@ -541,13 +551,22 @@ export function runPipeline(
     const coLocatedNames = Array.from(new Set(others.map((m) => m.label.cleanName || m.name)));
 
     // The station is named for the placemarks the user actually asked to schedule;
-    // anything co-located from another folder is reported separately. Where the timing
-    // system named the mat standing here, that wins: its names become the columns of the
-    // results file, so it is the one list that had to be right.
+    // anything co-located from another folder is reported separately.
+    const drawnName = Array.from(
+      new Set(selectedMembers.map((m) => m.label.cleanName || m.name))
+    ).join(' / ');
+    let stationName = drawnName;
+    for (let n = 2; usedNames.has(stationName); n++) stationName = `${drawnName} (${n})`;
+    usedNames.add(stationName);
+
+    // What it is called on screen, where the timing system named the mat standing here:
+    // those names become the columns of the results file, so they are the ones that had
+    // to be right. The map-derived name stays as the station's identity, because the
+    // timer calls several places the same thing — one real map has two "CP M2" and two
+    // "WS Lech Mong" — and a shared identity would let a removal or an override made
+    // against one silently apply to the other.
     const timedAs = timingLabelByGroup.get(groupIndex);
-    const stationName =
-      timedAs?.point.label ||
-      Array.from(new Set(selectedMembers.map((m) => m.label.cleanName || m.name))).join(' / ');
+    const displayName = timedAs?.point.label || drawnName;
 
     // Removed by the operator — a position that exists on the map but is not being run
     // this year. Dropped silently rather than reported as skipped, since it is a
@@ -651,7 +670,7 @@ export function runPipeline(
     }
 
     stations.push({
-      schedule: buildStationSchedule(stationName, crossings, options),
+      schedule: buildStationSchedule(displayName, crossings, options),
       mapName: stationName,
       isTimed: timedAs !== undefined,
       timingPointName: timedAs?.point.name,

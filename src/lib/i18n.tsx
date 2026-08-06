@@ -238,10 +238,10 @@ const VI: Record<string, string> = {
   'Name on the map': 'Tên trên bản đồ',
   Match: 'Độ khớp',
   'No stations to review.': 'Chưa có trạm nào để rà soát.',
-  'stations have a timing mat. The rest are staffed the same way but nobody is counted at them, so their traffic is modelled rather than measured.':
-    'trạm có thảm bấm giờ. Số còn lại vẫn cần nhân sự như thường, nhưng không ai được đếm ở đó, nên lưu lượng là số mô hình chứ không phải số đo.',
-  'Names come from the timing configuration where a mat was found within reach of the pin. Correct anything that looks wrong — a match measured further than 0.8 km is flagged, and only you can say whether a station really has a mat on it.':
-    'Tên lấy từ cấu hình bấm giờ khi tìm được thảm gần điểm trên bản đồ. Hãy sửa bất kỳ dòng nào trông sai — dòng lệch quá 0,8 km sẽ được đánh dấu, và chỉ bạn mới biết trạm đó có thảm hay không.',
+  'stations have a timing mat. Only these carry through to the rest of the plan — untick one and it leaves every section below.':
+    'trạm có thảm bấm giờ. Chỉ những trạm này được đưa vào phần còn lại của kế hoạch — bỏ tick là trạm đó rời khỏi mọi mục bên dưới.',
+  'Names come from the timing configuration where a mat was found within reach of the pin, and can be typed over. A match measured further than 0.8 km is flagged for a second look.':
+    'Tên lấy từ cấu hình bấm giờ khi tìm được thảm gần điểm trên bản đồ, và có thể gõ đè lên. Dòng lệch quá 0,8 km sẽ được đánh dấu để rà lại.',
 
   // Timing split configuration.
   'Timing points': 'Điểm bấm giờ',
@@ -250,7 +250,7 @@ const VI: Record<string, string> = {
     'Mỗi cự ly một file, xuất từ phần mềm bấm giờ. Tên trạm sẽ lấy từ đây.',
   'timing points': 'điểm bấm giờ',
   'no matching course loaded': 'chưa có đường đua tương ứng',
-  'Name in results': 'Tên trong file kết quả',
+  'Name in RACERESULT': 'Tên trong RACERESULT',
   'Declared km': 'Km công bố',
   Mat: 'Thảm',
   backup: 'dự phòng',

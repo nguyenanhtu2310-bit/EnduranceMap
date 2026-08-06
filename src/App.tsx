@@ -904,6 +904,23 @@ export default function App() {
     setResult(null);
   }
 
+  /*
+   * The stations the plan is actually built on.
+   *
+   * Only the ones with a mat: a chip is read there and nowhere else, so every arrival
+   * the rest of the tool reports is a real crossing rather than a pin someone dropped
+   * near the route. A map's station layer collects points nobody is planning for —
+   * unnamed markers, signage positions, last year's leftovers — and carrying them
+   * through only pads the schedule with rows no crew is standing on.
+   *
+   * The review table above still lists every one of them, so a station wrongly left out
+   * is one tick away from coming back.
+   */
+  const planned = useMemo(
+    () => (result ? { ...result, stations: result.stations.filter((s) => s.isTimed) } : null),
+    [result]
+  );
+
   /**
    * Says whether a station really has a mat on it, against what the timing config implied.
    *
@@ -1245,7 +1262,7 @@ export default function App() {
         </>
       )}
 
-      {result && (
+      {result && planned && (
         <>
           <section className="card">
             <h2>{t('Export')}</h2>
@@ -1286,7 +1303,7 @@ export default function App() {
               </label>
               <button
                 onClick={() => {
-                  const { html, fileName } = renderReport(result, 'dark');
+                  const { html, fileName } = renderReport(planned, 'dark');
                   downloadReport(html, fileName);
                 }}
                 disabled={!Object.values(reportSections).some(Boolean)}
@@ -1297,7 +1314,7 @@ export default function App() {
               <button
                 className="secondary"
                 onClick={() => {
-                  const { html, fileName } = renderReport(result, 'light');
+                  const { html, fileName } = renderReport(planned, 'light');
                   downloadReport(html, fileName);
                 }}
                 disabled={!Object.values(reportSections).some(Boolean)}
@@ -1369,17 +1386,22 @@ export default function App() {
             open={openSections.naming}
             onToggle={() => toggleSection('naming')}
           >
-            <StationNamingTable result={result} onToggleTimed={toggleTimed} />
+            <StationNamingTable
+              result={result}
+              onToggleTimed={toggleTimed}
+              overrides={raceOverrides}
+              onStationEdit={editStation}
+            />
           </ResultSection>
 
           <ResultSection
             title={t('Station operating schedule')}
-            summary={`${result.stations.length} stations`}
+            summary={`${planned.stations.length} stations`}
             open={openSections.schedule}
             onToggle={() => toggleSection('schedule')}
           >
             <p className="hint">
-              {result.stations.length} stations across {result.courses.length} distances. Open is the first
+              {planned.stations.length} stations across {planned.courses.length} distances. Open is the first
               modeled arrival minus the setup buffer; close is the official cut-off where one exists, otherwise
               the last modeled arrival plus teardown. A station shared by several distances closes on the latest
               of them.
@@ -1425,8 +1447,8 @@ export default function App() {
               </div>
             )}
             <StationScheduleTable
-              stations={result.stations}
-              binMinutes={result.binMinutes}
+              stations={planned.stations}
+              binMinutes={planned.binMinutes}
               showSourceNames={renumber}
               onReorder={(order) => {
                 setStationOrder(order);
@@ -1448,7 +1470,7 @@ export default function App() {
 
           <ResultSection
             title={t('Course amenities')}
-            summary={`${result.courses.length} distances`}
+            summary={`${planned.courses.length} distances`}
             open={openSections.amenities}
             onToggle={() => toggleSection('amenities')}
           >
@@ -1487,7 +1509,7 @@ export default function App() {
               onReset={() => setAmenities(DEFAULT_AMENITIES)}
             />
             <DistanceRunView
-              result={result}
+              result={planned}
               rules={DEFAULT_AMENITY_RULES}
               amenities={amenities}
               overrides={amenityOverrides}
@@ -1516,7 +1538,7 @@ export default function App() {
             )}
           </p>
             <TimingMatrix
-              result={result}
+              result={planned}
               notes={stationNotes}
               onNoteChange={changeStationNote}
               overrides={raceOverrides}
@@ -1531,31 +1553,31 @@ export default function App() {
             onToggle={() => toggleSection('distribution')}
           >
             <p className="hint">
-              Runner arrivals per {result.binMinutes} minutes, stacked by distance, on one shared clock. Rows
+              Runner arrivals per {planned.binMinutes} minutes, stacked by distance, on one shared clock. Rows
               run in course order, so the field can be seen moving down the route. The cap marks each station’s
               busiest window.
             </p>
-            <CrossingDistribution result={result} />
+            <CrossingDistribution result={planned} />
           </ResultSection>
 
           <ResultSection
             title={t('Traffic at each station')}
-            summary={`${result.stations.length} stations, one page each`}
+            summary={`${planned.stations.length} stations, one page each`}
             open={openSections.traffic}
             onToggle={() => toggleSection('traffic')}
           >
             
-            <StationTrafficList result={result} colourFor={seriesVar} />
+            <StationTrafficList result={planned} colourFor={seriesVar} />
           </ResultSection>
 
           <ResultSection
             title={t('Cut-off times')}
-            summary={`${result.cutoffTable.length} proposals`}
+            summary={`${planned.cutoffTable.length} proposals`}
             open={openSections.cutoffs}
             onToggle={() => toggleSection('cutoffs')}
           >
             <CutoffTable
-              result={result}
+              result={planned}
               graceMinutes={settings.cutoffGraceMinutes}
               overrides={raceOverrides}
               onCrossingEdit={editCrossing}

@@ -137,7 +137,7 @@ export function TimingPointsPanel({ files, onChange, courses }: Props) {
                       <thead>
                         <tr>
                           <th>{t('Timing point')}</th>
-                          <th>{t('Name in results')}</th>
+                          <th>{t('Name in RACERESULT')}</th>
                           <th className="num">{t('Declared km')}</th>
                         </tr>
                       </thead>
