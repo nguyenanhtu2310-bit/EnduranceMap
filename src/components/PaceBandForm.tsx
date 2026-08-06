@@ -1,4 +1,5 @@
 import type { DistanceInput } from '../lib/pipeline';
+import { EditableCell } from './EditableCell';
 import { TimeInput } from './TimeInput';
 import { useT } from '../lib/i18n';
 
@@ -83,10 +84,35 @@ export function PaceBandForm({ rows, onChange, drivenByResults, raceDate, course
    * It borrows an existing course's geometry rather than inventing any: the pipeline
    * already gives a named leg its own copy of a drawn route, which is the same problem.
    */
+  /** The route a row runs, which is its own name until it has been renamed. */
+  const routeOf = (row: DistanceFormRow) => row.sourceCourseName ?? row.courseName;
+
+  /**
+   * Renames a distance while keeping the route under it.
+   *
+   * A card can want two of one course — "21km Day 1" and "21km Day 2", the same trail run
+   * twice to take a field the path cannot hold at once — and each needs its own name, its
+   * own gun and its own cut-off. Renaming pins the route down as the row's source, so the
+   * name is free to be whatever the race calls it.
+   */
+  function rename(index: number, name: string) {
+    const row = rows[index];
+    const trimmed = name.trim();
+    if (!trimmed || rows.some((r, i) => i !== index && r.courseName === trimmed)) return;
+    update(index, { courseName: trimmed, sourceCourseName: routeOf(row) });
+  }
+
+  /** Points a distance at a different route, taking that route's measured length. */
+  function reroute(index: number, courseName: string) {
+    const course = courses.find((c) => c.name === courseName);
+    if (!course) return;
+    update(index, { sourceCourseName: course.name, measuredKm: course.totalKm });
+  }
+
   function addRow() {
     const source = courses[0];
     if (!source) return;
-    const base = rows.find((r) => r.courseName === source.name);
+    const base = rows.find((r) => routeOf(r) === source.name);
     let name = `${source.name} (2)`;
     for (let n = 2; rows.some((r) => r.courseName === name); n++) name = `${source.name} (${n})`;
     onChange([
@@ -143,12 +169,33 @@ export function PaceBandForm({ rows, onChange, drivenByResults, raceDate, course
           {rows.map((row, i) => (
             <tr key={row.courseName}>
               <td>
-                <strong>{row.courseName}</strong>
+                <EditableCell
+                  computed={row.courseName}
+                  type="text"
+                  title={t('What this distance is called')}
+                  onChange={(value) => rename(i, value ?? '')}
+                />
                 {drivenByResults?.has(row.courseName) && (
                   <span className="colocated">{t('from results file')}</span>
                 )}
               </td>
-              <td className="num muted">{row.measuredKm.toFixed(2)} km</td>
+              <td className="num muted">
+                {courses.length > 1 ? (
+                  <select
+                    value={routeOf(row)}
+                    title={t('Which route this distance runs')}
+                    onChange={(e) => reroute(i, e.target.value)}
+                  >
+                    {courses.map((c) => (
+                      <option key={c.name} value={c.name}>
+                        {c.name} · {c.totalKm.toFixed(1)} km
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  `${row.measuredKm.toFixed(2)} km`
+                )}
+              </td>
               <td style={{ minWidth: 110 }}>
                 <TimeInput
                   value={row.startTimeClock}
@@ -210,7 +257,7 @@ export function PaceBandForm({ rows, onChange, drivenByResults, raceDate, course
                 />
               </td>
               <td>
-                {row.sourceCourseName && (
+                {rows.length > courses.length && (
                   <button
                     type="button"
                     className="row-remove"

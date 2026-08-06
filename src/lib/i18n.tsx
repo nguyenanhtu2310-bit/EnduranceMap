@@ -233,6 +233,8 @@ const VI: Record<string, string> = {
 
   // Hand-added distances and copying names.
   'Add a distance': 'Thêm một cự ly',
+  'What this distance is called': 'Tên gọi của cự ly này',
+  'Which route this distance runs': 'Cự ly này chạy trên tuyến nào',
   'For a wave, a relay or a category racing a course the files already hold.':
     'Dùng cho một wave, một đội tiếp sức hay một hạng mục chạy trên đường đua đã có sẵn.',
   'Remove this distance': 'Xoá cự ly này',

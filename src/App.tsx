@@ -496,23 +496,24 @@ export default function App() {
    */
   useEffect(() => {
     setRows((current) => {
-      const byName = new Map(current.map((row) => [row.courseName, row]));
       const lengthOf = new Map(courses.map((course) => [course.name, course.totalKm]));
-      const next = courses.map((course) => {
-        const existing = byName.get(course.name);
-        return existing
-          ? { ...existing, measuredKm: course.totalKm }
-          : seedRow(course.name, course.totalKm);
-      });
+      /** The route a row runs, which is its own name until it has been renamed. */
+      const routeOf = (row: DistanceFormRow) => row.sourceCourseName ?? row.courseName;
 
-      // Distances added by hand are not courses and would otherwise be reconciled away.
-      // They survive as long as the course they borrow still does.
-      for (const row of current) {
-        if (!row.sourceCourseName) continue;
-        const km = lengthOf.get(row.sourceCourseName);
-        if (km === undefined) continue;
-        next.push({ ...row, measuredKm: km });
-      }
+      // Rows the files still back, keeping every figure typed into them and taking only
+      // their route's measured length.
+      const kept = current
+        .filter((row) => lengthOf.has(routeOf(row)))
+        .map((row) => ({ ...row, measuredKm: lengthOf.get(routeOf(row))! }));
+
+      // A course gets a row of its own only where no row is running it already. Without
+      // that, renaming "21km" to "21km Day 1" would conjure a second "21km" beside it,
+      // and a card wanting two waves of one route could never say so.
+      const claimed = new Set(kept.map(routeOf));
+      const next = [
+        ...kept,
+        ...courses.filter((c) => !claimed.has(c.name)).map((c) => seedRow(c.name, c.totalKm)),
+      ].sort((a, b) => b.measuredKm - a.measuredKm);
       const unchanged =
         next.length === current.length && next.every((row, i) => row === current[i]);
       return unchanged ? current : next;
