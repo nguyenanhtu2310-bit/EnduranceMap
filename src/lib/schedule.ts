@@ -129,6 +129,11 @@ export interface DistanceCrossing {
   arrivalPercentiles: PercentileResult[];
   /** Raw (from CSV) or modeled (from pace bands) per-runner arrival timestamps, for the histogram. */
   runnerArrivalsSeconds?: number[];
+  /**
+   * True where those arrivals are chip reads rather than a model. The two are different
+   * kinds of claim and a report that shows them alike overstates half of itself.
+   */
+  isCounted?: boolean;
   /** Official cutoff clock time for this distance at this station, if provided. */
   officialCutoffClock?: string;
   /**

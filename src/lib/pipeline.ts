@@ -1,5 +1,6 @@
 import { parseKml, type KmlParseOptions, type RawPlacemark } from './kml';
 import { mergeCourseSources } from './courseSources';
+import { computeArrivalPercentiles } from './percentiles';
 import { eventSecondsFrom } from './time';
 import { nameStations, type PlacemarkCrossing } from './stationNaming';
 import type { TimingPoint } from './timingPoints';
@@ -148,6 +149,15 @@ export interface PipelineOptions extends KmlParseOptions, SnapOptions, ScheduleO
    * determined without anyone dropping a pin.
    */
   extraPlacemarks?: RawPlacemark[];
+  /**
+   * When runners were actually read at each mat, by course and then by the results-file
+   * column that mat produces.
+   *
+   * Supplying them replaces the modelled arrivals at those stations with the recorded
+   * ones, which changes what every number downstream is: a count taken from chip reads
+   * rather than from a pace multiplied by a distance.
+   */
+  measuredArrivals?: Record<string, Record<string, number[]>>;
   /** Folder names (case-insensitive) whose points are treated as staffed stations. */
   stationFolders?: string[];
   /** Placemark names to exclude from the operational output entirely. */
@@ -252,6 +262,8 @@ export interface PipelineStation {
   isTimed: boolean;
   /** The results-file column this station produces, where it is timed. */
   timingPointName?: string;
+  /** True where every distance's arrivals here are chip reads rather than modelled. */
+  isCounted: boolean;
   /**
    * How far the pin sat from where the timing system says its mat is, in km, after the
    * declared kilometres were scaled onto the measured ones. Shown so a match that only
@@ -517,6 +529,15 @@ export function runPipeline(
    * timer calls one mat one thing whichever race is passing it.
    */
   const timingLabelByGroup = new Map<number, { point: TimingPoint; deltaKm: number }>();
+  /*
+   * The timing point each individual pass matched, keyed "group|snap".
+   *
+   * A station a course crosses twice has two of them — a real mat reads at 17.6 km and
+   * again at 95.6 km, and each produces its own column in the results file. Looking the
+   * recorded arrivals up by station would hand the return leg the outbound leg's
+   * crossings and close the station twenty-one hours early.
+   */
+  const timingPointByPass = new Map<string, TimingPoint>();
   if (options.timingPoints) {
     for (const course of courses) {
       const points = options.timingPoints[course.name];
@@ -537,6 +558,7 @@ export function runPipeline(
       for (const named of nameStations(crossings, points, { measuredTotalKm: course.totalKm })
         .stations) {
         if (!named.timingPoint) continue;
+        timingPointByPass.set(named.crossing.key, named.timingPoint);
         const groupIndex = Number(named.crossing.key.split('|')[0]);
         if (!timingLabelByGroup.has(groupIndex)) {
           timingLabelByGroup.set(groupIndex, {
@@ -626,7 +648,7 @@ export function runPipeline(
     const details: StationCrossingDetail[] = [];
     const leadArrivals: LeadArrival[] = [];
 
-    for (const snap of group.snaps) {
+    for (const [snapIndex, snap] of group.snaps.entries()) {
       const input = inputByCourse.get(snap.courseName);
       if (!input) continue;
       if (excludedPasses.has(passKey(stationName, snap.courseName, snap.passIndex))) continue;
@@ -649,15 +671,35 @@ export function runPipeline(
 
       const usesRealField = !!input.samples && input.samples.length > 0;
 
+      // Recorded crossings for this station on this course, where the timing export
+      // carried them. A count of chip reads is a different claim from a count derived
+      // from a pace, and downstream has to be able to tell them apart.
+      const passPoint = timingPointByPass.get(`${groupIndex}|${snapIndex}`);
+      const measured =
+        passPoint && options.measuredArrivals
+          ? options.measuredArrivals[snap.courseName]?.[passPoint.name]
+          : undefined;
+
+      const modelledArrivals = usesRealField
+        ? projectSampleArrivals(input.samples!, input, snap.kmFromStart)
+        : samplePaceModelArrivals(input, input, snap.kmFromStart, sampleSize);
+
+      // Where the crossings were recorded, they settle the whole schedule and not only
+      // the histogram: when this station opened, when it closed and what a cut-off there
+      // would have caught all follow from the arrivals, and a modelled window over
+      // counted traffic would be the worst of both.
+      const isCounted = !!measured && measured.length > 0;
+
       crossings.push({
         courseName: snap.courseName,
         kmFromStart: snap.kmFromStart,
-        arrivalPercentiles: usesRealField
-          ? arrivalPercentilesFromSamples(input.samples!, input, snap.kmFromStart)
-          : arrivalPercentilesFromPaceBand(input, input, snap.kmFromStart),
-        runnerArrivalsSeconds: usesRealField
-          ? projectSampleArrivals(input.samples!, input, snap.kmFromStart)
-          : samplePaceModelArrivals(input, input, snap.kmFromStart, sampleSize),
+        arrivalPercentiles: isCounted
+          ? computeArrivalPercentiles(measured!)
+          : usesRealField
+            ? arrivalPercentilesFromSamples(input.samples!, input, snap.kmFromStart)
+            : arrivalPercentilesFromPaceBand(input, input, snap.kmFromStart),
+        runnerArrivalsSeconds: isCounted ? measured! : modelledArrivals,
+        isCounted,
         officialCutoffClock,
         officialCutoffSeconds,
       });
@@ -699,6 +741,7 @@ export function runPipeline(
       schedule: buildStationSchedule(displayName, crossings, options),
       mapName: stationName,
       isTimed: timedAs !== undefined,
+      isCounted: crossings.length > 0 && crossings.every((c) => c.isCounted),
       timingPointName: timedAs?.point.name,
       timingDeltaKm: timedAs?.deltaKm,
       folder,
