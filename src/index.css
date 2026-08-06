@@ -1552,3 +1552,21 @@ button.row-remove:disabled {
 .climb-table tbody tr:last-child td {
   border-bottom: none;
 }
+
+/* A contest a timing export carried but nobody is planning for. */
+.row-remove {
+  margin-left: 0.5rem;
+  padding: 0 0.36rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-faint);
+  font-size: 1rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.row-remove:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}

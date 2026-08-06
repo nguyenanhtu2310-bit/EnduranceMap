@@ -826,6 +826,23 @@ export default function App() {
     setResult(null);
   }
 
+  /**
+   * Drops a contest the file carried but nobody is planning for.
+   *
+   * A timing export is a working document, not a start list: it holds pacers, chip
+   * tests, staff entries and last year's leftovers. Each one otherwise sits in the table
+   * demanding a distance before the rest of the panel will settle.
+   */
+  function removeContest(contest: string) {
+    if (!results || results.kind !== 'single') return;
+    setResults({ ...results, profiles: results.profiles.filter((p) => p.contest !== contest) });
+    setContestMapping((current) => {
+      const { [contest]: _dropped, ...rest } = current;
+      return rest;
+    });
+    setResult(null);
+  }
+
   function changeLegDistances(key: string, distancesKm: number[]) {
     if (!results || results.kind !== 'multisport') return;
     setResults({
@@ -883,6 +900,7 @@ export default function App() {
         }));
 
       const computed = runPipeline(kml.text, inputs, {
+          extraCourses: gpxCourses,
           stationFolders: selectedFolders,
           excludeStations,
           excludePasses,
@@ -1062,6 +1080,7 @@ export default function App() {
               onLoad={loadResults}
               onMappingChange={changeContestMapping}
                 onDistanceChange={changeContestDistance}
+                onRemoveContest={removeContest}
               onClear={clearResults}
               onError={setError}
             />

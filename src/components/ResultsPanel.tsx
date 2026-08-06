@@ -18,6 +18,51 @@ const DISTANCE_SOURCES: Record<DistanceSource, string> = {
   unknown: 'unknown — set it',
 };
 
+/**
+ * The distance box for one contest, typed into rather than fought with.
+ *
+ * Held locally while it is being typed and only reported on blur or Enter. A controlled
+ * number input driven straight off the profile fights the keyboard: every keystroke
+ * re-derives every runner's pace and hands back a rounded value, so "10" on the way to
+ * "104" comes back as 10 and the caret jumps. Reporting once, when the operator has
+ * finished, also means the field is not re-modelled sixty times on the way there.
+ */
+function DistanceInput({
+  km,
+  title,
+  onCommit,
+}: {
+  km: number;
+  title: string;
+  onCommit: (km: number) => void;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const shown = text ?? (km > 0 ? String(km) : '');
+
+  function commit() {
+    if (text === null) return;
+    const value = Number(text.replace(',', '.'));
+    if (Number.isFinite(value) && value > 0) onCommit(value);
+    setText(null);
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={shown}
+      placeholder="km"
+      title={title}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') setText(null);
+      }}
+    />
+  );
+}
+
 interface Props {
   fileName?: string;
   profiles: ContestProfile[];
@@ -28,6 +73,12 @@ interface Props {
   onMappingChange: (mapping: Record<string, string>) => void;
   /** Corrects how far a contest was, when the file could not say. */
   onDistanceChange?: (contest: string, km: number) => void;
+  /**
+   * Drops a contest from the file entirely. A timing export carries rows nobody is
+   * planning for — pacers, chip tests, staff entries — and leaving them listed means
+   * every distance decision has to be made around them.
+   */
+  onRemoveContest?: (contest: string) => void;
   onClear: () => void;
   onError: (message: string) => void;
 }
@@ -40,6 +91,7 @@ export function ResultsPanel({
   onLoad,
   onMappingChange,
   onDistanceChange,
+  onRemoveContest,
   onClear,
   onError,
 }: Props) {
@@ -138,14 +190,10 @@ export function ResultsPanel({
                   <td className="num">{profile.finishers.toLocaleString()}</td>
                   <td className="num">
                     {onDistanceChange ? (
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.1}
-                        value={profile.distanceKm || ''}
-                        placeholder="km"
+                      <DistanceInput
+                        km={profile.distanceKm}
                         title={t(DISTANCE_SOURCES[profile.distanceSource])}
-                        onChange={(e) => onDistanceChange(profile.contest, Number(e.target.value))}
+                        onCommit={(km) => onDistanceChange(profile.contest, km)}
                       />
                     ) : profile.distanceKm > 0 ? (
                       `${profile.distanceKm} km`
@@ -178,6 +226,17 @@ export function ResultsPanel({
                         </option>
                       ))}
                     </select>
+                    {onRemoveContest && (
+                      <button
+                        type="button"
+                        className="row-remove"
+                        title={t('Remove this contest')}
+                        aria-label={`${t('Remove this contest')}: ${profile.contest}`}
+                        onClick={() => onRemoveContest(profile.contest)}
+                      >
+                        ×
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

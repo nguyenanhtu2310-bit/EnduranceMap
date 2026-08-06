@@ -224,6 +224,7 @@ const VI: Record<string, string> = {
   'Choose an exported KML from Google My Maps, with each CP type on its own layer. Race routes can live in a layer here too, or come from the route files below.':
     'Chọn file KML xuất từ Google My Maps, mỗi loại trạm ở một lớp riêng. Tuyến đường đua có thể nằm trong một lớp ở đây, hoặc lấy từ file GPX bên dưới.',
 
+  'Remove this contest': 'Xoá cự ly này',
   'from the map is covered by': 'từ bản đồ đã được thay bằng',
   'from GPX, which carries elevation.': 'từ file GPX, vì file này có dữ liệu độ cao.',
 

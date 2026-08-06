@@ -195,7 +195,11 @@ export function buildLegDistanceInputs(
         const own = durations[i];
         let before = athlete.raceOffsetSeconds;
         for (let j = 0; j < k; j++) before += own[j] ?? 0;
-        return { startOffsetSeconds: before, paceMinPerKm: own[k] / 60 / km };
+        return {
+          startOffsetSeconds: before,
+          finishSeconds: own[k] ?? 0,
+          paceMinPerKm: (own[k] ?? 0) / 60 / km,
+        };
       });
 
       const band = durationBandAsPace(leg);

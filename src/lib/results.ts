@@ -12,6 +12,15 @@ import {
  */
 export interface RunnerSample {
   startOffsetSeconds: number;
+  /**
+   * Their finishing time. Kept alongside the pace because pace is a derived figure that
+   * depends on a distance the file does not always state: a contest whose distance the
+   * operator has to type in has no pace until they do, and re-deriving from the time is
+   * both possible and exact, where rescaling an existing pace compounds its rounding
+   * every time the distance is corrected.
+   */
+  finishSeconds: number;
+  /** Zero until the contest's distance is known. */
   paceMinPerKm: number;
 }
 
@@ -325,20 +334,23 @@ export function parseResultsCsv(text: string, options: ResultsParseOptions = {})
       if (elapsed === null || elapsed <= 0) continue;
       finishers += 1;
 
-      if (!distanceKm || distanceKm <= 0) continue;
-
       const ownStart = startCol ? parseTodSeconds(row[startCol] ?? '') : null;
       const startOffsetSeconds = ownStart !== null && firstStart !== null ? ownStart - firstStart : 0;
       if (ownStart !== null) withStartTime += 1;
 
-      const paceMinPerKm = elapsed / 60 / distanceKm;
-      samples.push({ startOffsetSeconds, paceMinPerKm });
+      // Kept even when the file never said how far this contest was. The field is real
+      // whether or not its distance is known, and holding the times means typing the
+      // distance in afterwards is enough to model it — which is the entire purpose of
+      // the box the operator is offered.
+      const known = (distanceKm ?? 0) > 0;
+      const paceMinPerKm = known ? elapsed / 60 / (distanceKm as number) : 0;
+      samples.push({ startOffsetSeconds, finishSeconds: elapsed, paceMinPerKm });
 
       // The winner of each sex, by finishing time. Their own offset and pace are kept so
       // the marker moves down the course the way that athlete actually did.
       const sex = sexCol ? normalizeSex(row[sexCol] ?? '') : null;
       if (sex && elapsed < (leaders.get(sex)?.finishSeconds ?? Infinity)) {
-        if (paceMinPerKm < FASTEST_CREDIBLE_MIN_PER_KM) implausibleLeaders += 1;
+        if (known && paceMinPerKm < FASTEST_CREDIBLE_MIN_PER_KM) implausibleLeaders += 1;
         else leaders.set(sex, { sex, startOffsetSeconds, paceMinPerKm, finishSeconds: elapsed });
       }
     }
@@ -412,17 +424,30 @@ export function summarizeProfile(profile: ContestProfile): {
  * inversely with it — no re-reading of the file is needed, and the result is identical
  * to what parsing with that distance would have produced.
  */
+/**
+ * Sets how far a contest was, and re-derives every pace from the finishing times.
+ *
+ * Deliberately re-derived rather than rescaled. Rescaling needs a distance to scale from,
+ * which the one case this exists for — a contest the file could not measure — does not
+ * have; and correcting the distance twice would compound the rounding of the first
+ * correction into the second.
+ */
 export function withContestDistance(profile: ContestProfile, km: number): ContestProfile {
-  if (!(km > 0) || !(profile.distanceKm > 0)) return profile;
-  const scale = profile.distanceKm / km;
+  if (!(km > 0)) return profile;
+  const paceOf = (finishSeconds: number) => finishSeconds / 60 / km;
   return {
     ...profile,
     distanceKm: km,
     distanceSource: 'operator',
     distanceNote: '',
+    warnings: profile.warnings.filter((w) => !w.startsWith('Could not work out how far')),
     samples: profile.samples.map((sample) => ({
       ...sample,
-      paceMinPerKm: sample.paceMinPerKm * scale,
+      paceMinPerKm: paceOf(sample.finishSeconds),
+    })),
+    leaders: profile.leaders.map((leader) => ({
+      ...leader,
+      paceMinPerKm: paceOf(leader.finishSeconds),
     })),
   };
 }

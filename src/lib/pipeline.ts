@@ -1,4 +1,5 @@
 import { parseKml, type KmlParseOptions } from './kml';
+import { mergeCourseSources } from './courseSources';
 import { parseClockTimeToSeconds } from './time';
 import {
   buildCourses,
@@ -112,6 +113,16 @@ export function isEndZoneStop(mapName: string, kmFromStart: number, courseTotalK
 }
 
 export interface PipelineOptions extends KmlParseOptions, SnapOptions, ScheduleOptions {
+  /**
+   * Courses from outside the map — the per-distance route GPX a timing provider hands
+   * out, which carries elevation the map does not.
+   *
+   * A race is allowed to keep its routes in one file and its stations in another: GPX
+   * cannot express a station, a folder or a cut-off label, and a KML usually arrives with
+   * its altitudes flattened. Stations snap onto these exactly as they snap onto a drawn
+   * route, so a map holding nothing but station layers still produces a schedule.
+   */
+  extraCourses?: Course[];
   /** Folder names (case-insensitive) whose points are treated as staffed stations. */
   stationFolders?: string[];
   /** Placemark names to exclude from the operational output entirely. */
@@ -396,7 +407,14 @@ export function runPipeline(
 
   const parsed = parseKml(kmlText, options);
   const warnings = [...parsed.warnings];
-  const courses = expandLegCourses(buildCourses(parsed.courses), distanceInputs);
+  // Both halves through one merge, the same one the screen uses, so what is scheduled can
+  // never disagree with what is listed.
+  const drawn = buildCourses(parsed.courses);
+  const supplied = options.extraCourses ?? [];
+  const courses = expandLegCourses(
+    supplied.length > 0 ? mergeCourseSources(drawn, supplied).courses : drawn,
+    distanceInputs
+  );
 
   const inputByCourse = new Map(distanceInputs.map((d) => [d.courseName, d]));
   for (const course of courses) {
