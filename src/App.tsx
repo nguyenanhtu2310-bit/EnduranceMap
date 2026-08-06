@@ -33,6 +33,7 @@ import { buildReportSheets } from './lib/workbook';
 import { downloadXlsx } from './lib/xlsx';
 import { FolderPicker } from './components/FolderPicker';
 import { KmlDropzone } from './components/KmlDropzone';
+import { GpxPanel } from './components/GpxPanel';
 import { PaceBandForm, type DistanceFormRow } from './components/PaceBandForm';
 import { MultisportPaceBandForm } from './components/MultisportPaceBandForm';
 import { RaceFormatPicker } from './components/RaceFormatPicker';
@@ -942,6 +943,16 @@ export default function App() {
           )}
         </p>
         <KmlDropzone fileName={kml?.fileName} onLoad={loadKml} onError={setError} />
+      </section>
+
+      <section className="card">
+        <h2>{t('Course profile')}</h2>
+        <p className="hint">
+          {t(
+            'Drop the route GPX for each distance to read its climbing. A GPX carries elevation on every point; a KML usually loses it.'
+          )}
+        </p>
+        <GpxPanel />
       </section>
 
       {rows.length > 0 && (
