@@ -52,13 +52,11 @@ export function CourseProfileView({ course }: Props) {
   const y = (ele: number) => PLOT_H - ((ele - minMetres) / span) * PLOT_H;
   const x = (index: number) => (index / Math.max(1, bands.length - 1)) * COLUMNS;
 
-  // Drawn as a filled band rather than a line: each column carries the lowest and highest
-  // reading within it, so summits survive being thinned to the chart's width.
-  const top = bands.map((b, i) => `${x(i).toFixed(1)},${y(b.high).toFixed(1)}`).join(' ');
-  const bottom = bands
-    .map((b, i) => `${x(bands.length - 1 - i).toFixed(1)},${y(b.low).toFixed(1)}`)
-    .reverse()
-    .join(' ');
+  // Filled from the floor up to the skyline, the way a course profile is always drawn.
+  // The skyline takes the highest reading in each column rather than a sampled point, so
+  // summits survive being thinned from 65,699 points to the chart's width.
+  const skyline = bands.map((b, i) => `${x(i).toFixed(1)},${y(b.high).toFixed(1)}`).join(' ');
+  const ground = `0,${PLOT_H} ${skyline} ${COLUMNS},${PLOT_H}`;
 
   const climbs = [...course.climbs]
     .filter((c) => c.changeMetres > 0)
@@ -101,8 +99,8 @@ export function CourseProfileView({ course }: Props) {
         role="img"
         aria-label={`${course.name} ${t('elevation profile')}`}
       >
-        <polygon className="profile-fill" points={`${top} ${bottom}`} />
-        <polyline className="profile-line" points={top} fill="none" />
+        <polygon className="profile-fill" points={ground} />
+        <polyline className="profile-line" points={skyline} fill="none" />
         <line className="profile-axis" x1={0} y1={PLOT_H} x2={COLUMNS} y2={PLOT_H} />
         {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
           <text
