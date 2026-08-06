@@ -1711,8 +1711,18 @@ button.row-remove:disabled {
   font-weight: 600;
 }
 
-.timeline-ruler .now {
+.timeline-ruler .now line {
   stroke: var(--color-text);
   stroke-width: 1.4;
   stroke-dasharray: 3 2;
+}
+
+.timeline-ruler .now rect {
+  fill: var(--color-text);
+}
+
+.timeline-ruler .now text {
+  fill: var(--color-bg);
+  font-size: 9px;
+  font-weight: 700;
 }

@@ -28,6 +28,8 @@ const LABEL_ROW_H = 13;
 const LABEL_PAD = 8;
 const BIN_KM = 1;
 const RULER_ROW_H = 12;
+/** Room at the top of the ruler for the marker that says which moment is being shown. */
+const NOW_BAND_H = 15;
 
 /** Fifteen minutes: fine enough that nobody crosses a whole leg between two knots. */
 const STEP_SECONDS = 15 * 60;
@@ -212,6 +214,7 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
   );
   const busiestBin = busiest.indexOf(Math.max(...busiest));
   const offSpine = snapshot.offSpineByCourse.reduce((a, b) => a + b, 0);
+  const rulerHeight = NOW_BAND_H + Math.max(1, startLayout.rows) * RULER_ROW_H + 10;
 
   return (
     <>
@@ -312,20 +315,20 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
 
       <svg
         className="timeline-ruler"
-        viewBox={`0 0 ${COLUMNS} ${Math.max(1, startLayout.rows) * RULER_ROW_H + 10}`}
+        viewBox={`0 0 ${COLUMNS} ${NOW_BAND_H + Math.max(1, startLayout.rows) * RULER_ROW_H + 10}`}
         role="img"
         aria-label={t('When each distance starts')}
       >
         {starts.map((start, i) => {
           const sx = start.fraction * COLUMNS;
           const placed = startLayout.placed.find((p) => p.index === i);
-          const rulerH = Math.max(1, startLayout.rows) * RULER_ROW_H + 10;
+          const rulerH = NOW_BAND_H + Math.max(1, startLayout.rows) * RULER_ROW_H + 10;
           return (
             <g className="gun" key={`${start.name}-${start.seconds}`}>
               <title>{`${start.name} — ${formatEventClock(start.seconds, raceDate)}`}</title>
               <line
                 x1={sx}
-                y1={placed ? placed.row * RULER_ROW_H + 3 : 0}
+                y1={placed ? NOW_BAND_H + placed.row * RULER_ROW_H + 3 : NOW_BAND_H}
                 x2={sx}
                 y2={rulerH}
                 stroke={seriesVar(courseIndex(start.name))}
@@ -333,7 +336,7 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
               {placed && (
                 <text
                   x={sx}
-                  y={placed.row * RULER_ROW_H + 9}
+                  y={NOW_BAND_H + placed.row * RULER_ROW_H + 9}
                   textAnchor={placed.anchor}
                   fill={seriesVar(courseIndex(start.name))}
                 >
@@ -343,18 +346,30 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
             </g>
           );
         })}
-        {/* Where the slider currently sits, against those guns. */}
-        <line
-          className="now"
-          x1={((atSeconds - window.startSeconds) /
-            Math.max(1, window.endSeconds - window.startSeconds)) *
-            COLUMNS}
-          y1={0}
-          x2={((atSeconds - window.startSeconds) /
-            Math.max(1, window.endSeconds - window.startSeconds)) *
-            COLUMNS}
-          y2={Math.max(1, startLayout.rows) * RULER_ROW_H + 10}
-        />
+        {/*
+          The moment on show, on the same axis as the guns.
+          It carries its own time rather than relying on the slider's thumb: a range
+          input's thumb is inset from both ends of its track, so it never quite lines up
+          with anything drawn edge to edge above it.
+        */}
+        {(() => {
+          const nowX =
+            ((atSeconds - window.startSeconds) /
+              Math.max(1, window.endSeconds - window.startSeconds)) *
+            COLUMNS;
+          const label = formatEventClock(atSeconds, raceDate);
+          const width = label.length * 5.6 + 10;
+          const left = Math.min(COLUMNS - width, Math.max(0, nowX - width / 2));
+          return (
+            <g className="now">
+              <line x1={nowX} y1={NOW_BAND_H - 3} x2={nowX} y2={rulerHeight} />
+              <rect x={left} y={0} width={width} height={NOW_BAND_H - 4} rx={2} />
+              <text x={left + width / 2} y={NOW_BAND_H - 8} textAnchor="middle">
+                {label}
+              </text>
+            </g>
+          );
+        })()}
       </svg>
 
       <div className="slider-row">
