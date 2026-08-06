@@ -1693,3 +1693,26 @@ button.row-remove:disabled {
   font-size: 9px;
   font-weight: 600;
 }
+
+/* The guns, drawn against the timeline the slider runs along. */
+.timeline-ruler {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-top: 0.5rem;
+}
+
+.timeline-ruler .gun line {
+  stroke-width: 1.4;
+}
+
+.timeline-ruler .gun text {
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.timeline-ruler .now {
+  stroke: var(--color-text);
+  stroke-width: 1.4;
+  stroke-dasharray: 3 2;
+}

@@ -10,7 +10,7 @@ import {
   type FieldInput,
   type RunnerPace,
 } from '../lib/fieldPosition';
-import { formatEventClock } from '../lib/time';
+import { eventSecondsFrom, formatEventClock } from '../lib/time';
 import { seriesVar } from '../lib/series';
 import { useT } from '../lib/i18n';
 
@@ -27,6 +27,7 @@ const AXIS_H = 20;
 const LABEL_ROW_H = 13;
 const LABEL_PAD = 8;
 const BIN_KM = 1;
+const RULER_ROW_H = 12;
 
 /** Fifteen minutes: fine enough that nobody crosses a whole leg between two knots. */
 const STEP_SECONDS = 15 * 60;
@@ -102,6 +103,27 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
   }, [inputs]);
 
   const window = useMemo(() => fieldWindow(inputs, paces), [inputs, paces]);
+
+  /*
+   * Every gun on the timeline, so the moment being looked at is read against the starts
+   * rather than counted from the left edge.
+   *
+   * On a card whose distances go off across three days — one Friday morning, four across
+   * a Saturday dawn — "Sat 06:00" means nothing until you know the 70 km left at three
+   * and the 50 km at half past five. These are the reference points an organiser is
+   * actually holding in their head.
+   */
+  const starts = useMemo(() => {
+    const span = Math.max(1, window.endSeconds - window.startSeconds);
+    return inputs
+      .map((input) => ({
+        name: input.courseName,
+        seconds: eventSecondsFrom(input.startTimeClock, input.startDayOffset),
+      }))
+      .filter((s): s is { name: string; seconds: number } => s.seconds !== null)
+      .map((s) => ({ ...s, fraction: (s.seconds - window.startSeconds) / span }))
+      .sort((a, b) => a.seconds - b.seconds);
+  }, [inputs, window]);
   const knots = Math.max(
     1,
     Math.ceil((window.endSeconds - window.startSeconds) / STEP_SECONDS)
@@ -138,6 +160,20 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
     for (const p of layout.placed) byIndex.set(p.index, { row: p.row, anchor: p.anchor });
     return byIndex;
   }, [layout]);
+
+  // Two distances an hour apart sit a percent apart on a forty-hour timeline, so the
+  // gun labels are placed the same way the station names are rather than overlapped.
+  const startLayout = useMemo(
+    () =>
+      layoutLabels(
+        starts.map((s) => ({
+          x: s.fraction * COLUMNS,
+          text: `${s.name} ${formatEventClock(s.seconds, raceDate)}`,
+        })),
+        { width: COLUMNS, maxRows: 3 }
+      ),
+    [starts, raceDate]
+  );
 
   if (!spineCourse || !profile?.totals || bands.length === 0) {
     return (
@@ -272,6 +308,53 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
             {(spineKm * fraction).toFixed(0)} km
           </text>
         ))}
+      </svg>
+
+      <svg
+        className="timeline-ruler"
+        viewBox={`0 0 ${COLUMNS} ${Math.max(1, startLayout.rows) * RULER_ROW_H + 10}`}
+        role="img"
+        aria-label={t('When each distance starts')}
+      >
+        {starts.map((start, i) => {
+          const sx = start.fraction * COLUMNS;
+          const placed = startLayout.placed.find((p) => p.index === i);
+          const rulerH = Math.max(1, startLayout.rows) * RULER_ROW_H + 10;
+          return (
+            <g className="gun" key={`${start.name}-${start.seconds}`}>
+              <title>{`${start.name} — ${formatEventClock(start.seconds, raceDate)}`}</title>
+              <line
+                x1={sx}
+                y1={placed ? placed.row * RULER_ROW_H + 3 : 0}
+                x2={sx}
+                y2={rulerH}
+                stroke={seriesVar(courseIndex(start.name))}
+              />
+              {placed && (
+                <text
+                  x={sx}
+                  y={placed.row * RULER_ROW_H + 9}
+                  textAnchor={placed.anchor}
+                  fill={seriesVar(courseIndex(start.name))}
+                >
+                  {start.name} {formatEventClock(start.seconds, raceDate)}
+                </text>
+              )}
+            </g>
+          );
+        })}
+        {/* Where the slider currently sits, against those guns. */}
+        <line
+          className="now"
+          x1={((atSeconds - window.startSeconds) /
+            Math.max(1, window.endSeconds - window.startSeconds)) *
+            COLUMNS}
+          y1={0}
+          x2={((atSeconds - window.startSeconds) /
+            Math.max(1, window.endSeconds - window.startSeconds)) *
+            COLUMNS}
+          y2={Math.max(1, startLayout.rows) * RULER_ROW_H + 10}
+        />
       </svg>
 
       <div className="slider-row">
