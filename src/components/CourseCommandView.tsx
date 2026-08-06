@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { PipelineResult } from '../lib/pipeline';
 import type { CourseProfile } from '../lib/courseProfile';
-import { resampleProfile, stationMarks } from '../lib/courseProfile';
+import { layoutLabels, resampleProfile, stationMarks } from '../lib/courseProfile';
 import { useT } from '../lib/i18n';
 
 interface Props {
@@ -12,8 +12,10 @@ interface Props {
 
 const COLUMNS = 900;
 const PLOT_H = 210;
-const LABEL_H = 46;
 const AXIS_H = 20;
+/** Height of one row of labels, and the gap between the lowest row and the profile. */
+const LABEL_ROW_H = 13;
+const LABEL_PAD = 10;
 
 /**
  * The course, its climbs and every station on it, on one picture.
@@ -41,6 +43,30 @@ export function CourseCommandView({ result, profiles }: Props) {
   );
   const bands = useMemo(() => resampleProfile(profile?.profile ?? [], COLUMNS), [profile]);
 
+  /*
+   * Every station is labelled, timed or not — a hollow dot with no name tells a medical
+   * director where something is but not what, which is the half that matters. Both kinds
+   * go through the same placement so a water station never lands on a checkpoint.
+   */
+  const totalKm = profile?.totalKm ?? 0;
+  const layout = useMemo(
+    () =>
+      layoutLabels(
+        marks.map((m) => ({
+          x: (m.kmFromStart / Math.max(0.001, totalKm)) * COLUMNS,
+          text: m.name + (m.passCount > 1 ? ` (${m.passIndex + 1})` : ''),
+        })),
+        { width: COLUMNS }
+      ),
+    [marks, totalKm]
+  );
+  const rowOf = useMemo(() => {
+    const byIndex = new Map<number, { row: number; anchor: 'start' | 'middle' | 'end' }>();
+    for (const p of layout.placed) byIndex.set(p.index, { row: p.row, anchor: p.anchor });
+    return byIndex;
+  }, [layout]);
+  const labelH = Math.max(1, layout.rows) * LABEL_ROW_H + LABEL_PAD;
+
   if (!course || !profile?.totals || bands.length === 0) {
     return (
       <p className="hint">
@@ -53,12 +79,12 @@ export function CourseCommandView({ result, profiles }: Props) {
 
   const { minMetres, maxMetres } = profile.totals;
   const span = Math.max(1, maxMetres - minMetres);
-  const y = (ele: number) => LABEL_H + PLOT_H - ((ele - minMetres) / span) * PLOT_H;
+  const y = (ele: number) => labelH + PLOT_H - ((ele - minMetres) / span) * PLOT_H;
   const xOfKm = (km: number) => (km / Math.max(0.001, profile.totalKm)) * COLUMNS;
   const x = (index: number) => (index / Math.max(1, bands.length - 1)) * COLUMNS;
 
   const skyline = bands.map((b, i) => `${x(i).toFixed(1)},${y(b.high).toFixed(1)}`).join(' ');
-  const ground = `0,${LABEL_H + PLOT_H} ${skyline} ${COLUMNS},${LABEL_H + PLOT_H}`;
+  const ground = `0,${labelH + PLOT_H} ${skyline} ${COLUMNS},${labelH + PLOT_H}`;
 
   /** Ground level under a station, so its stem starts at the hill rather than in the air. */
   const surfaceAt = (km: number) => {
@@ -66,8 +92,6 @@ export function CourseCommandView({ result, profiles }: Props) {
     return y(bands[index].high);
   };
 
-  // Labels are staggered over three rows. Thirty stations on a 164 km course cannot sit
-  // on one line without overlapping, and a label that overlaps is worse than absent.
   const timed = marks.filter((m) => m.isTimed);
 
   return (
@@ -107,7 +131,7 @@ export function CourseCommandView({ result, profiles }: Props) {
 
       <svg
         className="command-chart"
-        viewBox={`0 0 ${COLUMNS} ${LABEL_H + PLOT_H + AXIS_H}`}
+        viewBox={`0 0 ${COLUMNS} ${labelH + PLOT_H + AXIS_H}`}
         role="img"
         aria-label={`${course.name} ${t('elevation profile with stations')}`}
       >
@@ -117,8 +141,8 @@ export function CourseCommandView({ result, profiles }: Props) {
         {marks.map((mark, i) => {
           const mx = xOfKm(mark.kmFromStart);
           const top = surfaceAt(mark.kmFromStart);
-          const row = i % 3;
-          const labelY = 12 + row * 12;
+          const label = rowOf.get(i);
+          const labelY = label ? 10 + label.row * LABEL_ROW_H : 0;
           return (
             <g
               key={`${mark.name}-${mark.passIndex}-${mark.kmFromStart}`}
@@ -129,41 +153,32 @@ export function CourseCommandView({ result, profiles }: Props) {
                   (mark.passCount > 1 ? ` (${mark.passIndex + 1}/${mark.passCount})` : '') +
                   (mark.isTimed ? '' : ` — ${t('no timing mat')}`)}
               </title>
-              <line x1={mx} y1={top} x2={mx} y2={LABEL_H + PLOT_H} className="mark-stem" />
-              {mark.isTimed ? (
+              <line x1={mx} y1={top} x2={mx} y2={labelH + PLOT_H} className="mark-stem" />
+              {label && (
                 <>
-                  <line x1={mx} y1={labelY + 4} x2={mx} y2={top} className="mark-lead" />
-                  <circle cx={mx} cy={top} r={4} className="mark-dot" />
-                  <text
-                    x={mx}
-                    y={labelY}
-                    className="mark-label"
-                    textAnchor={mx < 60 ? 'start' : mx > COLUMNS - 60 ? 'end' : 'middle'}
-                  >
+                  <line x1={mx} y1={labelY + 3} x2={mx} y2={top} className="mark-lead" />
+                  <text x={mx} y={labelY} className="mark-label" textAnchor={label.anchor}>
                     {mark.name}
                     {mark.passCount > 1 ? ` (${mark.passIndex + 1})` : ''}
                   </text>
                 </>
+              )}
+              {mark.isTimed ? (
+                <circle cx={mx} cy={top} r={4} className="mark-dot" />
               ) : (
-                <circle cx={mx} cy={top} r={3} className="mark-dot-hollow" />
+                <circle cx={mx} cy={top} r={3.5} className="mark-dot-hollow" />
               )}
             </g>
           );
         })}
 
-        <line
-          className="profile-axis"
-          x1={0}
-          y1={LABEL_H + PLOT_H}
-          x2={COLUMNS}
-          y2={LABEL_H + PLOT_H}
-        />
+        <line className="profile-axis" x1={0} y1={labelH + PLOT_H} x2={COLUMNS} y2={labelH + PLOT_H} />
         {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
           <text
             key={fraction}
             className="profile-tick"
             x={Math.min(COLUMNS - 2, Math.max(2, fraction * COLUMNS))}
-            y={LABEL_H + PLOT_H + AXIS_H - 5}
+            y={labelH + PLOT_H + AXIS_H - 5}
             textAnchor={fraction === 0 ? 'start' : fraction === 1 ? 'end' : 'middle'}
           >
             {(profile.totalKm * fraction).toFixed(profile.totalKm < 20 ? 1 : 0)} km

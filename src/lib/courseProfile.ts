@@ -156,3 +156,71 @@ export function stationMarks(
   }
   return marks.sort((a, b) => a.kmFromStart - b.kmFromStart);
 }
+
+export interface PlacedLabel {
+  /** Index into the marks array this label belongs to. */
+  index: number;
+  /** Which row it was given, counting down from the top. */
+  row: number;
+  x: number;
+  anchor: 'start' | 'middle' | 'end';
+}
+
+export interface LabelLayout {
+  placed: PlacedLabel[];
+  /** How many rows were needed. */
+  rows: number;
+  /** Labels that would not fit anywhere without overlapping, by mark index. */
+  dropped: number[];
+}
+
+/**
+ * Fits station labels above a profile without letting any two touch.
+ *
+ * Staggering by position alone is not enough: "CP Topas Ecolodge (2)" is four times the
+ * width of "CP5", so two labels can sit on different rows and still collide with a third.
+ * Each label is measured, then given the first row where it clears whatever is already
+ * there — which is why a crowded stretch of course grows rows instead of overprinting.
+ *
+ * A label with nowhere to go is dropped rather than drawn on top of another, because an
+ * unreadable label is worse than an absent one and the dot is still there to hover.
+ */
+export function layoutLabels(
+  labels: { x: number; text: string }[],
+  options: { width: number; maxRows?: number; charWidth?: number; gap?: number } = { width: 900 }
+): LabelLayout {
+  const maxRows = options.maxRows ?? 6;
+  const charWidth = options.charWidth ?? 5.4;
+  const gap = options.gap ?? 6;
+
+  const order = labels.map((label, index) => ({ ...label, index })).sort((a, b) => a.x - b.x);
+  const rowEnds: number[] = [];
+  const placed: PlacedLabel[] = [];
+  const dropped: number[] = [];
+
+  for (const label of order) {
+    const width = label.text.length * charWidth;
+    // Labels near an edge are anchored to it, so they lean inwards rather than off the page.
+    const anchor: PlacedLabel['anchor'] =
+      label.x < width / 2 ? 'start' : label.x > options.width - width / 2 ? 'end' : 'middle';
+    const left = anchor === 'start' ? label.x : anchor === 'end' ? label.x - width : label.x - width / 2;
+    const right = left + width;
+
+    let row = -1;
+    for (let candidate = 0; candidate < maxRows; candidate++) {
+      if ((rowEnds[candidate] ?? -Infinity) + gap <= left) {
+        row = candidate;
+        break;
+      }
+    }
+
+    if (row === -1) {
+      dropped.push(label.index);
+      continue;
+    }
+    rowEnds[row] = right;
+    placed.push({ index: label.index, row, x: label.x, anchor });
+  }
+
+  return { placed, rows: rowEnds.length, dropped };
+}

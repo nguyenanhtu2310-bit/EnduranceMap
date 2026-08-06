@@ -1605,7 +1605,22 @@ button.row-remove:disabled {
   font-weight: 600;
 }
 
-/* An untimed station still has a crew on it, so it is shown — just not shouted. */
+/* An untimed station still has a crew on it and still needs naming — a hollow dot with
+   no name says where something is but not what, which is the half that matters. */
+.mark.untimed .mark-label {
+  fill: var(--color-muted);
+  font-size: 9.5px;
+  font-weight: 400;
+  font-style: italic;
+}
+
+.mark.untimed .mark-lead {
+  stroke: color-mix(in srgb, var(--color-text) 12%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
+
 .mark.untimed .mark-stem {
   stroke: var(--color-faint);
   stroke-width: 1;

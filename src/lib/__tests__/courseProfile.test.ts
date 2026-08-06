@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resampleProfile, stationMarks } from '../courseProfile';
+import { layoutLabels, resampleProfile, stationMarks } from '../courseProfile';
 
 const station = (name: string, isTimed: boolean, crossings: [string, number, number, number][]) => ({
   isTimed,
@@ -79,5 +79,52 @@ describe('resampleProfile', () => {
 
   it('copes with an empty profile', () => {
     expect(resampleProfile([], 10)).toEqual([]);
+  });
+});
+
+describe('layoutLabels', () => {
+  const wide = (x: number) => ({ x, text: 'CP Topas Ecolodge (2)' });
+
+  it('leaves well-spaced labels all on the top row', () => {
+    const out = layoutLabels([{ x: 0, text: 'A' }, { x: 400, text: 'B' }, { x: 800, text: 'C' }], {
+      width: 900,
+    });
+    expect(out.placed.every((p) => p.row === 0)).toBe(true);
+    expect(out.rows).toBe(1);
+  });
+
+  it('pushes a label that would touch its neighbour onto the next row', () => {
+    const out = layoutLabels([wide(200), wide(230)], { width: 900 });
+    expect(out.placed.map((p) => p.row).sort()).toEqual([0, 1]);
+  });
+
+  it('measures the label rather than assuming them all the same width', () => {
+    // Two short names fit side by side where two long ones would not.
+    const short = layoutLabels([{ x: 200, text: 'CP5' }, { x: 230, text: 'CP6' }], { width: 900 });
+    expect(short.rows).toBe(1);
+    expect(layoutLabels([wide(200), wide(230)], { width: 900 }).rows).toBe(2);
+  });
+
+  it('anchors a label at the start of the axis so it leans inwards', () => {
+    expect(layoutLabels([wide(2)], { width: 900 }).placed[0].anchor).toBe('start');
+    expect(layoutLabels([wide(898)], { width: 900 }).placed[0].anchor).toBe('end');
+    expect(layoutLabels([wide(450)], { width: 900 }).placed[0].anchor).toBe('middle');
+  });
+
+  it('drops a label with nowhere left rather than printing it over another', () => {
+    const crowded = Array.from({ length: 12 }, (_, i) => wide(300 + i));
+    const out = layoutLabels(crowded, { width: 900, maxRows: 3 });
+    expect(out.dropped.length).toBeGreaterThan(0);
+    expect(out.rows).toBeLessThanOrEqual(3);
+  });
+
+  it('reports rows against the marks they belong to, whatever order they came in', () => {
+    const out = layoutLabels([wide(800), wide(100)], { width: 900 });
+    expect(out.placed.find((p) => p.index === 0)!.x).toBe(800);
+    expect(out.placed.find((p) => p.index === 1)!.x).toBe(100);
+  });
+
+  it('copes with no labels at all', () => {
+    expect(layoutLabels([], { width: 900 })).toEqual({ placed: [], rows: 0, dropped: [] });
   });
 });
