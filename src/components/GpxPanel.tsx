@@ -1,14 +1,25 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { parseGpx } from '../lib/gpx';
 import { readCourseProfile, type CourseProfile } from '../lib/courseProfile';
 import { CourseProfileView } from './CourseProfileView';
 import { useT } from '../lib/i18n';
 
-interface LoadedFile {
+/** A route file as loaded, kept as text so a saved race can be reopened from it. */
+export interface LoadedGpx {
+  fileName: string;
+  text: string;
+}
+
+interface ReadFile {
   fileName: string;
   courses: CourseProfile[];
   warnings: string[];
   error?: string;
+}
+
+interface Props {
+  files: LoadedGpx[];
+  onChange: (files: LoadedGpx[]) => void;
 }
 
 /**
@@ -22,48 +33,51 @@ interface LoadedFile {
  * A file that fails is reported beside the ones that worked rather than stopping the
  * batch, because the failures come in ones and twos out of a set of six.
  */
-export function GpxPanel() {
+export function GpxPanel({ files, onChange }: Props) {
   const t = useT();
-  const [files, setFiles] = useState<LoadedFile[]>([]);
   const [isOver, setIsOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  async function accept(list: FileList | null | undefined) {
-    if (!list || list.length === 0) return;
-
-    const loaded: LoadedFile[] = [];
-    for (const file of Array.from(list)) {
-      if (!/\.gpx$/i.test(file.name)) {
-        loaded.push({
-          fileName: file.name,
-          courses: [],
-          warnings: [],
-          error: t('Not a .gpx file.'),
-        });
-        continue;
-      }
+  /*
+   * Read once per set of files rather than on every render. These are 4 MB and 65,699
+   * points each, and re-parsing six of them because a slider moved elsewhere on the page
+   * would stall the tab for half a minute.
+   */
+  const read = useMemo<ReadFile[]>(() => {
+    const out = files.map((file) => {
       try {
-        const parsed = parseGpx(await file.text());
-        loaded.push({
-          fileName: file.name,
+        const parsed = parseGpx(file.text);
+        return {
+          fileName: file.fileName,
           courses: parsed.tracks.map((track) =>
-            readCourseProfile(track, { fallbackName: file.name.replace(/\.gpx$/i, '') })
+            readCourseProfile(track, { fallbackName: file.fileName.replace(/\.gpx$/i, '') })
           ),
           warnings: parsed.warnings,
-        });
+        };
       } catch (e) {
-        loaded.push({
-          fileName: file.name,
+        return {
+          fileName: file.fileName,
           courses: [],
           warnings: [],
           error: e instanceof Error ? e.message : String(e),
-        });
+        };
       }
-    }
-
+    });
     // Longest first, matching how every other list in the tool is read down.
-    loaded.sort((a, b) => (b.courses[0]?.totalKm ?? 0) - (a.courses[0]?.totalKm ?? 0));
-    setFiles(loaded);
+    out.sort((a, b) => (b.courses[0]?.totalKm ?? 0) - (a.courses[0]?.totalKm ?? 0));
+    return out;
+  }, [files]);
+
+  async function accept(list: FileList | null | undefined) {
+    if (!list || list.length === 0) return;
+    const loaded: LoadedGpx[] = [];
+    for (const file of Array.from(list)) {
+      // A non-GPX is turned away here rather than carried in to fail later, so the
+      // course list never holds a file the panel is also calling unreadable.
+      if (!/\.gpx$/i.test(file.name)) continue;
+      loaded.push({ fileName: file.name, text: await file.text() });
+    }
+    onChange(loaded);
   }
 
   return (
@@ -97,9 +111,9 @@ export function GpxPanel() {
         />
       </div>
 
-      {files.length > 0 && (
+      {read.length > 0 && (
         <div className="gpx-results">
-          {files.map((file) => (
+          {read.map((file) => (
             <div className="gpx-file" key={file.fileName}>
               <div className="gpx-file-head">
                 <strong className="loaded-file">{file.fileName}</strong>

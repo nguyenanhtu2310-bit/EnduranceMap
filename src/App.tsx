@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CrossingDistribution } from './components/CrossingDistribution';
 import { EnduranceMapLogo } from './components/Logo';
 import {
@@ -33,7 +33,9 @@ import { buildReportSheets } from './lib/workbook';
 import { downloadXlsx } from './lib/xlsx';
 import { FolderPicker } from './components/FolderPicker';
 import { KmlDropzone } from './components/KmlDropzone';
-import { GpxPanel } from './components/GpxPanel';
+import { GpxPanel, type LoadedGpx } from './components/GpxPanel';
+import { parseGpx } from './lib/gpx';
+import { mergeCourseSources } from './lib/courseSources';
 import { PaceBandForm, type DistanceFormRow } from './components/PaceBandForm';
 import { MultisportPaceBandForm } from './components/MultisportPaceBandForm';
 import { RaceFormatPicker } from './components/RaceFormatPicker';
@@ -188,6 +190,8 @@ type LoadedResults =
  */
 interface RaceSnapshot {
   kml: LoadedKml | null;
+  /** Route files, one per distance. Their courses carry the elevation a KML loses. */
+  gpx: LoadedGpx[];
   rows: DistanceFormRow[];
   folders: FolderSummary[];
   selectedFolders: string[];
@@ -220,6 +224,7 @@ interface RaceSnapshot {
 function blankSnapshot(): RaceSnapshot {
   return {
     kml: null,
+    gpx: [],
     rows: [],
     folders: [],
     selectedFolders: [],
@@ -303,7 +308,63 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<LoadedResults | null>(null);
   const [contestMapping, setContestMapping] = useState<Record<string, string>>({});
-  const [courses, setCourses] = useState<Course[]>([]);
+  const [kmlCourses, setKmlCourses] = useState<Course[]>([]);
+  const [gpxFiles, setGpxFiles] = useState<LoadedGpx[]>([]);
+
+  /*
+   * The courses the plan runs on, from both file types at once.
+   *
+   * A GPX carries elevation on every point but has no idea what a checkpoint is; a KML
+   * carries the station layers, folders and cut-off labels but usually arrives with its
+   * altitudes flattened. Neither can express the other's half, so a race is allowed to
+   * supply routes from one, stations from the other, or everything from a single map.
+   */
+  const gpxCourses = useMemo(
+    () =>
+      gpxFiles.flatMap((file) => {
+        try {
+          return buildCourses(
+            parseGpx(file.text).tracks.map((track) => ({
+              name: /^Track \d+$/.test(track.name) ? file.fileName.replace(/\.gpx$/i, '') : track.name,
+              folder: file.fileName,
+              points: track.points,
+            }))
+          );
+        } catch {
+          // A file that will not parse is reported by the panel that loaded it; the
+          // course list simply goes on without it.
+          return [];
+        }
+      }),
+    [gpxFiles]
+  );
+  const mergedCourses = useMemo(
+    () => mergeCourseSources(kmlCourses, gpxCourses),
+    [kmlCourses, gpxCourses]
+  );
+  const courses = mergedCourses.courses;
+
+  /*
+   * Keeps one form row per course, from whichever file the course arrived in.
+   *
+   * Rows are reconciled rather than rebuilt: a row already on screen keeps every figure
+   * typed into it and only takes the course's measured length, so dropping in a route
+   * GPX after an hour of editing start times does not throw that hour away.
+   */
+  useEffect(() => {
+    setRows((current) => {
+      const byName = new Map(current.map((row) => [row.courseName, row]));
+      const next = courses.map((course) => {
+        const existing = byName.get(course.name);
+        return existing
+          ? { ...existing, measuredKm: course.totalKm }
+          : seedRow(course.name, course.totalKm);
+      });
+      const unchanged =
+        next.length === current.length && next.every((row, i) => row === current[i]);
+      return unchanged ? current : next;
+    });
+  }, [courses]);
   const [stationOrder, setStationOrder] = useState<string[]>([]);
   const [amenityOverrides, setAmenityOverrides] = useState<Record<string, Partial<AmenitySet>>>({});
   const [amenities, setAmenities] = useState<Amenity[]>(DEFAULT_AMENITIES);
@@ -367,8 +428,10 @@ export default function App() {
 
   function captureSnapshot(): RaceSnapshot {
     return {
-      kml, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
-      results, contestMapping, courses, stationOrder, amenityOverrides, amenities, raceName,
+      kml, gpx: gpxFiles, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
+      // The map's own courses, not the merged view — the GPX half is re-derived from its
+      // own text on the way back in, so the two can never be saved out of step.
+      results, contestMapping, courses: kmlCourses, stationOrder, amenityOverrides, amenities, raceName,
       removedStations, removedPasses, reportSections, stationNotes, raceOverrides,
       multisport, skipNames,
     };
@@ -385,7 +448,8 @@ export default function App() {
     setResult(snap.result);
     setResults(snap.results);
     setContestMapping(snap.contestMapping);
-    setCourses(snap.courses);
+    setKmlCourses(snap.courses);
+    setGpxFiles(snap.gpx ?? []);
     setStationOrder(snap.stationOrder);
     setAmenityOverrides(snap.amenityOverrides);
     setAmenities(snap.amenities?.length ? snap.amenities : DEFAULT_AMENITIES);
@@ -499,37 +563,36 @@ export default function App() {
     setResult(null);
     try {
       const parsed = parseKml(text);
-      const courses = buildCourses(parsed.courses);
-      if (courses.length === 0) {
+      const kmlOwn = buildCourses(parsed.courses);
+      const detected = listPlacemarkFolders(parsed.placemarks);
+
+      // A map holding only station layers is a normal thing to load, not a failure: the
+      // routes come from the per-distance GPX every timing provider hands out, and a KML
+      // is the only file that can express a station, a folder or a cut-off label at all.
+      // Only a map with neither routes nor placemarks has nothing to offer.
+      if (kmlOwn.length === 0 && parsed.placemarks.length === 0) {
         setKml(null);
-        setRows([]);
         setFolders([]);
         setError(
           parsed.warnings[0] ??
-            'No race routes found. Expected a folder named "RACE ROUTE" holding one line per distance.'
+            'That map holds no race routes and no placemarks. Expected a folder named ' +
+              '"RACE ROUTE" holding one line per distance, or a layer of stations.'
         );
         return;
       }
-      const detected = listPlacemarkFolders(parsed.placemarks);
+
       setKml({ text, fileName });
-      // Longest distance on top, shortest at the bottom, rather than whatever order the
-      // routes happened to be drawn in. The long course sets the day's outer envelope —
-      // first start, last finish — so it is the one the plan is read down from. The
-      // course list itself keeps its map order, since that is what the multisport leg
-      // bindings are picked from and there a swim belongs beside its own run.
-      setRows(
-        [...courses]
-          .sort((a, b) => b.totalKm - a.totalKm)
-          .map((c) => seedRow(c.name, c.totalKm))
-      );
-      setCourses(courses);
+      setKmlCourses(kmlOwn);
       setFolders(detected);
       setSelectedFolders(defaultSelection(detected));
-      if (multisport) setMultisport(autoBindCourses(multisport, courses));
-      if (results?.kind === 'single') setContestMapping(autoMapContests(results.profiles, courses));
+      const nextCourses = mergeCourseSources(kmlOwn, gpxCourses).courses;
+      if (multisport) setMultisport(autoBindCourses(multisport, nextCourses));
+      if (results?.kind === 'single') {
+        setContestMapping(autoMapContests(results.profiles, nextCourses));
+      }
     } catch (e) {
       setKml(null);
-      setRows([]);
+      setKmlCourses([]);
       setFolders([]);
       setError(e instanceof Error ? e.message : 'Could not parse that KML.');
     }
@@ -939,7 +1002,7 @@ export default function App() {
         </h2>
         <p className="hint">
           {t(
-            'Choose an exported KML from Google My Maps. Make sure all the race routes are placed in one layer, and each CP type on its own separate layer.'
+            'Choose an exported KML from Google My Maps, with each CP type on its own layer. Race routes can live in a layer here too, or come from the route files below.'
           )}
         </p>
         <KmlDropzone fileName={kml?.fileName} onLoad={loadKml} onError={setError} />
@@ -952,7 +1015,15 @@ export default function App() {
             'Drop the route GPX for each distance to read its climbing. A GPX carries elevation on every point; a KML usually loses it.'
           )}
         </p>
-        <GpxPanel />
+        <GpxPanel files={gpxFiles} onChange={setGpxFiles} />
+        {mergedCourses.replaced.map(({ kml: drawn, gpx: surveyed }) => (
+          <p className="hint" key={drawn.name}>
+            {`"${drawn.name}" (${drawn.totalKm.toFixed(2)} km) `}
+            {t('from the map is covered by')}
+            {` "${surveyed.name}" (${surveyed.totalKm.toFixed(2)} km) `}
+            {t('from GPX, which carries elevation.')}
+          </p>
+        ))}
       </section>
 
       {rows.length > 0 && (
@@ -1017,7 +1088,7 @@ export default function App() {
                 ? 'One row per leg. Set how long each takes and which drawn route it follows; the legs before a checkpoint decide how late it opens.'
                 : mappedCourses.size > 0
                   ? `Start time and field size apply to every distance. Pace is taken from the results file for ${[...mappedCourses].join(', ')} — the band shown there is for reference only.`
-                  : 'One row per distance found in the map. These stand in for a results CSV until you have one.'}
+                  : 'One row per distance, from the map or the route files. These stand in for a results CSV until you have one.'}
             </p>
 
             <RaceFormatPicker

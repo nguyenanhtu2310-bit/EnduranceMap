@@ -221,8 +221,40 @@ const VI: Record<string, string> = {
   'First Male / Female, coloured by distance': 'Nam / Nữ đầu tiên, màu theo cự ly',
   'Skip points whose name contains': 'Bỏ qua điểm có tên chứa',
   'Number stations along the course': 'Đánh số trạm dọc đường đua',
-  'Choose an exported KML from Google My Maps. Make sure all the race routes are placed in one layer, and each CP type on its own separate layer.':
-    'Chọn file KML xuất từ Google My Maps. Hãy đặt tất cả tuyến đường đua trong cùng một lớp, và mỗi loại trạm ở một lớp riêng.',
+  'Choose an exported KML from Google My Maps, with each CP type on its own layer. Race routes can live in a layer here too, or come from the route files below.':
+    'Chọn file KML xuất từ Google My Maps, mỗi loại trạm ở một lớp riêng. Tuyến đường đua có thể nằm trong một lớp ở đây, hoặc lấy từ file GPX bên dưới.',
+
+  'from the map is covered by': 'từ bản đồ đã được thay bằng',
+  'from GPX, which carries elevation.': 'từ file GPX, vì file này có dữ liệu độ cao.',
+
+  // Route files and their profiles.
+  'Course profile': 'Độ cao đường đua',
+  'Drop the route GPX for each distance to read its climbing. A GPX carries elevation on every point; a KML usually loses it.':
+    'Kéo thả file GPX của từng cự ly để đọc độ leo. File GPX có độ cao ở mọi điểm; file KML thường mất dữ liệu này.',
+  'Drop route GPX files here, or': 'Kéo thả file GPX đường đua vào đây, hoặc',
+  'One file per distance is fine — drop them all at once.':
+    'Mỗi cự ly một file cũng được — kéo tất cả vào cùng lúc.',
+  Unreadable: 'Không đọc được',
+  points: 'điểm',
+  Climb: 'Tổng leo',
+  Descent: 'Tổng xuống',
+  Range: 'Khoảng cao độ',
+  'Flat-equivalent': 'Quy đổi đường bằng',
+  'Biggest climbs': 'Các dốc lớn nhất',
+  Length: 'Chiều dài',
+  Gradient: 'Độ dốc',
+  'elevation profile': 'trắc dọc độ cao',
+  'This file has no elevation, so it can describe the route but not the climbing.':
+    'File này không có dữ liệu độ cao, nên chỉ mô tả được tuyến đường chứ không tính được độ leo.',
+  'Elevation is missing from part of this file': 'File này thiếu độ cao ở một phần dữ liệu',
+  'of points have none, so no profile is drawn.':
+    'số điểm không có độ cao, nên không vẽ được trắc dọc.',
+  'Recorded track — smoothed at': 'Track ghi từ thiết bị — đã làm mượt ở mức',
+  'before totalling': 'trước khi cộng tổng',
+  'reverses direction': 'đổi chiều',
+  'of the time': 'số lần',
+  'Already filtered by whatever wrote the file — totalled as it stands':
+    'Đã được lọc sẵn bởi phần mềm tạo file — cộng tổng nguyên trạng',
   'Drop a race KML here, or': 'Kéo thả file KML vào đây, hoặc',
   browse: 'chọn file',
   'Choose the layer that contains the type of CP you want to calculate.':
