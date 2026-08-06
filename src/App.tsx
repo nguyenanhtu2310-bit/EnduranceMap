@@ -203,6 +203,12 @@ interface RaceSnapshot {
    * config implied. Only the ones actually corrected are kept.
    */
   timedOverrides: Record<string, boolean>;
+  /**
+   * The event's first date, "YYYY-MM-DD". Optional — without one the tool counts days
+   * instead of naming them, which is still better than a clock time that could mean
+   * either of two mornings.
+   */
+  raceDate: string;
   rows: DistanceFormRow[];
   folders: FolderSummary[];
   selectedFolders: string[];
@@ -238,6 +244,7 @@ function blankSnapshot(): RaceSnapshot {
     gpx: [],
     lvs: [],
     timedOverrides: {},
+    raceDate: '',
     rows: [],
     folders: [],
     selectedFolders: [],
@@ -327,6 +334,7 @@ export default function App() {
   const [gpxFiles, setGpxFiles] = useState<LoadedGpx[]>([]);
   const [lvsFiles, setLvsFiles] = useState<LoadedGpx[]>([]);
   const [timedOverrides, setTimedOverrides] = useState<Record<string, boolean>>({});
+  const [raceDate, setRaceDate] = useState('');
 
   /*
    * The courses the plan runs on, from both file types at once.
@@ -478,7 +486,7 @@ export default function App() {
 
   function captureSnapshot(): RaceSnapshot {
     return {
-      kml, gpx: gpxFiles, lvs: lvsFiles, timedOverrides, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
+      kml, gpx: gpxFiles, lvs: lvsFiles, timedOverrides, raceDate, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
       // The map's own courses, not the merged view — the GPX half is re-derived from its
       // own text on the way back in, so the two can never be saved out of step.
       results, contestMapping, courses: kmlCourses, stationOrder, amenityOverrides, amenities, raceName,
@@ -502,6 +510,7 @@ export default function App() {
     setGpxFiles(snap.gpx ?? []);
     setLvsFiles(snap.lvs ?? []);
     setTimedOverrides(snap.timedOverrides ?? {});
+    setRaceDate(snap.raceDate ?? '');
     setStationOrder(snap.stationOrder);
     setAmenityOverrides(snap.amenityOverrides);
     setAmenities(snap.amenities?.length ? snap.amenities : DEFAULT_AMENITIES);
@@ -1211,6 +1220,23 @@ export default function App() {
                   : 'One row per distance, from the map or the route files. These stand in for a results CSV until you have one.'}
             </p>
 
+            <div className="actions" style={{ marginBottom: '0.9rem' }}>
+              <label className="inline-field">
+                {t('Race date')}
+                <input
+                  type="date"
+                  value={raceDate}
+                  onChange={(e) => setRaceDate(e.target.value)}
+                  title={t('The first day of the event — every time is then named by its weekday')}
+                />
+              </label>
+              <span className="hint" style={{ margin: 0 }}>
+                {raceDate
+                  ? t('Times on later days are named by their weekday.')
+                  : t('Optional. Without it, later days are counted as D+1, D+2.')}
+              </span>
+            </div>
+
             <RaceFormatPicker
               value={multisport?.races[0]?.template ?? null}
               onChange={chooseFormat}
@@ -1226,7 +1252,12 @@ export default function App() {
                 onRemoveRace={removeRace}
               />
             ) : (
-              <PaceBandForm rows={rows} onChange={setRows} drivenByResults={mappedCourses} />
+              <PaceBandForm
+                rows={rows}
+                onChange={setRows}
+                drivenByResults={mappedCourses}
+                raceDate={raceDate}
+              />
             )}
           </section>
 
@@ -1449,6 +1480,7 @@ export default function App() {
             <StationScheduleTable
               stations={planned.stations}
               binMinutes={planned.binMinutes}
+              raceDate={raceDate}
               showSourceNames={renumber}
               onReorder={(order) => {
                 setStationOrder(order);

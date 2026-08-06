@@ -1,5 +1,6 @@
 import { parseKml, type KmlParseOptions } from './kml';
 import { mergeCourseSources } from './courseSources';
+import { eventSecondsFrom } from './time';
 import { nameStations, type PlacemarkCrossing } from './stationNaming';
 import type { TimingPoint } from './timingPoints';
 import { parseClockTimeToSeconds } from './time';
@@ -48,6 +49,11 @@ export interface DistanceInput extends PaceBand, StartField {
    * intermediate points get their own proposals.
    */
   organizerCutoffClock?: string;
+  /**
+   * Which day of the event that cut-off falls on, counted from the first. A 49-hour race
+   * closing at 09:00 closes two days after it started, and no clock time says so.
+   */
+  cutoffDayOffset?: number;
   /**
    * Real finishers from a previous race. When present these drive the arrival times and
    * the pace band is only shown for reference; the band is a three-point approximation
@@ -621,6 +627,11 @@ export function runPipeline(
           : undefined;
       const officialCutoffClock =
         organizerCot ?? findCutoffForCrossing(group, snap, courses, toleranceKm, cutoffPassToleranceKm);
+      // Only the organizer's own cut-off knows which day it falls on; a time labelled on
+      // the map is a same-day note and is left to be read as one.
+      const officialCutoffSeconds = organizerCot
+        ? eventSecondsFrom(organizerCot, input.cutoffDayOffset) ?? undefined
+        : undefined;
 
       const usesRealField = !!input.samples && input.samples.length > 0;
 
@@ -634,6 +645,7 @@ export function runPipeline(
           ? projectSampleArrivals(input.samples!, input, snap.kmFromStart)
           : samplePaceModelArrivals(input, input, snap.kmFromStart, sampleSize),
         officialCutoffClock,
+        officialCutoffSeconds,
       });
 
       details.push({

@@ -107,3 +107,54 @@ export function normalizeClockTime(raw: string): string | null {
   if (hours > 23 || minutes > 59) return null;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
+
+/** Weekday names, indexed the way `Date.getDay()` does. */
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * A time on the event's clock, carrying the day it falls on.
+ *
+ * An ultra does not fit in a day, and a clock time on its own stops meaning anything
+ * once it does not: a station that opens at 06:31 and closes at 06:49 is either eighteen
+ * minutes' work or twenty-four hours and eighteen minutes of it, and nothing on the page
+ * says which. On a card where the 100 miles starts Friday and everything else starts
+ * Saturday, the same ambiguity reaches the start times too.
+ *
+ * Given the event's first date the day is named — "Sat 06:31" — because a crew chief
+ * reading a sheet at four in the morning should not be counting days off a race brief.
+ * Without one it falls back to counting them, which is still better than hiding them.
+ */
+export function formatEventClock(totalSeconds: number, raceDate?: string): string {
+  const rounded = Math.round(totalSeconds);
+  const day = Math.floor(rounded / 86400);
+  const clock = secondsToClockTime(rounded).slice(0, 5);
+
+  if (raceDate) {
+    // Parsed as local midnight rather than UTC, so a date never lands on the day before.
+    const date = new Date(`${raceDate}T00:00:00`);
+    if (!Number.isNaN(date.getTime())) {
+      date.setDate(date.getDate() + day);
+      return `${WEEKDAYS[date.getDay()]} ${clock}`;
+    }
+  }
+
+  return day === 0 ? clock : `D+${day} ${clock}`;
+}
+
+/** The day a time falls on, counted from the event's first, or null for the first day. */
+export function eventDayOffset(totalSeconds: number): number {
+  return Math.floor(Math.round(totalSeconds) / 86400);
+}
+
+/**
+ * Seconds from the event's first midnight, from a clock time and the day it is on.
+ *
+ * The day is stated rather than worked out. A 100 miles starting 08:00 Friday and closing
+ * 09:00 Sunday cannot be told apart from one closing 09:00 Saturday by looking at "09:00",
+ * and a tool that guessed would be wrong about half of them by a whole day.
+ */
+export function eventSecondsFrom(clock: string, dayOffset = 0): number | null {
+  const seconds = parseClockTimeToSeconds(clock);
+  if (seconds === null) return null;
+  return seconds + Math.max(0, Math.round(dayOffset)) * 86400;
+}

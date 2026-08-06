@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDuration, maskClockInput, normalizeClockTime, parseClockTimeToSeconds, secondsToClockTime, windowSeconds } from '../time';
+import { eventDayOffset, eventSecondsFrom, formatDuration, formatEventClock, maskClockInput, normalizeClockTime, parseClockTimeToSeconds, secondsToClockTime, windowSeconds } from '../time';
 
 describe('parseClockTimeToSeconds', () => {
   it('parses 24-hour HH:MM and HH:MM:SS', () => {
@@ -121,5 +121,63 @@ describe('normalizeClockTime', () => {
   it('never stores a half-typed entry as though it were a time', () => {
     // "07" alone is two digits — an hour with no minutes, not 07:00.
     expect(normalizeClockTime('07')).toBeNull();
+  });
+});
+
+describe('formatEventClock', () => {
+  it('names the weekday when the event has a date', () => {
+    // 2026-09-25 is a Friday.
+    expect(formatEventClock(8 * 3600, '2026-09-25')).toBe('Fri 08:00');
+    expect(formatEventClock(2 * 86400 + 9 * 3600, '2026-09-25')).toBe('Sun 09:00');
+  });
+
+  it('counts days when there is no date to name them by', () => {
+    expect(formatEventClock(6 * 3600 + 31 * 60)).toBe('06:31');
+    expect(formatEventClock(86400 + 6 * 3600 + 49 * 60)).toBe('D+1 06:49');
+  });
+
+  it('tells a short shift from a day-long one', () => {
+    // The case this exists for: 06:31 to 06:49 is either 18 minutes or 24h 18m.
+    const open = 6 * 3600 + 31 * 60;
+    const close = 86400 + 6 * 3600 + 49 * 60;
+    expect(formatEventClock(open, '2026-09-25')).toBe('Fri 06:31');
+    expect(formatEventClock(close, '2026-09-25')).toBe('Sat 06:49');
+  });
+
+  it('ignores a date it cannot read rather than printing nonsense', () => {
+    expect(formatEventClock(86400 + 3600, 'not a date')).toBe('D+1 01:00');
+  });
+
+  it('rolls a time past midnight into the next day', () => {
+    expect(formatEventClock(86400 - 1, '2026-09-25')).toBe('Fri 23:59');
+    expect(formatEventClock(86400, '2026-09-25')).toBe('Sat 00:00');
+  });
+});
+
+describe('eventSecondsFrom', () => {
+  it('adds whole days to a clock time', () => {
+    expect(eventSecondsFrom('08:00', 0)).toBe(8 * 3600);
+    expect(eventSecondsFrom('05:00', 1)).toBe(86400 + 5 * 3600);
+    expect(eventSecondsFrom('09:00', 2)).toBe(2 * 86400 + 9 * 3600);
+  });
+
+  it('defaults to the first day', () => {
+    expect(eventSecondsFrom('03:00')).toBe(3 * 3600);
+  });
+
+  it('refuses a clock time it cannot read', () => {
+    expect(eventSecondsFrom('nope', 1)).toBeNull();
+  });
+
+  it('never counts backwards', () => {
+    expect(eventSecondsFrom('08:00', -3)).toBe(8 * 3600);
+  });
+});
+
+describe('eventDayOffset', () => {
+  it('counts the days an elapsed time spans', () => {
+    expect(eventDayOffset(3600)).toBe(0);
+    expect(eventDayOffset(86400)).toBe(1);
+    expect(eventDayOffset(2 * 86400 + 9 * 3600)).toBe(2);
   });
 });

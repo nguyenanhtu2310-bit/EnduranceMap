@@ -131,6 +131,13 @@ export interface DistanceCrossing {
   runnerArrivalsSeconds?: number[];
   /** Official cutoff clock time for this distance at this station, if provided. */
   officialCutoffClock?: string;
+  /**
+   * That cut-off as seconds from the event's first midnight, where the day it falls on is
+   * known. A clock time alone cannot be compared against an ultra's arrivals: a 49-hour
+   * race closing at 09:00 closes two days after it started, and parsing "09:00" puts it
+   * on the morning of the first.
+   */
+  officialCutoffSeconds?: number;
 }
 
 export interface CutoffDetail {
@@ -144,6 +151,13 @@ export interface StationSchedule {
   crossings: DistanceCrossing[];
   openClockTime: string;
   closeClockTime: string;
+  /**
+   * The same two moments as seconds from the event's first midnight, so a display can
+   * name the day. An ultra's station opens on one day and closes on another, and the
+   * clock strings alone cannot tell an eighteen-minute shift from a twenty-four-hour one.
+   */
+  openSeconds: number;
+  closeSeconds: number;
   activityLevel: ActivityLevel;
   peakRunnersPerHour: number;
   histogram: HistogramBin[];
@@ -194,7 +208,8 @@ export function buildStationSchedule(
     let closeSeconds = p99 ? p99.seconds + teardownBufferMin * 60 : undefined;
 
     if (crossing.officialCutoffClock) {
-      const cutoffSeconds = parseClockTimeToSeconds(crossing.officialCutoffClock);
+      const cutoffSeconds =
+        crossing.officialCutoffSeconds ?? parseClockTimeToSeconds(crossing.officialCutoffClock);
       if (cutoffSeconds !== null) {
         closeSeconds = cutoffSeconds;
         if (p99 && p99.seconds > cutoffSeconds) {
@@ -222,6 +237,8 @@ export function buildStationSchedule(
     crossings,
     openClockTime: secondsToClockTime(openSeconds),
     closeClockTime: secondsToClockTime(closeSeconds),
+    openSeconds,
+    closeSeconds,
     activityLevel: classifyActivityLevel(peakPerHour, activityThresholds),
     peakRunnersPerHour: peakPerHour,
     histogram,
@@ -310,7 +327,7 @@ export function buildCutoffTable(
         maxMarginMinutes
       );
       const mapSeconds = crossing.officialCutoffClock
-        ? parseClockTimeToSeconds(crossing.officialCutoffClock)
+        ? crossing.officialCutoffSeconds ?? parseClockTimeToSeconds(crossing.officialCutoffClock)
         : null;
 
       rows.push({

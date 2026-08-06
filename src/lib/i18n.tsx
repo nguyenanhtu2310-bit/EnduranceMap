@@ -231,6 +231,21 @@ const VI: Record<string, string> = {
   'Optional. Supply the timing configuration and every station takes the name the timing system uses, so nothing needs renaming on the map.':
     'Không bắt buộc. Nếu có file cấu hình bấm giờ, mọi trạm sẽ tự lấy tên theo hệ thống bấm giờ, không cần sửa tên trên bản đồ.',
 
+  // Multi-day races.
+  'Race date': 'Ngày thi đấu',
+  'The first day of the event — every time is then named by its weekday':
+    'Ngày đầu tiên của sự kiện — mọi mốc giờ sẽ được gọi theo thứ trong tuần',
+  'Times on later days are named by their weekday.':
+    'Các mốc giờ sang ngày sau sẽ hiện kèm thứ trong tuần.',
+  'Optional. Without it, later days are counted as D+1, D+2.':
+    'Không bắt buộc. Nếu bỏ trống, các ngày sau được đánh số D+1, D+2.',
+  'Start day': 'Ngày xuất phát',
+  'COT day': 'Ngày COT',
+  'Which day of the event this distance starts on': 'Cự ly này xuất phát vào ngày nào của sự kiện',
+  'Which day the cut-off falls on — an ultra finishes on another day':
+    'COT rơi vào ngày nào — giải ultra về đích sang ngày khác',
+  'Which day the cut-off falls on': 'COT rơi vào ngày nào',
+
   // Station naming review.
   'Station naming': 'Đặt tên trạm',
   timed: 'có bấm giờ',

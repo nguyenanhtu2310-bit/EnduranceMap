@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { PipelineStation } from '../lib/pipeline';
 import { peakRunnersPerWindow, type ActivityLevel } from '../lib/schedule';
 import { secondsToClockTime } from '../lib/time';
+import { eventDayOffset, formatEventClock } from '../lib/time';
 import { useT } from '../lib/i18n';
 import { DEFAULT_HISTOGRAM_BIN_MINUTES } from '../lib/config';
 import type { RaceOverrides, StationOverride } from '../lib/overrides';
@@ -13,17 +14,34 @@ import { formatDuration, windowSeconds } from '../lib/time';
  * to send; the clock says when to have it there, and reading it off a chart in another
  * section was a step the schedule could take for itself.
  */
+/**
+ * The day a moment falls on, or nothing when it is the event's first.
+ *
+ * Shown beside the time rather than inside it, because the open and close cells are
+ * typed into: an operator entering "06:31" should not have to know the tool would
+ * rather have had "Sat 06:31", and an override stored with a day in it would stop
+ * matching the value it was meant to replace.
+ */
+function dayTag(totalSeconds: number, raceDate?: string): string {
+  if (eventDayOffset(totalSeconds) === 0) return '';
+  const formatted = formatEventClock(totalSeconds, raceDate);
+  return formatted.slice(0, formatted.lastIndexOf(' '));
+}
+
 function peakWindow(station: PipelineStation): string {
   const bin = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
   if (!bin) return '—';
   const hm = (seconds: number) => secondsToClockTime(seconds).slice(0, 5);
-  return `${hm(bin.binStartSeconds)}–${hm(bin.binEndSeconds)}`;
+  const day = eventDayOffset(bin.binStartSeconds);
+  return `${hm(bin.binStartSeconds)}–${hm(bin.binEndSeconds)}${day > 0 ? ` (+${day}d)` : ''}`;
 }
 
 interface Props {
   stations: PipelineStation[];
   /** Width of the counting window, so the peak column can say what it counted. */
   binMinutes?: number;
+  /** The event's first date, so a time on another day can be named rather than counted. */
+  raceDate?: string;
   /** Shows the map's own placemark names under each station. */
   showSourceNames?: boolean;
   /** Supplying this makes rows draggable; receives the new order as map names. */
@@ -73,6 +91,7 @@ export function StationScheduleTable({
   stations,
   binMinutes = DEFAULT_HISTOGRAM_BIN_MINUTES,
   showSourceNames = true,
+  raceDate,
   onReorder,
   onRemove,
   notes,
@@ -250,6 +269,9 @@ export function StationScheduleTable({
                 ) : (
                   formatHm(station.schedule.openClockTime)
                 )}
+                {dayTag(station.schedule.openSeconds, raceDate) && (
+                  <span className="colocated">{dayTag(station.schedule.openSeconds, raceDate)}</span>
+                )}
               </td>
               <td className="num">
                 {onStationEdit ? (
@@ -263,6 +285,9 @@ export function StationScheduleTable({
                   />
                 ) : (
                   formatHm(station.schedule.closeClockTime)
+                )}
+                {dayTag(station.schedule.closeSeconds, raceDate) && (
+                  <span className="colocated">{dayTag(station.schedule.closeSeconds, raceDate)}</span>
                 )}
               </td>
               <td className="num">

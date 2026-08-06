@@ -1,4 +1,4 @@
-import { parseClockTimeToSeconds, secondsToClockTime } from './time';
+import { eventSecondsFrom, secondsToClockTime } from './time';
 import { DEFAULT_PERCENTILES } from './config';
 import { computeArrivalPercentiles, type PercentileResult } from './percentiles';
 import type { RunnerSample } from './results';
@@ -12,6 +12,12 @@ export interface PaceBand {
 export interface StartField {
   /** Wave/gun start time, "HH:MM" or "HH:MM:SS". */
   startTimeClock: string;
+  /**
+   * Which day of the event this distance starts on, counted from the first. Stated
+   * rather than inferred: one real card starts its 100 miles on the Friday and every
+   * other distance on the Saturday, and no clock time can tell those apart.
+   */
+  startDayOffset?: number;
   runnerCount: number;
   /**
    * Minutes over which the field actually crosses the start line. A mass-participation
@@ -73,7 +79,7 @@ export function arrivalPercentilesFromPaceBand(
   kmFromStart: number,
   percentiles: number[] = DEFAULT_PERCENTILES
 ): PercentileResult[] {
-  const startSeconds = parseClockTimeToSeconds(start.startTimeClock);
+  const startSeconds = eventSecondsFrom(start.startTimeClock, start.startDayOffset);
   if (startSeconds === null) throw new Error(`Invalid start time: "${start.startTimeClock}"`);
   const spreadMinutes = start.startSpreadMinutes ?? DEFAULT_START_SPREAD_MINUTES;
 
@@ -133,7 +139,7 @@ export function projectSampleArrivals(
   start: StartField,
   kmFromStart: number
 ): number[] {
-  const startSeconds = parseClockTimeToSeconds(start.startTimeClock);
+  const startSeconds = eventSecondsFrom(start.startTimeClock, start.startDayOffset);
   if (startSeconds === null) throw new Error(`Invalid start time: "${start.startTimeClock}"`);
   if (samples.length === 0 || start.runnerCount <= 0) return [];
 
