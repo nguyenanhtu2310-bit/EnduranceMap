@@ -162,9 +162,17 @@ export function CourseCommandView({ result, profiles }: Props) {
                   `+${Math.round(climb.changeMetres)} m · ${climb.gradientPercent.toFixed(1)}%`}
               </title>
               <rect x={x1} y={labelH} width={Math.max(1, x2 - x1)} height={PLOT_H} />
-              <text x={(x1 + x2) / 2} y={labelH + PLOT_H - 6} textAnchor="middle">
-                +{Math.round(climb.changeMetres)} m · {climb.gradientPercent.toFixed(1)}%
-              </text>
+              {/* Two lines, so the figures stay inside the ground they describe. */}
+              {x2 - x1 > 34 && (
+                <>
+                  <text x={(x1 + x2) / 2} y={labelH + PLOT_H - 18} textAnchor="middle">
+                    +{Math.round(climb.changeMetres)} m
+                  </text>
+                  <text x={(x1 + x2) / 2} y={labelH + PLOT_H - 6} textAnchor="middle">
+                    {climb.gradientPercent.toFixed(1)}%
+                  </text>
+                </>
+              )}
             </g>
           );
         })}

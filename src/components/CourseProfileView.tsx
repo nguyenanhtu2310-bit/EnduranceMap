@@ -7,9 +7,17 @@ interface Props {
   course: CourseProfile;
 }
 
-const COLUMNS = 460;
-const PLOT_H = 150;
-const AXIS_H = 18;
+/*
+ * Drawn at the same resolution as the command view, so a label is the same size in both.
+ *
+ * These are viewBox units, not pixels: the chart still renders at whatever width its card
+ * gives it. Doubling the units while keeping the proportions halves how much of the plot
+ * a nine-unit label covers, which is the difference between a climb band that can carry
+ * its own figures and one that cannot.
+ */
+const COLUMNS = 900;
+const PLOT_H = 300;
+const AXIS_H = 34;
 
 /**
  * One route file, as read.
@@ -109,18 +117,27 @@ export function CourseProfileView({ course }: Props) {
         {climbs.map((climb) => {
           const x1 = xOfKm(climb.startKm);
           const x2 = xOfKm(climb.endKm);
-          const wide = x2 - x1 > 46;
+          // A short sharp climb shades without a label rather than printing one wider
+          // than the ground it describes.
+          // Stacked on two lines rather than one: a climb on a 100 km course is fifty
+          // units wide, and "+785 m · 13.6%" needs eighty. Split, each line needs thirty.
+          const width = x2 - x1;
           return (
             <g className="climb-band" key={`${climb.startKm}-${climb.endKm}`}>
               <title>
                 {`${t('km')} ${climb.startKm.toFixed(1)}–${climb.endKm.toFixed(1)} · ` +
                   `+${Math.round(climb.changeMetres)} m · ${climb.gradientPercent.toFixed(1)}%`}
               </title>
-              <rect x={x1} y={0} width={Math.max(1, x2 - x1)} height={PLOT_H} />
-              {wide && (
-                <text x={(x1 + x2) / 2} y={PLOT_H - 5} textAnchor="middle">
-                  +{Math.round(climb.changeMetres)} m
-                </text>
+              <rect x={x1} y={0} width={Math.max(1, width)} height={PLOT_H} />
+              {width > 34 && (
+                <>
+                  <text x={(x1 + x2) / 2} y={PLOT_H - 18} textAnchor="middle">
+                    +{Math.round(climb.changeMetres)} m
+                  </text>
+                  <text x={(x1 + x2) / 2} y={PLOT_H - 6} textAnchor="middle">
+                    {climb.gradientPercent.toFixed(1)}%
+                  </text>
+                </>
               )}
             </g>
           );
@@ -134,7 +151,7 @@ export function CourseProfileView({ course }: Props) {
             key={fraction}
             className="profile-tick"
             x={Math.min(COLUMNS - 2, Math.max(2, fraction * COLUMNS))}
-            y={PLOT_H + AXIS_H - 4}
+            y={PLOT_H + AXIS_H - 8}
             textAnchor={fraction === 0 ? 'start' : fraction === 1 ? 'end' : 'middle'}
           >
             {/* A short course rounded to whole km ends its axis past its own finish —
