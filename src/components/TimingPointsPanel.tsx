@@ -139,7 +139,6 @@ export function TimingPointsPanel({ files, onChange, courses }: Props) {
                           <th>{t('Timing point')}</th>
                           <th>{t('Name in results')}</th>
                           <th className="num">{t('Declared km')}</th>
-                          <th>{t('Mat')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -148,14 +147,6 @@ export function TimingPointsPanel({ files, onChange, courses }: Props) {
                             <td>{point.label}</td>
                             <td>{point.name}</td>
                             <td className="num">{point.kmFromStart.toFixed(2)}</td>
-                            <td>
-                              {point.mat}
-                              {point.backupMat && (
-                                <span className="colocated">
-                                  {t('backup')}: {point.backupMat}
-                                </span>
-                              )}
-                            </td>
                           </tr>
                         ))}
                       </tbody>

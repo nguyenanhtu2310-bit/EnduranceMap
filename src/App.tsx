@@ -35,6 +35,7 @@ import { FolderPicker } from './components/FolderPicker';
 import { KmlDropzone } from './components/KmlDropzone';
 import { GpxPanel, type LoadedGpx } from './components/GpxPanel';
 import { TimingPointsPanel } from './components/TimingPointsPanel';
+import { StationNamingTable } from './components/StationNamingTable';
 import { parseTimingPoints, type TimingPoint } from './lib/timingPoints';
 import { parseGpx } from './lib/gpx';
 import { mergeCourseSources } from './lib/courseSources';
@@ -92,6 +93,7 @@ import { DEFAULT_START_SPREAD_MINUTES } from './lib/paceModel';
 
 /** The five sections of the RESULT part, in the order they are produced. */
 type ResultSectionKey =
+  | 'naming'
   | 'schedule'
   | 'amenities'
   | 'splits'
@@ -196,6 +198,11 @@ interface RaceSnapshot {
   gpx: LoadedGpx[];
   /** Timing split configs, one per distance. Stations take their names from these. */
   lvs: LoadedGpx[];
+  /**
+   * Stations the operator has said do or do not have a mat, against what the timing
+   * config implied. Only the ones actually corrected are kept.
+   */
+  timedOverrides: Record<string, boolean>;
   rows: DistanceFormRow[];
   folders: FolderSummary[];
   selectedFolders: string[];
@@ -230,6 +237,7 @@ function blankSnapshot(): RaceSnapshot {
     kml: null,
     gpx: [],
     lvs: [],
+    timedOverrides: {},
     rows: [],
     folders: [],
     selectedFolders: [],
@@ -280,6 +288,7 @@ export default function App() {
    * at a time as they work through it.
    */
   const [openSections, setOpenSections] = useState<Record<ResultSectionKey, boolean>>({
+    naming: true,
     schedule: true,
     amenities: true,
     splits: true,
@@ -296,6 +305,7 @@ export default function App() {
 
   function setAllSections(open: boolean) {
     setOpenSections({
+      naming: open,
       schedule: open,
       amenities: open,
       splits: open,
@@ -316,6 +326,7 @@ export default function App() {
   const [kmlCourses, setKmlCourses] = useState<Course[]>([]);
   const [gpxFiles, setGpxFiles] = useState<LoadedGpx[]>([]);
   const [lvsFiles, setLvsFiles] = useState<LoadedGpx[]>([]);
+  const [timedOverrides, setTimedOverrides] = useState<Record<string, boolean>>({});
 
   /*
    * The courses the plan runs on, from both file types at once.
@@ -467,7 +478,7 @@ export default function App() {
 
   function captureSnapshot(): RaceSnapshot {
     return {
-      kml, gpx: gpxFiles, lvs: lvsFiles, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
+      kml, gpx: gpxFiles, lvs: lvsFiles, timedOverrides, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
       // The map's own courses, not the merged view — the GPX half is re-derived from its
       // own text on the way back in, so the two can never be saved out of step.
       results, contestMapping, courses: kmlCourses, stationOrder, amenityOverrides, amenities, raceName,
@@ -490,6 +501,7 @@ export default function App() {
     setKmlCourses(snap.courses);
     setGpxFiles(snap.gpx ?? []);
     setLvsFiles(snap.lvs ?? []);
+    setTimedOverrides(snap.timedOverrides ?? {});
     setStationOrder(snap.stationOrder);
     setAmenityOverrides(snap.amenityOverrides);
     setAmenities(snap.amenities?.length ? snap.amenities : DEFAULT_AMENITIES);
@@ -892,6 +904,26 @@ export default function App() {
     setResult(null);
   }
 
+  /**
+   * Says whether a station really has a mat on it, against what the timing config implied.
+   *
+   * Applied to the result in place as well as remembered, because the answer changes what
+   * the traffic at that station means — counted or modelled — and an operator correcting
+   * it is usually looking straight at the number they are correcting.
+   */
+  function toggleTimed(mapName: string) {
+    const station = result?.stations.find((s) => s.mapName === mapName);
+    if (!station) return;
+    const next = !station.isTimed;
+
+    setTimedOverrides((current) => ({ ...current, [mapName]: next }));
+    setResult((r) =>
+      r
+        ? { ...r, stations: r.stations.map((s) => (s.mapName === mapName ? { ...s, isTimed: next } : s)) }
+        : r
+    );
+  }
+
   function calculate(overrides?: { stations?: string[]; passes?: string[] }) {
     if (!kml) return;
     const excludeStations = overrides?.stations ?? removedStations;
@@ -971,7 +1003,11 @@ export default function App() {
           ...built.warnings,
           ...computed.warnings,
         ],
-        stations: applyStationOrder(computed.stations, stationOrder),
+        stations: applyStationOrder(computed.stations, stationOrder).map((station) =>
+          station.mapName in timedOverrides
+            ? { ...station, isTimed: timedOverrides[station.mapName] }
+            : station
+        ),
       };
       setResult(applyRaceOverrides(ordered, raceOverrides));
     } catch (e) {
@@ -1326,6 +1362,15 @@ export default function App() {
               {allOpen ? t('Collapse all sections') : t('Expand all sections')}
             </button>
           </div>
+
+          <ResultSection
+            title={t('Station naming')}
+            summary={`${result.stations.filter((s) => s.isTimed).length}/${result.stations.length} ${t('timed')}`}
+            open={openSections.naming}
+            onToggle={() => toggleSection('naming')}
+          >
+            <StationNamingTable result={result} onToggleTimed={toggleTimed} />
+          </ResultSection>
 
           <ResultSection
             title={t('Station operating schedule')}

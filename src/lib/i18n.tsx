@@ -231,6 +231,18 @@ const VI: Record<string, string> = {
   'Optional. Supply the timing configuration and every station takes the name the timing system uses, so nothing needs renaming on the map.':
     'Không bắt buộc. Nếu có file cấu hình bấm giờ, mọi trạm sẽ tự lấy tên theo hệ thống bấm giờ, không cần sửa tên trên bản đồ.',
 
+  // Station naming review.
+  'Station naming': 'Đặt tên trạm',
+  timed: 'có bấm giờ',
+  Timed: 'Có bấm giờ',
+  'Name on the map': 'Tên trên bản đồ',
+  Match: 'Độ khớp',
+  'No stations to review.': 'Chưa có trạm nào để rà soát.',
+  'stations have a timing mat. The rest are staffed the same way but nobody is counted at them, so their traffic is modelled rather than measured.':
+    'trạm có thảm bấm giờ. Số còn lại vẫn cần nhân sự như thường, nhưng không ai được đếm ở đó, nên lưu lượng là số mô hình chứ không phải số đo.',
+  'Names come from the timing configuration where a mat was found within reach of the pin. Correct anything that looks wrong — a match measured further than 0.8 km is flagged, and only you can say whether a station really has a mat on it.':
+    'Tên lấy từ cấu hình bấm giờ khi tìm được thảm gần điểm trên bản đồ. Hãy sửa bất kỳ dòng nào trông sai — dòng lệch quá 0,8 km sẽ được đánh dấu, và chỉ bạn mới biết trạm đó có thảm hay không.',
+
   // Timing split configuration.
   'Timing points': 'Điểm bấm giờ',
   'Drop the timing split files (.lvs) here, or': 'Kéo thả file cấu hình bấm giờ (.lvs) vào đây, hoặc',

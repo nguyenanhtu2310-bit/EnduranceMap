@@ -238,6 +238,12 @@ export interface PipelineStation {
   /** The results-file column this station produces, where it is timed. */
   timingPointName?: string;
   /**
+   * How far the pin sat from where the timing system says its mat is, in km, after the
+   * declared kilometres were scaled onto the measured ones. Shown so a match that only
+   * just qualified can be spotted and corrected rather than trusted.
+   */
+  timingDeltaKm?: number;
+  /**
    * Name derived from the map, before any sequential renumbering. Stable regardless of
    * how the station is labelled on screen, so manual cut-offs keyed to it survive
    * turning numbering on and off.
@@ -490,7 +496,7 @@ export function runPipeline(
    * kilometre differs on every course — and the first course to name it wins, since the
    * timer calls one mat one thing whichever race is passing it.
    */
-  const timingLabelByGroup = new Map<number, TimingPoint>();
+  const timingLabelByGroup = new Map<number, { point: TimingPoint; deltaKm: number }>();
   if (options.timingPoints) {
     for (const course of courses) {
       const points = options.timingPoints[course.name];
@@ -512,7 +518,12 @@ export function runPipeline(
         .stations) {
         if (!named.timingPoint) continue;
         const groupIndex = Number(named.crossing.key.split('|')[0]);
-        if (!timingLabelByGroup.has(groupIndex)) timingLabelByGroup.set(groupIndex, named.timingPoint);
+        if (!timingLabelByGroup.has(groupIndex)) {
+          timingLabelByGroup.set(groupIndex, {
+            point: named.timingPoint,
+            deltaKm: named.deltaKm ?? 0,
+          });
+        }
       }
     }
   }
@@ -535,7 +546,7 @@ export function runPipeline(
     // results file, so it is the one list that had to be right.
     const timedAs = timingLabelByGroup.get(groupIndex);
     const stationName =
-      timedAs?.label ||
+      timedAs?.point.label ||
       Array.from(new Set(selectedMembers.map((m) => m.label.cleanName || m.name))).join(' / ');
 
     // Removed by the operator — a position that exists on the map but is not being run
@@ -643,7 +654,8 @@ export function runPipeline(
       schedule: buildStationSchedule(stationName, crossings, options),
       mapName: stationName,
       isTimed: timedAs !== undefined,
-      timingPointName: timedAs?.name,
+      timingPointName: timedAs?.point.name,
+      timingDeltaKm: timedAs?.deltaKm,
       folder,
       // Filled in below, once the shared time grid is known.
       distribution: [],
