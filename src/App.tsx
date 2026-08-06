@@ -40,6 +40,7 @@ import { CourseCommandView } from './components/CourseCommandView';
 import { FieldSlider } from './components/FieldSlider';
 import { readCourseProfile, type CourseProfile } from './lib/courseProfile';
 import { parseTimingPoints, type TimingPoint } from './lib/timingPoints';
+import { timingStations, TIMING_FOLDER } from './lib/timingStations';
 import { parseGpx } from './lib/gpx';
 import { mergeCourseSources } from './lib/courseSources';
 import { PaceBandForm, type DistanceFormRow } from './components/PaceBandForm';
@@ -437,6 +438,23 @@ export default function App() {
   const hasTimingConfig = Object.keys(timingPointsByCourse).length > 0;
 
   /*
+   * Stations built from the timing configuration, for a race planned without a map.
+   *
+   * The route says where a kilometre is and the timing system says which kilometre, so a
+   * mat's position is determined between them. Supplied alongside whatever the map holds
+   * rather than instead of it — a card can have both, and a station drawn on the map and
+   * read by a mat lands in the same place and merges.
+   */
+  const timingPlacemarks = useMemo(
+    () =>
+      timingStations(
+        timingPointsByCourse,
+        new Map(courses.map((c) => [c.name, c.vertices]))
+      ),
+    [timingPointsByCourse, courses]
+  );
+
+  /*
    * Keeps one form row per course, from whichever file the course arrived in.
    *
    * Rows are reconciled rather than rebuilt: a row already on screen keeps every figure
@@ -725,8 +743,17 @@ export default function App() {
 
   /** Anything that would keep the calculate button disabled, in either mode. */
   const blockers = multisport ? planProblems.map((p) => p.message) : [];
+  /*
+   * A race needs somewhere to put stations, from either source: a map layer that has been
+   * ticked, or a timing configuration that already knows where its mats are. It no longer
+   * needs a map at all — GPX plus LVS is a complete card for a race that cares about
+   * timing, which is most trail races.
+   */
+  const hasStationSource = selectedFolders.length > 0 || timingPlacemarks.placemarks.length > 0;
   const cannotCalculate =
-    !kml || selectedFolders.length === 0 || (multisport ? blockers.length > 0 : invalidRows.length > 0);
+    !hasStationSource ||
+    rows.length === 0 ||
+    (multisport ? blockers.length > 0 : invalidRows.length > 0);
 
   /**
    * Rewrites each mapped distance's pace band and field size from the real results, so
@@ -990,7 +1017,9 @@ export default function App() {
   }
 
   function calculate(overrides?: { stations?: string[]; passes?: string[] }) {
-    if (!kml) return;
+    // A map is no longer required: routes can come from GPX and stations from the timing
+    // configuration, which is every trail race that only cares about timing.
+    if (!kml && timingPlacemarks.placemarks.length === 0) return;
     const excludeStations = overrides?.stations ?? removedStations;
     const excludePasses = overrides?.passes ?? removedPasses;
     setError(null);
@@ -1036,10 +1065,11 @@ export default function App() {
           leaders: leadersByCourse.get(r.courseName),
         }));
 
-      const computed = runPipeline(kml.text, inputs, {
+      const computed = runPipeline(kml?.text ?? '', inputs, {
           extraCourses: gpxCourses,
           timingPoints: timingPointsByCourse,
-          stationFolders: selectedFolders,
+          extraPlacemarks: timingPlacemarks.placemarks,
+          stationFolders: [...selectedFolders, TIMING_FOLDER],
           excludeStations,
           excludePasses,
           excludePlacemarkContaining: skipNames.split(',').map((f) => f.trim()).filter(Boolean),
@@ -1066,6 +1096,7 @@ export default function App() {
               `its own points are being left out. Clear it from step 2 if that is not what you want.`
           ),
           ...built.warnings,
+          ...timingPlacemarks.warnings,
           ...computed.warnings,
         ],
         stations: applyStationOrder(computed.stations, stationOrder).map((station) =>
@@ -1311,9 +1342,9 @@ export default function App() {
             <button className="cta" onClick={() => calculate()} disabled={cannotCalculate}>
               {t('CALCULATE')}
             </button>
-            {selectedFolders.length === 0 && (
+            {!hasStationSource && (
               <span className="hint" style={{ margin: 0 }}>
-                Tick at least one folder to schedule.
+                Tick a map layer to schedule, or drop the timing configuration.
               </span>
             )}
             {multisport

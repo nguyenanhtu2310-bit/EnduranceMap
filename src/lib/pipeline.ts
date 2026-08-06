@@ -1,4 +1,4 @@
-import { parseKml, type KmlParseOptions } from './kml';
+import { parseKml, type KmlParseOptions, type RawPlacemark } from './kml';
 import { mergeCourseSources } from './courseSources';
 import { eventSecondsFrom } from './time';
 import { nameStations, type PlacemarkCrossing } from './stationNaming';
@@ -139,6 +139,15 @@ export interface PipelineOptions extends KmlParseOptions, SnapOptions, ScheduleO
    * stations with no mat at all, whose traffic is modelled rather than counted.
    */
   timingPoints?: Record<string, TimingPoint[]>;
+  /**
+   * Stations supplied from outside the map — built from the timing configuration, which
+   * already knows how far along each course its mats sit.
+   *
+   * A race that only cares about timing needs no map at all: the route says where a
+   * kilometre is and the timing system says which kilometre, so the position is
+   * determined without anyone dropping a pin.
+   */
+  extraPlacemarks?: RawPlacemark[];
   /** Folder names (case-insensitive) whose points are treated as staffed stations. */
   stationFolders?: string[];
   /** Placemark names to exclude from the operational output entirely. */
@@ -436,8 +445,13 @@ export function runPipeline(
   const cutoffPassToleranceKm = options.cutoffPassToleranceKm ?? DEFAULT_CUTOFF_PASS_MATCH_TOLERANCE_KM;
   const sampleSize = options.paceModelSampleSize ?? 200;
 
-  const parsed = parseKml(kmlText, options);
+  // A card with routes and a timing configuration and no map is a normal thing to plan:
+  // parsing an empty string would only throw about XML nobody supplied.
+  const parsed = kmlText.trim()
+    ? parseKml(kmlText, options)
+    : { courses: [], segments: [], placemarks: [], warnings: [] };
   const warnings = [...parsed.warnings];
+  const allPlacemarks = [...parsed.placemarks, ...(options.extraPlacemarks ?? [])];
   // Both halves through one merge, the same one the screen uses, so what is scheduled can
   // never disagree with what is listed.
   const drawn = buildCourses(parsed.courses);
@@ -462,7 +476,7 @@ export function runPipeline(
   const excludedFragments = (options.excludePlacemarkContaining ?? [])
     .map((fragment) => fragment.trim().toLowerCase())
     .filter(Boolean);
-  const considered = parsed.placemarks.filter(
+  const considered = allPlacemarks.filter(
     (p) =>
       !excluded.includes(normalize(p.name)) &&
       !excludedFragments.some((fragment) => p.name.toLowerCase().includes(fragment))
