@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { PipelineResult } from '../lib/pipeline';
 import type { CourseProfile } from '../lib/courseProfile';
 import { layoutLabels, resampleProfile, stationMarks } from '../lib/courseProfile';
+import { segmentClimbs } from '../lib/elevation';
 import { useT } from '../lib/i18n';
 
 interface Props {
@@ -42,6 +43,22 @@ export function CourseCommandView({ result, profiles }: Props) {
     [result.stations, course]
   );
   const bands = useMemo(() => resampleProfile(profile?.profile ?? [], COLUMNS), [profile]);
+
+  /*
+   * The climbs worth naming, shaded on the ground they occupy.
+   *
+   * A profile shows that a course goes up; it does not say which of the ups is the one
+   * that decides the race. On a real 164 km course the biggest is +885 m at 12.7% arriving
+   * at km 121, and the crew and medical decisions follow from knowing that rather than
+   * from squinting at a silhouette.
+   */
+  const climbs = useMemo(() => {
+    const found = segmentClimbs(profile?.profile ?? [], { minChangeMetres: 250 })
+      .filter((c) => c.changeMetres > 0)
+      .sort((a, b) => b.changeMetres - a.changeMetres)
+      .slice(0, 5);
+    return found.sort((a, b) => a.startKm - b.startKm);
+  }, [profile]);
 
   /*
    * Every station is labelled, timed or not — a hollow dot with no name tells a medical
@@ -135,6 +152,23 @@ export function CourseCommandView({ result, profiles }: Props) {
         role="img"
         aria-label={`${course.name} ${t('elevation profile with stations')}`}
       >
+        {climbs.map((climb) => {
+          const x1 = xOfKm(climb.startKm);
+          const x2 = xOfKm(climb.endKm);
+          return (
+            <g className="climb-band" key={`${climb.startKm}-${climb.endKm}`}>
+              <title>
+                {`${t('km')} ${climb.startKm.toFixed(1)}–${climb.endKm.toFixed(1)} · ` +
+                  `+${Math.round(climb.changeMetres)} m · ${climb.gradientPercent.toFixed(1)}%`}
+              </title>
+              <rect x={x1} y={labelH} width={Math.max(1, x2 - x1)} height={PLOT_H} />
+              <text x={(x1 + x2) / 2} y={labelH + PLOT_H - 6} textAnchor="middle">
+                +{Math.round(climb.changeMetres)} m · {climb.gradientPercent.toFixed(1)}%
+              </text>
+            </g>
+          );
+        })}
+
         <polygon className="profile-fill" points={ground} />
         <polyline className="profile-line" points={skyline} fill="none" />
 

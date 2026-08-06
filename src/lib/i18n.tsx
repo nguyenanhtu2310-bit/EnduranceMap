@@ -231,6 +231,15 @@ const VI: Record<string, string> = {
   'Optional. Supply the timing configuration and every station takes the name the timing system uses, so nothing needs renaming on the map.':
     'Không bắt buộc. Nếu có file cấu hình bấm giờ, mọi trạm sẽ tự lấy tên theo hệ thống bấm giờ, không cần sửa tên trên bản đồ.',
 
+  // Hand-added distances and copying names.
+  'Add a distance': 'Thêm một cự ly',
+  'For a wave, a relay or a category racing a course the files already hold.':
+    'Dùng cho một wave, một đội tiếp sức hay một hạng mục chạy trên đường đua đã có sẵn.',
+  'Remove this distance': 'Xoá cự ly này',
+  'Use RACERESULT names for all': 'Dùng tên RACERESULT cho tất cả',
+  'Renames every matched station to the column it produces in the results file.':
+    'Đổi tên mọi trạm đã khớp thành đúng tên cột trong file kết quả.',
+
   // The course profile as a command view.
   'stations on course': 'trạm trên đường đua',
   'The climbs and the crews on one picture. Timed stations are solid and named; the ones with no mat are hollow — a chip is read at the first and not the second.':

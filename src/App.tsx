@@ -464,12 +464,22 @@ export default function App() {
   useEffect(() => {
     setRows((current) => {
       const byName = new Map(current.map((row) => [row.courseName, row]));
+      const lengthOf = new Map(courses.map((course) => [course.name, course.totalKm]));
       const next = courses.map((course) => {
         const existing = byName.get(course.name);
         return existing
           ? { ...existing, measuredKm: course.totalKm }
           : seedRow(course.name, course.totalKm);
       });
+
+      // Distances added by hand are not courses and would otherwise be reconciled away.
+      // They survive as long as the course they borrow still does.
+      for (const row of current) {
+        if (!row.sourceCourseName) continue;
+        const km = lengthOf.get(row.sourceCourseName);
+        if (km === undefined) continue;
+        next.push({ ...row, measuredKm: km });
+      }
       const unchanged =
         next.length === current.length && next.every((row, i) => row === current[i]);
       return unchanged ? current : next;
@@ -1003,6 +1013,26 @@ export default function App() {
    * the traffic at that station means — counted or modelled — and an operator correcting
    * it is usually looking straight at the number they are correcting.
    */
+  /**
+   * Renames every matched station to the column it produces in the results file.
+   *
+   * The two names serve different readers: a crew sheet wants "CP Topas Ecolodge" and a
+   * results file wants "CP_TEL". An operator working against the timing export all day
+   * would otherwise retype thirty of them.
+   */
+  function useResultNames() {
+    if (!result) return;
+    setRaceOverrides((current) => {
+      let next = current;
+      for (const station of result.stations) {
+        if (!station.timingPointName) continue;
+        next = setStationOverride(next, station.mapName, 'name', station.timingPointName);
+      }
+      setResult((r) => (r ? applyRaceOverrides(r, next) : r));
+      return next;
+    });
+  }
+
   function toggleTimed(mapName: string) {
     const station = result?.stations.find((s) => s.mapName === mapName);
     if (!station) return;
@@ -1052,18 +1082,19 @@ export default function App() {
 
       const inputs: DistanceInput[] =
         built.inputs ??
-        rows.map((r) => ({
-          courseName: r.courseName,
-          startTimeClock: r.startTimeClock,
-          startSpreadMinutes: r.startSpreadMinutes,
-          runnerCount: Number(r.runnerCountText),
-          fastestMinPerKm: r.fastestMinPerKm,
-          typicalMinPerKm: r.typicalMinPerKm,
-          slowestMinPerKm: r.slowestMinPerKm,
-          organizerCutoffClock: r.organizerCutoffClock?.trim() || undefined,
-          samples: samplesByCourse.get(r.courseName),
-          leaders: leadersByCourse.get(r.courseName),
-        }));
+        rows.map(({ runnerCountText, measuredKm, ...rest }) => {
+          void measuredKm;
+          // Spread rather than list the fields. Listing them silently dropped the day a
+          // distance starts on the moment that was added, so a Friday 100 miles and a
+          // Saturday 100 km were modelled on top of each other and nothing said so.
+          return {
+            ...rest,
+            runnerCount: Number(runnerCountText),
+            organizerCutoffClock: rest.organizerCutoffClock?.trim() || undefined,
+            samples: samplesByCourse.get(rest.courseName),
+            leaders: leadersByCourse.get(rest.courseName),
+          };
+        });
 
       const computed = runPipeline(kml?.text ?? '', inputs, {
           extraCourses: gpxCourses,
@@ -1327,6 +1358,7 @@ export default function App() {
                 onChange={setRows}
                 drivenByResults={mappedCourses}
                 raceDate={raceDate}
+                courses={courses}
               />
             )}
           </section>
@@ -1515,6 +1547,7 @@ export default function App() {
               result={result}
               filterToTimed={planTimedOnly}
               onFilterChange={setPlanTimedOnly}
+              onUseResultNames={useResultNames}
               onToggleTimed={toggleTimed}
               overrides={raceOverrides}
               onStationEdit={editStation}

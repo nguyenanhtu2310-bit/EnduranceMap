@@ -1682,3 +1682,14 @@ button.row-remove:disabled {
   font-size: 0.9rem;
   line-height: 1.2;
 }
+
+/* The climbs that decide a trail race, shaded on the ground they occupy. */
+.climb-band rect {
+  fill: color-mix(in srgb, var(--color-warn) 14%, transparent);
+}
+
+.climb-band text {
+  fill: var(--color-warn);
+  font-size: 9px;
+  font-weight: 600;
+}

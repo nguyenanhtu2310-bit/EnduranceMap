@@ -10,6 +10,8 @@ interface Props {
   /** True when only timed stations are being carried into the rest of the plan. */
   filterToTimed: boolean;
   onFilterChange: (only: boolean) => void;
+  /** Renames every matched station to the column it produces in the results file. */
+  onUseResultNames: () => void;
   /** Names the operator has typed over the computed ones. */
   overrides: RaceOverrides;
   onStationEdit: <K extends keyof StationOverride>(
@@ -38,6 +40,7 @@ export function StationNamingTable({
   result,
   filterToTimed,
   onFilterChange,
+  onUseResultNames,
   onToggleTimed,
   overrides,
   onStationEdit,
@@ -65,6 +68,15 @@ export function StationNamingTable({
           ? t('stations have a mat. Only these carry through — untick one and it leaves every section below.')
           : t('stations have a mat. Every station is being planned, timed or not.')}
       </p>
+
+      <div className="actions" style={{ marginBottom: '0.6rem' }}>
+        <button className="secondary" onClick={onUseResultNames} disabled={timed === 0}>
+          {t('Use RACERESULT names for all')}
+        </button>
+        <span className="hint" style={{ margin: 0 }}>
+          {t('Renames every matched station to the column it produces in the results file.')}
+        </span>
+      </div>
 
       <div className="table-scroll">
         <table>
