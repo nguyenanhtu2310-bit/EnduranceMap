@@ -36,6 +36,8 @@ import { KmlDropzone } from './components/KmlDropzone';
 import { GpxPanel, type LoadedGpx } from './components/GpxPanel';
 import { TimingPointsPanel } from './components/TimingPointsPanel';
 import { StationNamingTable } from './components/StationNamingTable';
+import { CourseCommandView } from './components/CourseCommandView';
+import { readCourseProfile, type CourseProfile } from './lib/courseProfile';
 import { parseTimingPoints, type TimingPoint } from './lib/timingPoints';
 import { parseGpx } from './lib/gpx';
 import { mergeCourseSources } from './lib/courseSources';
@@ -93,6 +95,7 @@ import { DEFAULT_START_SPREAD_MINUTES } from './lib/paceModel';
 
 /** The five sections of the RESULT part, in the order they are produced. */
 type ResultSectionKey =
+  | 'command'
   | 'naming'
   | 'schedule'
   | 'amenities'
@@ -295,6 +298,7 @@ export default function App() {
    * at a time as they work through it.
    */
   const [openSections, setOpenSections] = useState<Record<ResultSectionKey, boolean>>({
+    command: true,
     naming: true,
     schedule: true,
     amenities: true,
@@ -312,6 +316,7 @@ export default function App() {
 
   function setAllSections(open: boolean) {
     setOpenSections({
+      command: open,
       naming: open,
       schedule: open,
       amenities: open,
@@ -363,6 +368,29 @@ export default function App() {
       }),
     [gpxFiles]
   );
+  /*
+   * The elevation profile behind each course, keyed by the name the plan knows it as.
+   *
+   * Parsed here rather than in the panel that shows them, so the command view and the
+   * file list read the same 4 MB parse instead of each doing their own.
+   */
+  const courseProfiles = useMemo(() => {
+    const byName = new Map<string, CourseProfile>();
+    for (const file of gpxFiles) {
+      let tracks;
+      try {
+        tracks = parseGpx(file.text).tracks;
+      } catch {
+        continue;
+      }
+      for (const track of tracks) {
+        const read = readCourseProfile(track, { fallbackName: file.fileName.replace(/\.gpx$/i, '') });
+        byName.set(read.name, read);
+      }
+    }
+    return byName;
+  }, [gpxFiles]);
+
   const mergedCourses = useMemo(
     () => mergeCourseSources(kmlCourses, gpxCourses),
     [kmlCourses, gpxCourses]
@@ -378,6 +406,8 @@ export default function App() {
    * config belongs to its 10 km course would name every station wrongly and look
    * confident doing it.
    */
+  const [planTimedOnly, setPlanTimedOnly] = useState(true);
+
   const timingPointsByCourse = useMemo(() => {
     const byCourse: Record<string, TimingPoint[]> = {};
     for (const file of lvsFiles) {
@@ -401,6 +431,9 @@ export default function App() {
     }
     return byCourse;
   }, [lvsFiles, courses]);
+
+  /** Whether any course was matched to a timing configuration at all. */
+  const hasTimingConfig = Object.keys(timingPointsByCourse).length > 0;
 
   /*
    * Keeps one form row per course, from whichever file the course arrived in.
@@ -926,10 +959,14 @@ export default function App() {
    * The review table above still lists every one of them, so a station wrongly left out
    * is one tick away from coming back.
    */
-  const planned = useMemo(
-    () => (result ? { ...result, stations: result.stations.filter((s) => s.isTimed) } : null),
-    [result]
-  );
+  const planned = useMemo(() => {
+    if (!result) return null;
+    // Without a timing configuration nothing has been matched to a mat, so nothing is
+    // known to be untimed either — and a road race, where the water stations never carry
+    // one, would be filtered down to nothing.
+    if (!planTimedOnly || !hasTimingConfig) return result;
+    return { ...result, stations: result.stations.filter((s) => s.isTimed) };
+  }, [result, planTimedOnly, hasTimingConfig]);
 
   /**
    * Says whether a station really has a mat on it, against what the timing config implied.
@@ -1414,6 +1451,21 @@ export default function App() {
           </div>
 
           <ResultSection
+            title={t('Course profile')}
+            summary={`${planned.stations.length} ${t('stations on course')}`}
+            open={openSections.command}
+            onToggle={() => toggleSection('command')}
+          >
+            <p className="hint">
+              {t(
+                'The climbs and the crews on one picture. Timed stations are solid and named; the ones with no mat are hollow — a chip is read at the first and not the second.'
+              )}
+            </p>
+            <CourseCommandView result={planned} profiles={courseProfiles} />
+          </ResultSection>
+
+{hasTimingConfig && (
+          <ResultSection
             title={t('Station naming')}
             summary={`${result.stations.filter((s) => s.isTimed).length}/${result.stations.length} ${t('timed')}`}
             open={openSections.naming}
@@ -1421,11 +1473,14 @@ export default function App() {
           >
             <StationNamingTable
               result={result}
+              filterToTimed={planTimedOnly}
+              onFilterChange={setPlanTimedOnly}
               onToggleTimed={toggleTimed}
               overrides={raceOverrides}
               onStationEdit={editStation}
             />
           </ResultSection>
+          )}
 
           <ResultSection
             title={t('Station operating schedule')}

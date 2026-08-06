@@ -231,6 +231,19 @@ const VI: Record<string, string> = {
   'Optional. Supply the timing configuration and every station takes the name the timing system uses, so nothing needs renaming on the map.':
     'Không bắt buộc. Nếu có file cấu hình bấm giờ, mọi trạm sẽ tự lấy tên theo hệ thống bấm giờ, không cần sửa tên trên bản đồ.',
 
+  // The course profile as a command view.
+  'stations on course': 'trạm trên đường đua',
+  'The climbs and the crews on one picture. Timed stations are solid and named; the ones with no mat are hollow — a chip is read at the first and not the second.':
+    'Dốc và nhân sự trên cùng một hình. Trạm có bấm giờ hiện đậm và có tên; trạm không có thảm hiện rỗng — chip chỉ được đọc ở loại thứ nhất.',
+  'Drop the route GPX for a distance to see its profile here, with every station drawn on it.':
+    'Kéo thả file GPX của một cự ly để xem trắc dọc kèm toàn bộ trạm trên đó.',
+  Course: 'Cự ly',
+  'Stations on course': 'Số trạm',
+  'elevation profile with stations': 'trắc dọc kèm các trạm',
+  'no timing mat': 'không có thảm bấm giờ',
+  'Timed — a chip is read here': 'Có bấm giờ — chip được đọc ở đây',
+  'No mat — staffed, but nobody is counted': 'Không có thảm — vẫn có nhân sự, nhưng không ai được đếm',
+
   // Multi-day races.
   'Race date': 'Ngày thi đấu',
   'The first day of the event — every time is then named by its weekday':
@@ -253,8 +266,11 @@ const VI: Record<string, string> = {
   'Name on the map': 'Tên trên bản đồ',
   Match: 'Độ khớp',
   'No stations to review.': 'Chưa có trạm nào để rà soát.',
-  'stations have a timing mat. Only these carry through to the rest of the plan — untick one and it leaves every section below.':
-    'trạm có thảm bấm giờ. Chỉ những trạm này được đưa vào phần còn lại của kế hoạch — bỏ tick là trạm đó rời khỏi mọi mục bên dưới.',
+  'Plan only the stations with a timing mat': 'Chỉ lập kế hoạch cho trạm có thảm bấm giờ',
+  'stations have a mat. Only these carry through — untick one and it leaves every section below.':
+    'trạm có thảm bấm giờ. Chỉ những trạm này được đưa vào kế hoạch — bỏ tick là trạm đó rời khỏi mọi mục bên dưới.',
+  'stations have a mat. Every station is being planned, timed or not.':
+    'trạm có thảm bấm giờ. Mọi trạm đều đang được lập kế hoạch, dù có bấm giờ hay không.',
   'Names come from the timing configuration where a mat was found within reach of the pin, and can be typed over. A match measured further than 0.8 km is flagged for a second look.':
     'Tên lấy từ cấu hình bấm giờ khi tìm được thảm gần điểm trên bản đồ, và có thể gõ đè lên. Dòng lệch quá 0,8 km sẽ được đánh dấu để rà lại.',
 

@@ -116,3 +116,43 @@ export function resampleProfile(profile: ProfilePoint[], columns: number): Profi
 
   return bands.filter((b): b is ProfileBand => b !== undefined);
 }
+
+/** A station as it appears on a course's profile: where it is, and whether it counts anyone. */
+export interface StationMark {
+  name: string;
+  kmFromStart: number;
+  /** Which pass this is, for a station a course crosses more than once. */
+  passIndex: number;
+  passCount: number;
+  isTimed: boolean;
+}
+
+/**
+ * Every station one course passes, in the order it meets them.
+ *
+ * A pass rather than a station: an out-and-back reads its mat twice and the two are
+ * different moments on the profile, hours apart, with the whole field between them.
+ */
+export function stationMarks(
+  stations: {
+    schedule: { name: string };
+    crossings: { courseName: string; kmFromStart: number; passIndex: number; passCount: number }[];
+    isTimed: boolean;
+  }[],
+  courseName: string
+): StationMark[] {
+  const marks: StationMark[] = [];
+  for (const station of stations) {
+    for (const crossing of station.crossings) {
+      if (crossing.courseName !== courseName) continue;
+      marks.push({
+        name: station.schedule.name,
+        kmFromStart: crossing.kmFromStart,
+        passIndex: crossing.passIndex,
+        passCount: crossing.passCount,
+        isTimed: station.isTimed,
+      });
+    }
+  }
+  return marks.sort((a, b) => a.kmFromStart - b.kmFromStart);
+}

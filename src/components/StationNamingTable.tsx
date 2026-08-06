@@ -7,6 +7,9 @@ interface Props {
   result: PipelineResult;
   /** Flips whether a station is treated as having a mat on it. */
   onToggleTimed: (mapName: string) => void;
+  /** True when only timed stations are being carried into the rest of the plan. */
+  filterToTimed: boolean;
+  onFilterChange: (only: boolean) => void;
   /** Names the operator has typed over the computed ones. */
   overrides: RaceOverrides;
   onStationEdit: <K extends keyof StationOverride>(
@@ -31,7 +34,14 @@ const LOOSE_MATCH_KM = 0.8;
  * from its mat and one that sat 0.79 km from it are not equally certain, and only the
  * operator standing on the ground can settle the second.
  */
-export function StationNamingTable({ result, onToggleTimed, overrides, onStationEdit }: Props) {
+export function StationNamingTable({
+  result,
+  filterToTimed,
+  onFilterChange,
+  onToggleTimed,
+  overrides,
+  onStationEdit,
+}: Props) {
   const t = useT();
   const timed = result.stations.filter((s) => s.isTimed).length;
 
@@ -41,11 +51,19 @@ export function StationNamingTable({ result, onToggleTimed, overrides, onStation
 
   return (
     <>
+      <label className="inline-field" style={{ marginBottom: '0.5rem' }}>
+        <input
+          type="checkbox"
+          checked={filterToTimed}
+          onChange={(e) => onFilterChange(e.target.checked)}
+        />
+        {t('Plan only the stations with a timing mat')}
+      </label>
       <p className="hint">
         {timed} {t('of')} {result.stations.length}{' '}
-        {t(
-          'stations have a timing mat. Only these carry through to the rest of the plan — untick one and it leaves every section below.'
-        )}
+        {filterToTimed
+          ? t('stations have a mat. Only these carry through — untick one and it leaves every section below.')
+          : t('stations have a mat. Every station is being planned, timed or not.')}
       </p>
 
       <div className="table-scroll">
