@@ -1726,3 +1726,21 @@ button.row-remove:disabled {
   font-size: 9px;
   font-weight: 700;
 }
+
+/* The two scales beside the field chart: ground height, and people on it. */
+.command-chart .scale line {
+  stroke: var(--color-divider);
+  stroke-width: 1;
+}
+
+.command-chart .scale text {
+  fill: var(--color-faint);
+  font-size: 9px;
+}
+
+.command-chart .scale-unit {
+  fill: var(--color-muted);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}

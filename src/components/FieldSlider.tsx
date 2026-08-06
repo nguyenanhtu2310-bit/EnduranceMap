@@ -28,6 +28,8 @@ const LABEL_ROW_H = 13;
 const LABEL_PAD = 8;
 const BIN_KM = 1;
 const RULER_ROW_H = 12;
+/** Room to the left of the plot for the two scales, in the same units the plot uses. */
+const GUTTER = 42;
 /** Room at the top of the ruler for the marker that says which moment is being shown. */
 const NOW_BAND_H = 15;
 
@@ -246,7 +248,7 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
 
       <svg
         className="command-chart"
-        viewBox={`0 0 ${COLUMNS} ${baseline + AXIS_H}`}
+        viewBox={`${-GUTTER} 0 ${COLUMNS + GUTTER} ${baseline + AXIS_H}`}
         role="img"
         aria-label={t('The field on the course at the chosen moment')}
       >
@@ -299,7 +301,40 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
           });
         })}
 
+        {/*
+          Two scales, because the picture stacks two different things: how high the ground
+          is, and how many people are standing on it. Without them the bars say "taller
+          than that one" and nothing else, which is not a number anybody can staff to.
+        */}
+        {[maxMetres, (maxMetres + minMetres) / 2, minMetres].map((metres) => (
+          <g className="scale" key={`ele-${metres}`}>
+            <line x1={-4} y1={y(metres)} x2={0} y2={y(metres)} />
+            <text x={-7} y={y(metres) + 3} textAnchor="end">
+              {Math.round(metres).toLocaleString()}
+            </text>
+          </g>
+        ))}
+        <text className="scale-unit" x={-7} y={top - 4} textAnchor="end">
+          {t('m')}
+        </text>
+
+        {[tallest, tallest / 2, 0].map((count) => {
+          const cy = baseline - (count / tallest) * FIELD_H;
+          return (
+            <g className="scale" key={`field-${count}`}>
+              <line x1={-4} y1={cy} x2={0} y2={cy} />
+              <text x={-7} y={cy + 3} textAnchor="end">
+                {Math.round(count).toLocaleString()}
+              </text>
+            </g>
+          );
+        })}
+        <text className="scale-unit" x={-7} y={fieldTop - 4} textAnchor="end">
+          {t('runners')}
+        </text>
+
         <line className="profile-axis" x1={0} y1={baseline} x2={COLUMNS} y2={baseline} />
+        <line className="profile-axis" x1={0} y1={fieldTop} x2={COLUMNS} y2={fieldTop} />
         {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
           <text
             key={fraction}
@@ -400,10 +435,20 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
         </button>
       </div>
 
+      {/*
+        Named from the distances the bars are actually drawn from, and coloured by the
+        same lookup. Reading the key off the course order instead let a distance the
+        order did not contain take a colour with no entry beside it — a stripe on the
+        chart that nothing on the page accounted for.
+      */}
       <div className="mark-key">
-        {result.courseOrder.map((name, i) => (
-          <span key={name}>
-            <i className="key-dot" style={{ background: seriesVar(i) }} /> {name}
+        {inputs.map((input) => (
+          <span key={input.courseName}>
+            <i
+              className="key-dot"
+              style={{ background: seriesVar(courseIndex(input.courseName)) }}
+            />{' '}
+            {input.courseName}
           </span>
         ))}
       </div>
