@@ -55,15 +55,74 @@ interface CardEntry {
   cutoffDay: number;
   /** Elapsed hours the published cut-off allows. */
   limitHours: number;
+  /** Every intermediate cut-off the card carries, as published. */
+  checkpoints: { name: string; clock: string; day: number }[];
 }
 
+/** Day names as the card writes them, so a mistranscription reads as one. */
+const FRI = 0;
+const SAT = 1;
+const SUN = 2;
+
 const CARD: CardEntry[] = [
-  { name: '100 Miles', km: 161, startClock: '08:00', startDay: 0, cutoffClock: '09:00', cutoffDay: 2, limitHours: 49 },
-  { name: '100km', km: 101.6, startClock: '05:00', startDay: 1, cutoffClock: '09:00', cutoffDay: 2, limitHours: 28 },
-  { name: '70km', km: 70.2, startClock: '03:00', startDay: 1, cutoffClock: '00:00', cutoffDay: 2, limitHours: 21 },
-  { name: '50km', km: 47.4, startClock: '05:30', startDay: 1, cutoffClock: '00:00', cutoffDay: 2, limitHours: 18.5 },
-  { name: '21km', km: 21.4, startClock: '08:00', startDay: 1, cutoffClock: '21:00', cutoffDay: 1, limitHours: 13 },
-  { name: '10km', km: 10.2, startClock: '09:00', startDay: 1, cutoffClock: '15:30', cutoffDay: 1, limitHours: 6.5 },
+  {
+    name: '100 Miles', km: 161, startClock: '08:00', startDay: FRI,
+    cutoffClock: '09:00', cutoffDay: SUN, limitHours: 49,
+    checkpoints: [
+      { name: 'CP Sa Pa', clock: '13:30', day: FRI },
+      { name: 'CP M4', clock: '20:00', day: FRI },
+      { name: 'CP M7', clock: '04:00', day: SAT },
+      { name: 'CP Topas Ecolodge', clock: '10:00', day: SAT },
+      { name: 'CP2', clock: '17:00', day: SAT },
+      { name: 'CP3', clock: '20:00', day: SAT },
+      { name: 'CP4', clock: '23:00', day: SAT },
+      { name: 'CP5', clock: '01:30', day: SUN },
+      { name: 'CP6', clock: '04:30', day: SUN },
+      { name: 'CP7', clock: '06:15', day: SUN },
+    ],
+  },
+  {
+    name: '100km', km: 101.6, startClock: '05:00', startDay: SAT,
+    cutoffClock: '09:00', cutoffDay: SUN, limitHours: 28,
+    checkpoints: [
+      { name: 'CP Topas Ecolodge', clock: '10:45', day: SAT },
+      { name: 'CP2', clock: '17:00', day: SAT },
+      { name: 'CP3', clock: '20:00', day: SAT },
+      { name: 'CP4', clock: '23:00', day: SAT },
+      { name: 'CP5', clock: '01:30', day: SUN },
+      { name: 'CP6', clock: '04:30', day: SUN },
+      { name: 'CP7', clock: '06:15', day: SUN },
+    ],
+  },
+  {
+    name: '70km', km: 70.2, startClock: '03:00', startDay: SAT,
+    cutoffClock: '00:00', cutoffDay: SUN, limitHours: 21,
+    checkpoints: [
+      { name: 'CP3', clock: '12:00', day: SAT },
+      { name: 'CP4', clock: '15:00', day: SAT },
+      { name: 'CP5', clock: '17:00', day: SAT },
+      { name: 'CP6', clock: '20:00', day: SAT },
+      { name: 'CP7', clock: '21:30', day: SAT },
+    ],
+  },
+  {
+    name: '50km', km: 47.4, startClock: '05:30', startDay: SAT,
+    cutoffClock: '00:00', cutoffDay: SUN, limitHours: 18.5,
+    checkpoints: [
+      { name: 'CP4', clock: '15:00', day: SAT },
+      { name: 'CP5', clock: '17:00', day: SAT },
+      { name: 'CP6', clock: '20:00', day: SAT },
+      { name: 'CP7', clock: '21:30', day: SAT },
+    ],
+  },
+  {
+    name: '21km', km: 21.4, startClock: '08:00', startDay: SAT,
+    cutoffClock: '21:00', cutoffDay: SAT, limitHours: 13, checkpoints: [],
+  },
+  {
+    name: '10km', km: 10.2, startClock: '09:00', startDay: SAT,
+    cutoffClock: '15:30', cutoffDay: SAT, limitHours: 6.5, checkpoints: [],
+  },
 ];
 
 const inputs: DistanceInput[] = CARD.map((entry) => ({
@@ -152,5 +211,73 @@ describe('the VMM 2026 card', () => {
     const limit = eventSecondsFrom('09:00', 2)!;
     expect(window.endSeconds).toBeGreaterThanOrEqual(limit);
     expect(window.endSeconds - limit).toBeLessThanOrEqual(5 * 60);
+  });
+});
+
+describe('what the published cut-offs are shaped like', () => {
+  const cotAt = (distance: string, checkpoint: string) => {
+    const entry = CARD.find((e) => e.name === distance)!;
+    const cp = entry.checkpoints.find((c) => c.name === checkpoint);
+    return cp ? eventSecondsFrom(cp.clock, cp.day) : null;
+  };
+  const finishOf = (distance: string) => {
+    const entry = CARD.find((e) => e.name === distance)!;
+    return eventSecondsFrom(entry.cutoffClock, entry.cutoffDay)!;
+  };
+
+  it('closes a shared checkpoint at one moment for both ultras', () => {
+    // A crew tears a checkpoint down once. The 100 miles and the 100 km run the same
+    // ground from CP2 on, and every cut-off they share is the same instant — so a
+    // schedule that gave each distance its own closing time would staff it twice.
+    for (const cp of ['CP2', 'CP3', 'CP4', 'CP5', 'CP6', 'CP7']) {
+      expect(cotAt('100 Miles', cp)).toBe(cotAt('100km', cp));
+    }
+    expect(finishOf('100 Miles')).toBe(finishOf('100km'));
+  });
+
+  it('closes the shorter pair together too', () => {
+    for (const cp of ['CP4', 'CP5', 'CP6', 'CP7']) {
+      expect(cotAt('70km', cp)).toBe(cotAt('50km', cp));
+    }
+    expect(finishOf('70km')).toBe(finishOf('50km'));
+  });
+
+  it('gives one checkpoint two different cut-offs for two groups', () => {
+    // CP3 closes at noon for the 70 km and at eight in the evening for the ultras. Both
+    // are real: the shorter field must be through by one time, and the crew stands until
+    // the other. A model holding a single cut-off per station cannot express that.
+    const short = cotAt('70km', 'CP3')!;
+    const long = cotAt('100km', 'CP3')!;
+    expect(short).toBeLessThan(long);
+    expect((long - short) / 3600).toBe(8);
+  });
+
+  it('runs the ultras’ checkpoints past midnight and the shorter pair’s before it', () => {
+    expect(cotAt('100km', 'CP5')!).toBeGreaterThan(eventSecondsFrom('00:00', SUN)!);
+    expect(cotAt('70km', 'CP7')!).toBeLessThan(eventSecondsFrom('00:00', SUN)!);
+  });
+
+  it('leaves the two short distances with a finish cut-off and nothing else', () => {
+    for (const name of ['21km', '10km']) {
+      expect(CARD.find((e) => e.name === name)!.checkpoints).toEqual([]);
+    }
+  });
+
+  it('never lets an intermediate cut-off fall after its own finish', () => {
+    for (const entry of CARD) {
+      const finish = eventSecondsFrom(entry.cutoffClock, entry.cutoffDay)!;
+      for (const cp of entry.checkpoints) {
+        expect(eventSecondsFrom(cp.clock, cp.day)!).toBeLessThan(finish);
+      }
+    }
+  });
+
+  it('keeps every intermediate cut-off after its own gun', () => {
+    for (const entry of CARD) {
+      const start = eventSecondsFrom(entry.startClock, entry.startDay)!;
+      for (const cp of entry.checkpoints) {
+        expect(eventSecondsFrom(cp.clock, cp.day)!).toBeGreaterThan(start);
+      }
+    }
   });
 });
