@@ -1,5 +1,11 @@
 import { isEndZoneStop, type PipelineResult, type PipelineStation } from './pipeline';
-import { formatDuration, parseClockTimeToSeconds, secondsToClockTime, windowSeconds } from './time';
+import {
+  formatDuration,
+  formatEventClock,
+  parseClockTimeToSeconds,
+  secondsToClockTime,
+  windowSeconds,
+} from './time';
 import {
   DEFAULT_AMENITIES,
   resolveAmenities,
@@ -75,6 +81,12 @@ export interface ReportOptions {
   /** Name of the source map, recorded so a printed sheet can be traced back. */
   sourceFileName?: string;
   resultsFileName?: string;
+  /**
+   * The event's first date, so a time on another day is named rather than left to be
+   * guessed. A report of a 49-hour race otherwise prints every clock as though the whole
+   * thing happened between one midnight and the next.
+   */
+  raceDate?: string;
 }
 
 function hm(clock: string): string {
@@ -228,6 +240,8 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   const notes = options.notes ?? {};
   const sections = options.sections ?? ALL_REPORT_SECTIONS;
   const generated = new Date().toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' });
+  /** A moment with the day it falls on, for a race that does not fit inside one. */
+  const day = (seconds: number) => formatEventClock(seconds, options.raceDate);
 
   const courses = [...result.courses]
     .filter((c) => result.courseOrder.includes(c.name))
@@ -250,8 +264,8 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
             : ''
         }${notes[station.mapName] ? `<div class="sub note">${esc(notes[station.mapName])}</div>` : ''}</td>
         <td class="sub">${crossings}</td>
-        <td class="num">${hm(station.schedule.openClockTime)}</td>
-        <td class="num">${hm(station.schedule.closeClockTime)}</td>
+        <td class="num">${day(station.schedule.openSeconds)}</td>
+        <td class="num">${day(station.schedule.closeSeconds)}</td>
         <td class="num">${(() => {
           const seconds = windowSeconds(station.schedule.openClockTime, station.schedule.closeClockTime);
           return seconds && seconds > 0 ? formatDuration(seconds) : '–';
@@ -259,7 +273,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         <td class="num">${(() => {
           const bin = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
           return bin
-            ? `${secondsToClockTime(bin.binStartSeconds).slice(0, 5)}–${secondsToClockTime(bin.binEndSeconds).slice(0, 5)}`
+            ? `${day(bin.binStartSeconds)}–${secondsToClockTime(bin.binEndSeconds).slice(0, 5)}`
             : '–';
         })()}</td>
         <td class="num">${peakRunnersPerWindow(station.schedule.peakRunnersPerHour, result.binMinutes).toLocaleString()}</td>
@@ -304,8 +318,8 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
             }${notes[stop.station.mapName] ? `<div class="sub note">${esc(notes[stop.station.mapName])}</div>` : ''}</td>
             <td class="num">${stop.kmFromStart.toFixed(1)}</td>
             <td class="num${stop.gapKm === longest && longest > 0 ? ' risk' : ''}">${stop.gapKm.toFixed(1)}</td>
-            <td class="num">${hm(stop.station.schedule.openClockTime)}</td>
-            <td class="num">${hm(stop.station.schedule.closeClockTime)}</td>
+            <td class="num">${day(stop.station.schedule.openSeconds)}</td>
+            <td class="num">${day(stop.station.schedule.closeSeconds)}</td>
             <td class="num">${stop.officialCutoffClock ? hm(stop.officialCutoffClock) : '–'}</td>
             <td><span class="tag ${stop.station.schedule.activityLevel}">${
               stop.station.schedule.activityLevel
@@ -362,12 +376,14 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         <td>${esc(row.stationName)}</td>
         <td>${esc(row.courseName)}</td>
         <td class="num">${row.kmFromStart.toFixed(1)}</td>
-        <td class="num">${row.modeledLastArrivalClockTime.slice(0, 5)}</td>
+        <td class="num">${day(row.modeledLastArrivalSeconds)}</td>
         <td class="num ${isFinal ? 'cot-final' : 'cot-other'}">${
           isFinal ? '<span class="final-tag">final</span>' : ''
-        }<strong>${hm(row.suggestedClockTime)}</strong></td>
+        }<strong>${day(row.suggestedSeconds)}</strong></td>
         <td class="num muted">${margin === null ? '–' : `+${margin} min`}</td>
-        <td class="num${row.mapIsTighter ? ' risk' : ''}">${row.mapClockTime ? hm(row.mapClockTime) : '–'}</td>
+        <td class="num${row.mapIsTighter ? ' risk' : ''}">${
+          row.mapSeconds !== undefined ? day(row.mapSeconds) : row.mapClockTime ? hm(row.mapClockTime) : '–'
+        }</td>
       </tr>`;
     })
     .join('');
@@ -387,9 +403,9 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
               })
               .join('');
             const note = notes[station.mapName] ? `<div class="sub note">${esc(notes[station.mapName])}</div>` : '';
-            return `<tr><td>${esc(station.schedule.name)}${note}</td><td class="num">${hm(
-              station.schedule.openClockTime
-            )}–${hm(station.schedule.closeClockTime)}</td>${cells}</tr>`;
+            return `<tr><td>${esc(station.schedule.name)}${note}</td><td class="num">${day(
+              station.schedule.openSeconds
+            )}–${day(station.schedule.closeSeconds)}</td>${cells}</tr>`;
           })
           .join('');
         return `<h2>Split calculation</h2>
@@ -407,7 +423,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
           .map((station) => {
             const peak = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
             const window = peak
-              ? `${secondsToClockTime(peak.binStartSeconds).slice(0, 5)}–${secondsToClockTime(
+              ? `${day(peak.binStartSeconds)}–${secondsToClockTime(
                   peak.binEndSeconds
                 ).slice(0, 5)}`
               : '–';

@@ -6,7 +6,13 @@ import {
   type AmenityRules,
   type AmenitySet,
 } from './amenities';
-import { formatDuration, parseClockTimeToSeconds, secondsToClockTime, windowSeconds } from './time';
+import {
+  formatDuration,
+  formatEventClock,
+  parseClockTimeToSeconds,
+  secondsToClockTime,
+  windowSeconds,
+} from './time';
 import { peakRunnersPerWindow } from './schedule';
 import { firstLeadOfSex, leadsForStation } from './leadMarkers';
 import type { ReportSections } from './report';
@@ -23,6 +29,11 @@ import type { Sheet, CellValue } from './xlsx';
  */
 export interface WorkbookOptions {
   raceName: string;
+  /**
+   * The event's first date, so a cell holding a time on another day says which. A
+   * spreadsheet is read away from the tool that made it, with nothing to infer from.
+   */
+  raceDate?: string;
   rules: AmenityRules;
   overrides: Record<string, Partial<AmenitySet>>;
   amenities?: Amenity[];
@@ -40,6 +51,7 @@ function coursesOf(result: PipelineResult) {
 }
 
 function scheduleSheet(result: PipelineResult, options: WorkbookOptions): Sheet {
+  const dayOf = (seconds: number) => formatEventClock(seconds, options.raceDate);
   const notes = options.notes ?? {};
   const rows: CellValue[][] = [
     ['Station', 'Map name', 'Note', 'Open', 'Close', 'Duration', 'Peak window', `Peak /${result.binMinutes} min`, 'Activity', 'Cut-off risk', 'Crossings'],
@@ -51,13 +63,13 @@ function scheduleSheet(result: PipelineResult, options: WorkbookOptions): Sheet 
       station.schedule.name,
       station.sourceNames.join(', '),
       notes[station.mapName] ?? '',
-      hm(station.schedule.openClockTime),
-      hm(station.schedule.closeClockTime),
+      dayOf(station.schedule.openSeconds),
+      dayOf(station.schedule.closeSeconds),
       seconds && seconds > 0 ? formatDuration(seconds) : '',
       (() => {
         const bin = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
         return bin
-          ? `${hm(secondsToClockTime(bin.binStartSeconds))}–${hm(secondsToClockTime(bin.binEndSeconds))}`
+          ? `${dayOf(bin.binStartSeconds)}–${hm(secondsToClockTime(bin.binEndSeconds))}`
           : '';
       })(),
       peakRunnersPerWindow(station.schedule.peakRunnersPerHour, result.binMinutes),
@@ -78,7 +90,8 @@ function scheduleSheet(result: PipelineResult, options: WorkbookOptions): Sheet 
  * A point a course passes twice gets a row per pass, so the outbound and returning
  * readings can be sorted and filtered rather than living in one cell.
  */
-function splitsSheet(result: PipelineResult): Sheet {
+function splitsSheet(result: PipelineResult, options: WorkbookOptions): Sheet {
+  const day = (seconds: number) => formatEventClock(seconds, options.raceDate);
   const rows: CellValue[][] = [
     ['Distance', 'Station', 'Km', 'Pass', 'Of', 'Open', 'Close', 'Duration', 'Cut-off'],
   ];
@@ -110,8 +123,8 @@ function splitsSheet(result: PipelineResult): Sheet {
         Number(stop.km.toFixed(2)),
         stop.pass,
         stop.of,
-        hm(stop.station.schedule.openClockTime),
-        hm(stop.station.schedule.closeClockTime),
+        day(stop.station.schedule.openSeconds),
+        day(stop.station.schedule.closeSeconds),
         seconds && seconds > 0 ? formatDuration(seconds) : '',
         stop.cot ? hm(stop.cot) : '',
       ]);
@@ -129,6 +142,7 @@ function splitsSheet(result: PipelineResult): Sheet {
  * lines, not the lines themselves.
  */
 function amenitiesSheet(result: PipelineResult, options: WorkbookOptions): Sheet {
+  const day = (seconds: number) => formatEventClock(seconds, options.raceDate);
   const amenities = options.amenities ?? DEFAULT_AMENITIES;
   const rows: CellValue[][] = [
     ['Distance', '#', 'Station', 'Km', 'Gap from previous', 'Open', 'Close', 'Activity', 'On course', ...amenities.map((a) => a.label)],
@@ -164,8 +178,8 @@ function amenitiesSheet(result: PipelineResult, options: WorkbookOptions): Sheet
         stop.station.schedule.name,
         Number(stop.km.toFixed(2)),
         Number(gap.toFixed(2)),
-        hm(stop.station.schedule.openClockTime),
-        hm(stop.station.schedule.closeClockTime),
+        day(stop.station.schedule.openSeconds),
+        day(stop.station.schedule.closeSeconds),
         stop.station.schedule.activityLevel,
         onCourse ? 'yes' : 'start/finish',
         ...amenities.map((a) => (set[a.key] ? 'yes' : '')),
@@ -183,7 +197,8 @@ function marginMinutes(suggested: string, modeled: string): number | null {
   return a === null || b === null ? null : Math.round((a - b) / 60);
 }
 
-function cutoffSheet(result: PipelineResult): Sheet {
+function cutoffSheet(result: PipelineResult, options: WorkbookOptions): Sheet {
+  const day = (seconds: number) => formatEventClock(seconds, options.raceDate);
   const rows: CellValue[][] = [
     [
       'Distance',
@@ -203,10 +218,10 @@ function cutoffSheet(result: PipelineResult): Sheet {
       row.courseName,
       row.stationName,
       Number(row.kmFromStart.toFixed(2)),
-      hm(row.modeledLastArrivalClockTime),
-      hm(row.suggestedClockTime),
+      day(row.modeledLastArrivalSeconds),
+      day(row.suggestedSeconds),
       margin === null ? '' : margin,
-      row.mapClockTime ? hm(row.mapClockTime) : '',
+      row.mapSeconds !== undefined ? day(row.mapSeconds) : row.mapClockTime ? hm(row.mapClockTime) : '',
       row.mapIsTighter ? 'yes' : '',
     ]);
   }
@@ -218,7 +233,8 @@ function cutoffSheet(result: PipelineResult): Sheet {
  * The distribution as numbers rather than bars: peak window, what came through it, and
  * the head of the field. The chart is the thing to look at; this is the thing to sort.
  */
-function distributionSheet(result: PipelineResult): Sheet {
+function distributionSheet(result: PipelineResult, options: WorkbookOptions): Sheet {
+  const day = (seconds: number) => formatEventClock(seconds, options.raceDate);
   const anyLeads = result.stations.some((s) => leadsForStation(s).length > 0);
   const rows: CellValue[][] = [
     [
@@ -234,7 +250,7 @@ function distributionSheet(result: PipelineResult): Sheet {
   for (const station of result.stations) {
     const peak = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
     const window = peak
-      ? `${hm(secondsToClockTime(peak.binStartSeconds))}–${hm(secondsToClockTime(peak.binEndSeconds))}`
+      ? `${day(peak.binStartSeconds)}–${hm(secondsToClockTime(peak.binEndSeconds))}`
       : '';
 
     let busiest = '';
@@ -300,9 +316,9 @@ export function buildReportSheets(result: PipelineResult, options: WorkbookOptio
 
   if (!wanted || wanted.schedule) sheets.push(scheduleSheet(result, options));
   if (!wanted || wanted.perDistance) sheets.push(amenitiesSheet(result, options));
-  if (!wanted || wanted.splits) sheets.push(splitsSheet(result));
-  if (!wanted || wanted.distribution) sheets.push(distributionSheet(result));
-  if (!wanted || wanted.cutoffs) sheets.push(cutoffSheet(result));
+  if (!wanted || wanted.splits) sheets.push(splitsSheet(result, options));
+  if (!wanted || wanted.distribution) sheets.push(distributionSheet(result, options));
+  if (!wanted || wanted.cutoffs) sheets.push(cutoffSheet(result, options));
 
   return sheets;
 }

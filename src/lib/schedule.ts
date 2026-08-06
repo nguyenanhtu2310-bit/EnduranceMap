@@ -253,6 +253,13 @@ export interface CutoffTableRow {
   kmFromStart: number;
   /** Cut-off proposed by the tool, from the modelled tail plus grace, rounded up. */
   suggestedClockTime: string;
+  /**
+   * The same three moments as seconds from the event's first midnight, so a display can
+   * name the day they fall on. A 49-hour race proposes cut-offs two days after its gun.
+   */
+  suggestedSeconds: number;
+  mapSeconds?: number;
+  modeledLastArrivalSeconds: number;
   /** Cut-off written on the source map, where the placemark carried one. */
   mapClockTime?: string;
   modeledLastArrivalClockTime: string;
@@ -335,8 +342,11 @@ export function buildCutoffTable(
         courseName: crossing.courseName,
         kmFromStart: crossing.kmFromStart,
         suggestedClockTime: secondsToClockTime(suggestedSeconds),
+        suggestedSeconds,
         mapClockTime: crossing.officialCutoffClock,
+        mapSeconds: mapSeconds ?? undefined,
         modeledLastArrivalClockTime: p99.clockTime,
+        modeledLastArrivalSeconds: p99.seconds,
         mapIsTighter: mapSeconds !== null && mapSeconds < suggestedSeconds,
       });
     }

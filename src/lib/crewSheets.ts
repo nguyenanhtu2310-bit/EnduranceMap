@@ -1,5 +1,5 @@
 import type { PipelineResult } from './pipeline';
-import { secondsToClockTime } from './time';
+import { eventDayOffset, formatEventClock } from './time';
 import { firstLeadOfSex, leadsForStation } from './leadMarkers';
 import { buildStationTraffic, courseTotal } from './stationTraffic';
 import { TRAFFIC_BANDS, buildStationTrafficSvg, trafficSvgWidth } from './stationTrafficSvg';
@@ -10,6 +10,12 @@ export type Translate = (english: string) => string;
 
 export interface CrewSheetOptions {
   raceName: string;
+  /**
+   * The event's first date, so a shift that runs into the next day says so. A sheet
+   * reading "06:31 – 06:49" is either eighteen minutes of work or a day and eighteen
+   * minutes of it, and the crew holding it at four in the morning cannot tell.
+   */
+  raceDate?: string;
   /** The app's current language, so the crew reads the sheet in their own. */
   t?: Translate;
   /** Stations to print, by schedule name. Defaults to all of them. */
@@ -52,7 +58,8 @@ function esc(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-const hm = (seconds: number) => secondsToClockTime(seconds).slice(0, 5);
+/** Bare clock, for the column heads where the day is carried by the row instead. */
+const hm = (seconds: number) => formatEventClock(seconds).replace(/^D\+\d+ /, '');
 
 /**
  * One A4 landscape page per station: the traffic that station will see, and nothing
@@ -77,7 +84,9 @@ export function buildCrewSheetsHtml(result: PipelineResult, options: CrewSheetOp
   const stations = splitStartFinish(result).filter(
     (s) => !wanted || wanted.has(s.name) || wanted.has(trafficStationName(s, t))
   );
-  const pages = stations.map((station) => sheet(station, result, t, options.raceName)).filter(Boolean);
+  const pages = stations
+    .map((station) => sheet(station, result, t, options.raceName, options.raceDate))
+    .filter(Boolean);
   const generated = new Date().toISOString().slice(0, 16).replace('T', ' ');
 
   return `<!doctype html>
@@ -144,6 +153,8 @@ export function buildCrewSheetsHtml(result: PipelineResult, options: CrewSheetOp
   thead th { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
   tbody tr:last-child td { border-bottom: none; font-weight: 700; border-top: 1.5px solid var(--ink); }
 
+  .day-turn { border-left: 2px solid var(--ink); }
+
   .foot { margin-top: 5px; font-size: 9px; color: var(--muted); display: flex; justify-content: space-between; }
 
   @media screen {
@@ -164,29 +175,31 @@ function sheet(
   station: TrafficStation,
   result: PipelineResult,
   t: Translate,
-  raceName: string
+  raceName: string,
+  raceDate?: string
 ): string {
+  const day = (seconds: number) => formatEventClock(seconds, raceDate);
   const view = buildStationTraffic(station, result.courseOrder);
   if (!view) return '';
 
   const colour = (index: number) => SERIES[index % SERIES.length];
 
   const facts: string[] = [
-    `<div><dt>${esc(t('Operating time'))}</dt><dd>${hm(view.active[0].binStartSeconds)} – ${hm(
+    `<div><dt>${esc(t('Operating time'))}</dt><dd>${day(view.active[0].binStartSeconds)} – ${day(
       view.active[view.active.length - 1].binEndSeconds
     )}</dd></div>`,
     `<div><dt>${esc(t('Total visits'))}</dt><dd>${view.total.toLocaleString()}</dd></div>`,
     `<div><dt>${esc(t('Busiest'))}</dt><dd>${view.busiestBin.total.toLocaleString()} ${esc(
       t('at')
-    )} ${hm(view.busiestBin.binStartSeconds)} – ${hm(view.busiestBin.binEndSeconds)}</dd></div>`,
+    )} ${day(view.busiestBin.binStartSeconds)} – ${hm(view.busiestBin.binEndSeconds)}</dd></div>`,
   ];
 
   const man = firstLeadOfSex(station, 'M');
   const woman = firstLeadOfSex(station, 'F');
   if (leadsForStation(station).length > 0) {
     const parts = [
-      man ? `${esc(t('Male'))} ${hm(man.seconds)}` : '',
-      woman ? `${esc(t('Female'))} ${hm(woman.seconds)}` : '',
+      man ? `${esc(t('Male'))} ${day(man.seconds)}` : '',
+      woman ? `${esc(t('Female'))} ${day(woman.seconds)}` : '',
     ].filter(Boolean);
     facts.push(`<div><dt>${esc(t('First through'))}</dt><dd>${parts.join(' · ')}</dd></div>`);
   }
@@ -198,7 +211,17 @@ function sheet(
     )
     .join('');
 
-  const head = view.active.map((bin) => `<th>${hm(bin.binStartSeconds)}</th>`).join('');
+  // Only the columns that begin a new day are tagged, so a sheet that fits inside one
+  // reads exactly as it did and a sheet that does not says where the day turned over.
+  let lastDay = eventDayOffset(view.active[0].binStartSeconds);
+  const head = view.active
+    .map((bin) => {
+      const binDay = eventDayOffset(bin.binStartSeconds);
+      const turned = binDay !== lastDay;
+      lastDay = binDay;
+      return `<th${turned ? ' class="day-turn"' : ''}>${hm(bin.binStartSeconds)}</th>`;
+    })
+    .join('');
   const body = view.present
     .map(({ name, index }) => {
       const cells = view.active

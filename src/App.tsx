@@ -807,6 +807,7 @@ export default function App() {
     const name = raceName.trim() || kml?.fileName.replace(/\.kml$/i, '') || 'Race';
     const html = buildReportHtml(computed, {
       raceName: name,
+      raceDate,
       theme,
       notes: stationNotes,
       sections: reportSections,
@@ -1357,8 +1358,9 @@ export default function App() {
                 className="secondary"
                 onClick={() => {
                   const name = raceName.trim() || kml?.fileName.replace(/\.kml$/i, '') || 'Race';
-                  const sheets = buildReportSheets(result, {
+                  const sheets = buildReportSheets(planned, {
                     raceName: name,
+                    raceDate,
                     rules: DEFAULT_AMENITY_RULES,
                     overrides: amenityOverrides,
                     amenities,
