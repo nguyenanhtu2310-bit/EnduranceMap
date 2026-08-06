@@ -4,7 +4,7 @@ import { readCourseProfile, type CourseProfile } from '../lib/courseProfile';
 import { CourseProfileView } from './CourseProfileView';
 import { useT } from '../lib/i18n';
 
-/** A route file as loaded, kept as text so a saved race can be reopened from it. */
+/** A race file as loaded, kept as text so a saved race can be reopened from it. */
 export interface LoadedGpx {
   fileName: string;
   text: string;
@@ -72,8 +72,8 @@ export function GpxPanel({ files, onChange }: Props) {
     if (!list || list.length === 0) return;
     const loaded: LoadedGpx[] = [];
     for (const file of Array.from(list)) {
-      // A non-GPX is turned away here rather than carried in to fail later, so the
-      // course list never holds a file the panel is also calling unreadable.
+      // Anything that is not a route file is turned away here rather than carried in to
+      // fail later, so the course list never holds a file the panel calls unreadable.
       if (!/\.gpx$/i.test(file.name)) continue;
       loaded.push({ fileName: file.name, text: await file.text() });
     }

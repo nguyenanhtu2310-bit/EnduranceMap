@@ -1,5 +1,7 @@
 import { parseKml, type KmlParseOptions } from './kml';
 import { mergeCourseSources } from './courseSources';
+import { nameStations, type PlacemarkCrossing } from './stationNaming';
+import type { TimingPoint } from './timingPoints';
 import { parseClockTimeToSeconds } from './time';
 import {
   buildCourses,
@@ -123,6 +125,14 @@ export interface PipelineOptions extends KmlParseOptions, SnapOptions, ScheduleO
    * route, so a map holding nothing but station layers still produces a schedule.
    */
   extraCourses?: Course[];
+  /**
+   * The timing system's own points, per course name.
+   *
+   * Supplying them renames each station to whatever the timer calls the mat it stands
+   * on, so nobody has to rename twenty-nine pins in Google My Maps — and marks the
+   * stations with no mat at all, whose traffic is modelled rather than counted.
+   */
+  timingPoints?: Record<string, TimingPoint[]>;
   /** Folder names (case-insensitive) whose points are treated as staffed stations. */
   stationFolders?: string[];
   /** Placemark names to exclude from the operational output entirely. */
@@ -218,6 +228,15 @@ export interface LeadArrival {
 
 export interface PipelineStation {
   schedule: StationSchedule;
+  /**
+   * True where a mat reads chips here. A water station is every bit as much a station —
+   * it needs the same crew and the same hours — but nobody is counted at it, so its
+   * traffic is a model where a timed station's is a measurement. Reporting the two as
+   * though they were the same claim would overstate half the plan.
+   */
+  isTimed: boolean;
+  /** The results-file column this station produces, where it is timed. */
+  timingPointName?: string;
   /**
    * Name derived from the map, before any sequential renumbering. Stable regardless of
    * how the station is labelled on screen, so manual cut-offs keyed to it survive
@@ -464,10 +483,44 @@ export function runPipeline(
     return snaps.length === group.snaps.length ? group : { ...group, snaps };
   });
 
+  /*
+   * What the timing system calls each group, worked out per course and pooled.
+   *
+   * A station crossed by several distances is matched on each of them separately — its
+   * kilometre differs on every course — and the first course to name it wins, since the
+   * timer calls one mat one thing whichever race is passing it.
+   */
+  const timingLabelByGroup = new Map<number, TimingPoint>();
+  if (options.timingPoints) {
+    for (const course of courses) {
+      const points = options.timingPoints[course.name];
+      if (!points || points.length === 0) continue;
+
+      const crossings: PlacemarkCrossing[] = [];
+      groups.forEach((group, groupIndex) => {
+        group.snaps.forEach((snap, snapIndex) => {
+          if (snap.courseName !== course.name) return;
+          crossings.push({
+            key: `${groupIndex}|${snapIndex}`,
+            name: group.members[0]?.name ?? '',
+            kmFromStart: snap.kmFromStart,
+          });
+        });
+      });
+
+      for (const named of nameStations(crossings, points, { measuredTotalKm: course.totalKm })
+        .stations) {
+        if (!named.timingPoint) continue;
+        const groupIndex = Number(named.crossing.key.split('|')[0]);
+        if (!timingLabelByGroup.has(groupIndex)) timingLabelByGroup.set(groupIndex, named.timingPoint);
+      }
+    }
+  }
+
   const stations: PipelineStation[] = [];
   const skipped: PipelineResult['skipped'] = [];
 
-  for (const group of groups) {
+  for (const [groupIndex, group] of groups.entries()) {
     const selectedMembers = group.members.filter((m) => isSelectedFolder(m.folder));
     if (selectedMembers.length === 0) continue;
 
@@ -477,8 +530,13 @@ export function runPipeline(
     const coLocatedNames = Array.from(new Set(others.map((m) => m.label.cleanName || m.name)));
 
     // The station is named for the placemarks the user actually asked to schedule;
-    // anything co-located from another folder is reported separately.
-    const stationName = Array.from(new Set(selectedMembers.map((m) => m.label.cleanName || m.name))).join(' / ');
+    // anything co-located from another folder is reported separately. Where the timing
+    // system named the mat standing here, that wins: its names become the columns of the
+    // results file, so it is the one list that had to be right.
+    const timedAs = timingLabelByGroup.get(groupIndex);
+    const stationName =
+      timedAs?.label ||
+      Array.from(new Set(selectedMembers.map((m) => m.label.cleanName || m.name))).join(' / ');
 
     // Removed by the operator — a position that exists on the map but is not being run
     // this year. Dropped silently rather than reported as skipped, since it is a
@@ -584,6 +642,8 @@ export function runPipeline(
     stations.push({
       schedule: buildStationSchedule(stationName, crossings, options),
       mapName: stationName,
+      isTimed: timedAs !== undefined,
+      timingPointName: timedAs?.name,
       folder,
       // Filled in below, once the shared time grid is known.
       distribution: [],

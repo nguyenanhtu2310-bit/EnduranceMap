@@ -34,6 +34,8 @@ import { downloadXlsx } from './lib/xlsx';
 import { FolderPicker } from './components/FolderPicker';
 import { KmlDropzone } from './components/KmlDropzone';
 import { GpxPanel, type LoadedGpx } from './components/GpxPanel';
+import { TimingPointsPanel } from './components/TimingPointsPanel';
+import { parseTimingPoints, type TimingPoint } from './lib/timingPoints';
 import { parseGpx } from './lib/gpx';
 import { mergeCourseSources } from './lib/courseSources';
 import { PaceBandForm, type DistanceFormRow } from './components/PaceBandForm';
@@ -192,6 +194,8 @@ interface RaceSnapshot {
   kml: LoadedKml | null;
   /** Route files, one per distance. Their courses carry the elevation a KML loses. */
   gpx: LoadedGpx[];
+  /** Timing split configs, one per distance. Stations take their names from these. */
+  lvs: LoadedGpx[];
   rows: DistanceFormRow[];
   folders: FolderSummary[];
   selectedFolders: string[];
@@ -225,6 +229,7 @@ function blankSnapshot(): RaceSnapshot {
   return {
     kml: null,
     gpx: [],
+    lvs: [],
     rows: [],
     folders: [],
     selectedFolders: [],
@@ -310,6 +315,7 @@ export default function App() {
   const [contestMapping, setContestMapping] = useState<Record<string, string>>({});
   const [kmlCourses, setKmlCourses] = useState<Course[]>([]);
   const [gpxFiles, setGpxFiles] = useState<LoadedGpx[]>([]);
+  const [lvsFiles, setLvsFiles] = useState<LoadedGpx[]>([]);
 
   /*
    * The courses the plan runs on, from both file types at once.
@@ -343,6 +349,39 @@ export default function App() {
     [kmlCourses, gpxCourses]
   );
   const courses = mergedCourses.courses;
+
+  /*
+   * Each timing config matched to the course it describes, by the length it declares
+   * against the length that course measures.
+   *
+   * Matched rather than named: the files come out of the timing program called
+   * "Splits.lvs" as often as anything else, and a race that has been told its 100 km
+   * config belongs to its 10 km course would name every station wrongly and look
+   * confident doing it.
+   */
+  const timingPointsByCourse = useMemo(() => {
+    const byCourse: Record<string, TimingPoint[]> = {};
+    for (const file of lvsFiles) {
+      let points: TimingPoint[];
+      try {
+        points = parseTimingPoints(file.text).points;
+      } catch {
+        continue;
+      }
+      if (points.length === 0) continue;
+
+      const declaredKm = points.reduce((far, p) => Math.max(far, p.kmFromStart), 0);
+      let best: { name: string; gap: number } | null = null;
+      for (const course of courses) {
+        const gap = Math.abs(course.totalKm - declaredKm) / Math.max(course.totalKm, declaredKm);
+        if (!best || gap < best.gap) best = { name: course.name, gap };
+      }
+      // The same bound the course merge uses: a drawn route and a surveyed one disagree
+      // by a few percent, and trail distances advertise short.
+      if (best && best.gap <= 0.08) byCourse[best.name] = points;
+    }
+    return byCourse;
+  }, [lvsFiles, courses]);
 
   /*
    * Keeps one form row per course, from whichever file the course arrived in.
@@ -428,7 +467,7 @@ export default function App() {
 
   function captureSnapshot(): RaceSnapshot {
     return {
-      kml, gpx: gpxFiles, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
+      kml, gpx: gpxFiles, lvs: lvsFiles, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
       // The map's own courses, not the merged view — the GPX half is re-derived from its
       // own text on the way back in, so the two can never be saved out of step.
       results, contestMapping, courses: kmlCourses, stationOrder, amenityOverrides, amenities, raceName,
@@ -450,6 +489,7 @@ export default function App() {
     setContestMapping(snap.contestMapping);
     setKmlCourses(snap.courses);
     setGpxFiles(snap.gpx ?? []);
+    setLvsFiles(snap.lvs ?? []);
     setStationOrder(snap.stationOrder);
     setAmenityOverrides(snap.amenityOverrides);
     setAmenities(snap.amenities?.length ? snap.amenities : DEFAULT_AMENITIES);
@@ -901,6 +941,7 @@ export default function App() {
 
       const computed = runPipeline(kml.text, inputs, {
           extraCourses: gpxCourses,
+          timingPoints: timingPointsByCourse,
           stationFolders: selectedFolders,
           excludeStations,
           excludePasses,
@@ -1034,6 +1075,13 @@ export default function App() {
           )}
         </p>
         <GpxPanel files={gpxFiles} onChange={setGpxFiles} />
+        <h3 style={{ margin: '1.4rem 0 0.3rem', fontSize: '1rem' }}>{t('Timing points')}</h3>
+        <p className="hint">
+          {t(
+            'Optional. Supply the timing configuration and every station takes the name the timing system uses, so nothing needs renaming on the map.'
+          )}
+        </p>
+                <TimingPointsPanel files={lvsFiles} onChange={setLvsFiles} courses={courses} />
         {mergedCourses.replaced.map(({ kml: drawn, gpx: surveyed }) => (
           <p className="hint" key={drawn.name}>
             {`"${drawn.name}" (${drawn.totalKm.toFixed(2)} km) `}

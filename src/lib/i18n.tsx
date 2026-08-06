@@ -228,6 +228,21 @@ const VI: Record<string, string> = {
   'from the map is covered by': 'từ bản đồ đã được thay bằng',
   'from GPX, which carries elevation.': 'từ file GPX, vì file này có dữ liệu độ cao.',
 
+  'Optional. Supply the timing configuration and every station takes the name the timing system uses, so nothing needs renaming on the map.':
+    'Không bắt buộc. Nếu có file cấu hình bấm giờ, mọi trạm sẽ tự lấy tên theo hệ thống bấm giờ, không cần sửa tên trên bản đồ.',
+
+  // Timing split configuration.
+  'Timing points': 'Điểm bấm giờ',
+  'Drop the timing split files (.lvs) here, or': 'Kéo thả file cấu hình bấm giờ (.lvs) vào đây, hoặc',
+  'One per distance, exported from the timing program. Stations take their names from these.':
+    'Mỗi cự ly một file, xuất từ phần mềm bấm giờ. Tên trạm sẽ lấy từ đây.',
+  'timing points': 'điểm bấm giờ',
+  'no matching course loaded': 'chưa có đường đua tương ứng',
+  'Name in results': 'Tên trong file kết quả',
+  'Declared km': 'Km công bố',
+  Mat: 'Thảm',
+  backup: 'dự phòng',
+
   // Route files and their profiles.
   'Course profile': 'Độ cao đường đua',
   'Drop the route GPX for each distance to read its climbing. A GPX carries elevation on every point; a KML usually loses it.':
