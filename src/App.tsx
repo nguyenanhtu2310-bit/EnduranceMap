@@ -37,6 +37,7 @@ import { GpxPanel, type LoadedGpx } from './components/GpxPanel';
 import { TimingPointsPanel } from './components/TimingPointsPanel';
 import { StationNamingTable } from './components/StationNamingTable';
 import { CourseCommandView } from './components/CourseCommandView';
+import { FieldSlider } from './components/FieldSlider';
 import { readCourseProfile, type CourseProfile } from './lib/courseProfile';
 import { parseTimingPoints, type TimingPoint } from './lib/timingPoints';
 import { parseGpx } from './lib/gpx';
@@ -1462,6 +1463,14 @@ export default function App() {
               )}
             </p>
             <CourseCommandView result={planned} profiles={courseProfiles} />
+
+            <h3 style={{ margin: '1.6rem 0 0.3rem', fontSize: '1rem' }}>{t('Where the field is')}</h3>
+            <p className="hint">
+              {t(
+                'Slide to a moment and see every distance on the course at once, under the climbs they are on and beside the stations that serve them.'
+              )}
+            </p>
+            <FieldSlider result={planned} profiles={courseProfiles} raceDate={raceDate} />
           </ResultSection>
 
 {hasTimingConfig && (

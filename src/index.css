@@ -1663,3 +1663,22 @@ button.row-remove:disabled {
   background: var(--color-bg);
   border: 1.5px solid var(--color-faint);
 }
+
+/* The moment picker under the field chart. */
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.2rem 0 0.4rem;
+}
+
+.slider-row input[type='range'] {
+  flex: 1 1 auto;
+  accent-color: var(--color-accent);
+}
+
+.slider-row button {
+  padding: 0.2rem 0.55rem;
+  font-size: 0.9rem;
+  line-height: 1.2;
+}

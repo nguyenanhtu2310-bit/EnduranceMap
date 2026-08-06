@@ -244,6 +244,25 @@ const VI: Record<string, string> = {
   'Timed — a chip is read here': 'Có bấm giờ — chip được đọc ở đây',
   'No mat — staffed, but nobody is counted': 'Không có thảm — vẫn có nhân sự, nhưng không ai được đếm',
 
+  // The field on the course.
+  'Where the field is': 'VĐV đang ở đâu',
+  'Slide to a moment and see every distance on the course at once, under the climbs they are on and beside the stations that serve them.':
+    'Kéo tới một thời điểm để thấy toàn bộ các cự ly trên đường đua cùng lúc, kèm địa hình và các trạm phục vụ.',
+  'Drop the route GPX for the longest distance to see the field on its course.':
+    'Kéo thả file GPX của cự ly dài nhất để xem VĐV trên đường đua.',
+  At: 'Lúc',
+  'Runners on course': 'Đang trên đường',
+  'Busiest kilometre': 'Km đông nhất',
+  'Off this course': 'Ngoài tuyến này',
+  'Running ground the longest course never touches': 'Đang chạy trên đoạn mà cự ly dài nhất không đi qua',
+  'The field on the course at the chosen moment': 'VĐV trên đường đua tại thời điểm đã chọn',
+  runners: 'VĐV',
+  'Back an hour': 'Lùi một giờ',
+  'On an hour': 'Tiến một giờ',
+  'Moment of the race': 'Thời điểm trong giải',
+  'Every distance placed on the longest course. Counts between two timing mats are exact — a chip read at one and not the other puts a runner between them — but where on that stretch they are is interpolated.':
+    'Mọi cự ly được đặt trên cự ly dài nhất. Số VĐV giữa hai thảm bấm giờ là số chính xác — chip đọc ở thảm này mà chưa đọc ở thảm kia nghĩa là VĐV đang ở giữa — nhưng vị trí cụ thể trong đoạn đó là số nội suy.',
+
   // Multi-day races.
   'Race date': 'Ngày thi đấu',
   'The first day of the event — every time is then named by its weekday':
