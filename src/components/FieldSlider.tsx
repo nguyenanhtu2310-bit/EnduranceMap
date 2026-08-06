@@ -28,6 +28,8 @@ const LABEL_ROW_H = 13;
 const LABEL_PAD = 8;
 const BIN_KM = 1;
 const RULER_ROW_H = 12;
+/** Height of the strip carrying whoever is running ground the spine never reaches. */
+const OFF_H = 26;
 /** Room to the left of the plot for the two scales, in the same units the plot uses. */
 const GUTTER = 42;
 /** Room at the top of the ruler for the marker that says which moment is being shown. */
@@ -191,6 +193,13 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
   const top = labelH;
   const fieldTop = top + PLOT_H;
   const baseline = fieldTop + FIELD_H;
+  // A distance mostly off the spine gets its own strip rather than a position it does
+  // not have. A third of one real 10 km runs its own roads, and those runners are on
+  // course and need a crew whether or not the long course goes anywhere near them.
+  const offByCourse = inputs
+    .map((input, i) => ({ name: input.courseName, count: snapshot.offSpineByCourse[i] }))
+    .filter((entry) => entry.count > 0);
+  const offBand = offByCourse.length > 0 ? OFF_H : 0;
 
   const { minMetres, maxMetres } = profile.totals;
   const span = Math.max(1, maxMetres - minMetres);
@@ -248,7 +257,7 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
 
       <svg
         className="command-chart"
-        viewBox={`${-GUTTER} 0 ${COLUMNS + GUTTER} ${baseline + AXIS_H}`}
+        viewBox={`${-GUTTER} 0 ${COLUMNS + GUTTER} ${baseline + offBand + AXIS_H}`}
         role="img"
         aria-label={t('The field on the course at the chosen moment')}
       >
@@ -335,12 +344,42 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
 
         <line className="profile-axis" x1={0} y1={baseline} x2={COLUMNS} y2={baseline} />
         <line className="profile-axis" x1={0} y1={fieldTop} x2={COLUMNS} y2={fieldTop} />
+
+        {/*
+          Off the spine, on its own strip. These runners have no kilometre on this axis
+          because the course under it does not go where they are — drawn as a bar of its
+          own so the count is visible and the position is not invented.
+        */}
+        {offByCourse.length > 0 && (
+          <g className="off-spine">
+            <text x={-7} y={baseline + OFF_H - 8} textAnchor="end">
+              {t('off route')}
+            </text>
+            {offByCourse.map((entry, index) => {
+              const width = COLUMNS / Math.max(3, offByCourse.length);
+              return (
+                <g key={entry.name}>
+                  <rect
+                    x={index * (width + 6)}
+                    y={baseline + 6}
+                    width={width}
+                    height={OFF_H - 12}
+                    fill={seriesVar(courseIndex(entry.name))}
+                  />
+                  <text x={index * (width + 6) + 6} y={baseline + OFF_H - 8}>
+                    {entry.name} · {entry.count}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+        )}
         {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
           <text
             key={fraction}
             className="profile-tick"
             x={Math.min(COLUMNS - 2, Math.max(2, fraction * COLUMNS))}
-            y={baseline + AXIS_H - 5}
+            y={baseline + offBand + AXIS_H - 5}
             textAnchor={fraction === 0 ? 'start' : fraction === 1 ? 'end' : 'middle'}
           >
             {(spineKm * fraction).toFixed(0)} km

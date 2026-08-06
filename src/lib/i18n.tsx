@@ -256,6 +256,7 @@ const VI: Record<string, string> = {
   // The field on the course.
   'Where the field is': 'VĐV đang ở đâu',
   'When each distance starts': 'Giờ xuất phát của từng cự ly',
+  'off route': 'ngoài tuyến',
   m: 'm',
   'Slide to a moment and see every distance on the course at once, under the climbs they are on and beside the stations that serve them.':
     'Kéo tới một thời điểm để thấy toàn bộ các cự ly trên đường đua cùng lúc, kèm địa hình và các trạm phục vụ.',

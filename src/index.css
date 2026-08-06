@@ -1744,3 +1744,15 @@ button.row-remove:disabled {
   font-weight: 600;
   letter-spacing: 0.04em;
 }
+
+/* Runners on ground the spine never reaches: counted, not placed. */
+.command-chart .off-spine rect {
+  opacity: 0.55;
+  rx: 2;
+}
+
+.command-chart .off-spine text {
+  fill: var(--color-muted);
+  font-size: 9px;
+  font-weight: 600;
+}
