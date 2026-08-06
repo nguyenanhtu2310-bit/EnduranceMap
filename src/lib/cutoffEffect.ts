@@ -80,3 +80,115 @@ export const TIGHT_SPEED_UP = 0.1;
 
 /** A cut-off leaving behind more than this share of the field is worth a second look. */
 export const HEAVY_SHARE = 0.1;
+
+interface EffectSource {
+  stations: {
+    schedule: {
+      name: string;
+      crossings: {
+        courseName: string;
+        kmFromStart: number;
+        arrivalPercentiles: { percentile: number; seconds: number }[];
+        runnerArrivalsSeconds?: number[];
+        isCounted?: boolean;
+      }[];
+    };
+  }[];
+  distanceInputs: { courseName: string; startTimeClock: string; startDayOffset?: number }[];
+  cutoffTable: {
+    stationName: string;
+    courseName: string;
+    kmFromStart: number;
+    mapSeconds?: number;
+    suggestedSeconds: number;
+  }[];
+}
+
+/** Identifies one cut-off row against the crossing it came from. */
+export function cutoffKey(stationName: string, courseName: string, kmFromStart: number): string {
+  return `${stationName}|${courseName}|${kmFromStart.toFixed(2)}`;
+}
+
+/**
+ * Reads every provided cut-off on a card against the field that has to clear it.
+ *
+ * Effort is taken from the field rather than from the ground: the share of its own
+ * median finishing time the median runner has used by this point. That needs no
+ * elevation model and is truer than one — it is how the course actually spent them,
+ * including the parts a profile cannot see.
+ */
+export function cutoffEffects(
+  result: EffectSource,
+  secondsFrom: (clock: string, day?: number) => number | null
+): Map<string, CutoffEffect> {
+  const startByCourse = new Map<string, number>();
+  for (const input of result.distanceInputs) {
+    const start = secondsFrom(input.startTimeClock, input.startDayOffset);
+    if (start !== null) startByCourse.set(input.courseName, start);
+  }
+
+  // The median runner's elapsed time at each crossing, and at the furthest one, which is
+  // the finish for every course that has one.
+  const medianAt = new Map<string, number>();
+  const furthestKm = new Map<string, number>();
+  for (const station of result.stations) {
+    for (const crossing of station.schedule.crossings) {
+      const p50 =
+        crossing.arrivalPercentiles.find((p) => p.percentile === 50) ??
+        crossing.arrivalPercentiles[Math.floor(crossing.arrivalPercentiles.length / 2)];
+      if (!p50) continue;
+      medianAt.set(cutoffKey(station.schedule.name, crossing.courseName, crossing.kmFromStart), p50.seconds);
+      if (crossing.kmFromStart > (furthestKm.get(crossing.courseName) ?? -1)) {
+        furthestKm.set(crossing.courseName, crossing.kmFromStart);
+      }
+    }
+  }
+
+  const medianFinish = new Map<string, number>();
+  for (const station of result.stations) {
+    for (const crossing of station.schedule.crossings) {
+      if (crossing.kmFromStart !== furthestKm.get(crossing.courseName)) continue;
+      const p50 =
+        crossing.arrivalPercentiles.find((p) => p.percentile === 50) ??
+        crossing.arrivalPercentiles[Math.floor(crossing.arrivalPercentiles.length / 2)];
+      if (p50) medianFinish.set(crossing.courseName, p50.seconds);
+    }
+  }
+
+  const arrivalsAt = new Map<string, number[]>();
+  for (const station of result.stations) {
+    for (const crossing of station.schedule.crossings) {
+      if (!crossing.runnerArrivalsSeconds) continue;
+      arrivalsAt.set(
+        cutoffKey(station.schedule.name, crossing.courseName, crossing.kmFromStart),
+        crossing.runnerArrivalsSeconds
+      );
+    }
+  }
+
+  const effects = new Map<string, CutoffEffect>();
+  for (const row of result.cutoffTable) {
+    if (row.mapSeconds === undefined) continue;
+    const key = cutoffKey(row.stationName, row.courseName, row.kmFromStart);
+    const start = startByCourse.get(row.courseName);
+    const here = medianAt.get(key);
+    const finish = medianFinish.get(row.courseName);
+    if (start === undefined) continue;
+
+    const effortFraction =
+      here !== undefined && finish !== undefined && finish > start ? (here - start) / (finish - start) : 0;
+
+    effects.set(
+      key,
+      cutoffEffect({
+        arrivalsSeconds: arrivalsAt.get(key) ?? [],
+        cutoffSeconds: row.mapSeconds,
+        startSeconds: start,
+        effortFraction,
+        finishLimitSeconds: finish !== undefined ? finish - start : null,
+      })
+    );
+  }
+
+  return effects;
+}

@@ -213,6 +213,17 @@ export function StationScheduleTable({
                 ) : (
                   <span className="station-name">{station.schedule.name}</span>
                 )}
+                {station.isCounted && (
+                  <>
+                    {' '}
+                    <span
+                      className="tag counted"
+                      title={t('Every arrival here is a chip read, not a model')}
+                    >
+                      {t('counted')}
+                    </span>
+                  </>
+                )}
                 {station.schedule.cutoffExceeded && (
                   <>
                     {' '}

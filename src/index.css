@@ -1756,3 +1756,9 @@ button.row-remove:disabled {
   font-size: 9px;
   font-weight: 600;
 }
+
+/* A number taken from chip reads rather than from a model. */
+.tag.counted {
+  background: var(--color-ok-bg);
+  color: var(--color-ok);
+}

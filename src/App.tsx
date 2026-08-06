@@ -40,6 +40,8 @@ import { CourseCommandView } from './components/CourseCommandView';
 import { FieldSlider } from './components/FieldSlider';
 import { readCourseProfile, type CourseProfile } from './lib/courseProfile';
 import { parseTimingPoints, type TimingPoint } from './lib/timingPoints';
+import { readMeasuredSplits, type MeasuredSplits } from './lib/measuredSplits';
+import { parseCsv } from './lib/csv';
 import { timingStations, TIMING_FOLDER } from './lib/timingStations';
 import { parseGpx } from './lib/gpx';
 import { mergeCourseSources } from './lib/courseSources';
@@ -189,7 +191,17 @@ function autoMapContests(profiles: ContestProfile[], courses: Course[]): Record<
  * squeezed into the same shape.
  */
 type LoadedResults =
-  | { kind: 'single'; fileName: string; profiles: ContestProfile[] }
+  | {
+      kind: 'single';
+      fileName: string;
+      profiles: ContestProfile[];
+      /**
+       * When each mat was crossed, by contest and column, where the file carried splits.
+       * Kept apart from the profiles because it answers a different question: the
+       * profiles model a field onto a future race, these say what happened at this one.
+       */
+      splits?: MeasuredSplits;
+    }
   | { kind: 'multisport'; fileName: string; profiles: MultisportProfile[] };
 
 /**
@@ -433,6 +445,27 @@ export default function App() {
     }
     return byCourse;
   }, [lvsFiles, courses]);
+
+  const [useRecordedArrivals, setUseRecordedArrivals] = useState(true);
+
+  /**
+   * Recorded crossings keyed the way the pipeline wants them: by course, then by the
+   * results-file column each mat produces.
+   *
+   * Only where the operator has said this file describes this race. The same export
+   * shape serves both purposes, and last year's crossings placed on this year's clock
+   * would be a schedule of a race that has not happened.
+   */
+  const measuredArrivals = useMemo(() => {
+    if (!useRecordedArrivals || results?.kind !== 'single' || !results.splits) return undefined;
+    const byCourse: Record<string, Record<string, number[]>> = {};
+    for (const contest of results.splits.contests) {
+      const courseName = contestMapping[contest.contest];
+      if (!courseName || contest.arrivalsBySplit.size === 0) continue;
+      byCourse[courseName] = Object.fromEntries(contest.arrivalsBySplit);
+    }
+    return Object.keys(byCourse).length > 0 ? byCourse : undefined;
+  }, [useRecordedArrivals, results, contestMapping]);
 
   /** Whether any course was matched to a timing configuration at all. */
   const hasTimingConfig = Object.keys(timingPointsByCourse).length > 0;
@@ -868,7 +901,17 @@ export default function App() {
       return;
     }
     const mapping = autoMapContests(parsed.profiles, courses);
-    setResults({ kind: 'single', fileName, profiles: parsed.profiles });
+    // Splits are read alongside the profiles: a file from this race says what happened,
+    // and a file from last year's says how the field behaves. The same export can be
+    // either, so both are kept and the operator decides which is being used.
+    let splits: MeasuredSplits | undefined;
+    try {
+      const read = readMeasuredSplits(parseCsv(text));
+      if (read.contests.some((c) => c.arrivalsBySplit.size > 0)) splits = read;
+    } catch {
+      splits = undefined;
+    }
+    setResults({ kind: 'single', fileName, profiles: parsed.profiles, splits });
     setContestMapping(mapping);
     applyProfilesToRows(parsed.profiles, mapping);
   }
@@ -1100,6 +1143,7 @@ export default function App() {
           extraCourses: gpxCourses,
           timingPoints: timingPointsByCourse,
           extraPlacemarks: timingPlacemarks.placemarks,
+          measuredArrivals,
           stationFolders: [...selectedFolders, TIMING_FOLDER],
           excludeStations,
           excludePasses,
@@ -1283,6 +1327,28 @@ export default function App() {
               Optional. Choose a CSV finish-line result from a comparable race to replace the estimated pace
               band with the real field — every runner's own pace and start offset.
             </p>
+            {results?.kind === 'single' && results.splits && (
+              <div className="notice" style={{ marginBottom: '1rem' }}>
+                <label className="inline-field">
+                  <input
+                    type="checkbox"
+                    checked={useRecordedArrivals}
+                    onChange={(e) => setUseRecordedArrivals(e.target.checked)}
+                  />
+                  {t('This file is this race — use its recorded crossings')}
+                </label>
+                <p className="hint" style={{ margin: '0.35rem 0 0' }}>
+                  {useRecordedArrivals
+                    ? t(
+                        'Traffic at every mat in the file is counted from chip reads rather than modelled. Turn this off to plan a future race from the same file as a pace model.'
+                      )
+                    : t(
+                        'The file is being used as a pace model only. Turn this on where it describes the race being reported.'
+                      )}
+                </p>
+              </div>
+            )}
+
             <ResultsPanel
               fileName={results?.kind === 'single' ? results.fileName : undefined}
               profiles={results?.kind === 'single' ? results.profiles : []}

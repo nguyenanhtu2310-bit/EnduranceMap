@@ -256,6 +256,19 @@ const VI: Record<string, string> = {
   // The field on the course.
   'Where the field is': 'VĐV đang ở đâu',
   'When each distance starts': 'Giờ xuất phát của từng cự ly',
+  'It catches': 'Loại bao nhiêu',
+  'It demands': 'Đòi hỏi nhanh hơn',
+  'Runners the provided cut-off leaves behind': 'Số VĐV bị COT này loại',
+  'How much faster than an even effort to the finish a runner must be to clear it':
+    'Phải nhanh hơn bao nhiêu so với nhịp đều tới đích mới qua được',
+  counted: 'số đếm',
+  'Every arrival here is a chip read, not a model': 'Mọi mốc giờ ở đây là chip đọc thật, không phải số mô hình',
+  'This file is this race — use its recorded crossings':
+    'File này là của chính giải này — dùng mốc giờ đã ghi',
+  'Traffic at every mat in the file is counted from chip reads rather than modelled. Turn this off to plan a future race from the same file as a pace model.':
+    'Lưu lượng tại mọi thảm trong file được đếm từ chip đọc thật thay vì mô hình. Bỏ tick nếu dùng file này làm mô hình pace cho một giải sắp tới.',
+  'The file is being used as a pace model only. Turn this on where it describes the race being reported.':
+    'File đang chỉ được dùng làm mô hình pace. Bật lên nếu file mô tả chính giải đang báo cáo.',
   'off route': 'ngoài tuyến',
   m: 'm',
   'Slide to a moment and see every distance on the course at once, under the climbs they are on and beside the stations that serve them.':

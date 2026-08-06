@@ -1,4 +1,6 @@
 import { passKey, type PipelineResult } from '../lib/pipeline';
+import { cutoffEffects, cutoffKey, HEAVY_SHARE, TIGHT_SPEED_UP } from '../lib/cutoffEffect';
+import { eventSecondsFrom } from '../lib/time';
 import { useT } from '../lib/i18n';
 import type { CrossingOverride, RaceOverrides } from '../lib/overrides';
 import { EditableCell } from './EditableCell';
@@ -36,6 +38,16 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
   }
 
   const tighter = rows.filter((r) => r.mapIsTighter).length;
+
+  /*
+   * What each provided cut-off actually does.
+   *
+   * A cut-off is not a prediction the tool got wrong; it is a decision about who stops
+   * here. Measured against a real published card the proposal was out by up to two and a
+   * half hours, and every gap turned out to be a choice — so the useful thing to report
+   * is not a better proposal but what the operator's own times cost.
+   */
+  const effects = cutoffEffects(result, eventSecondsFrom);
 
   // The time a CP actually works to is the LATEST proposal across the distances through
   // it — usually the slowest arrival of the longest race. Highlight it, or a table of
@@ -86,6 +98,15 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
               <th className="num">{t('Proposed cut-off')}</th>
               <th className="num">{t('Margin')}</th>
               <th className="num">{t('Provided COT')}</th>
+              <th className="num" title={t('Runners the provided cut-off leaves behind')}>
+                {t('It catches')}
+              </th>
+              <th
+                className="num"
+                title={t('How much faster than an even effort to the finish a runner must be to clear it')}
+              >
+                {t('It demands')}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -131,6 +152,43 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
                       <span className="muted">–</span>
                     )}
                   </td>
+                  {(() => {
+                    const effect = effects.get(
+                      cutoffKey(row.stationName, row.courseName, row.kmFromStart)
+                    );
+                    if (!effect) {
+                      return (
+                        <>
+                          <td className="num muted">–</td>
+                          <td className="num muted">–</td>
+                        </>
+                      );
+                    }
+                    const speedUp = effect.demandedSpeedUp;
+                    return (
+                      <>
+                        <td className="num">
+                          {effect.fieldSize === 0 ? (
+                            <span className="muted">–</span>
+                          ) : (
+                            <span className={effect.share > HEAVY_SHARE ? 'tag over' : 'muted'}>
+                              {effect.caught} {t('of')} {effect.fieldSize}
+                            </span>
+                          )}
+                        </td>
+                        <td className="num">
+                          {speedUp === null ? (
+                            <span className="muted">–</span>
+                          ) : (
+                            <span className={speedUp > TIGHT_SPEED_UP ? 'tag Medium' : 'muted'}>
+                              {speedUp >= 0 ? '+' : ''}
+                              {(speedUp * 100).toFixed(0)}%
+                            </span>
+                          )}
+                        </td>
+                      </>
+                    );
+                  })()}
                 </tr>
               );
             })}
