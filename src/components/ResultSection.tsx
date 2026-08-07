@@ -4,6 +4,8 @@ interface Props {
   title: string;
   /** Shown beside the title when collapsed, so a shut section still says what it holds. */
   summary?: string;
+  /** Anchor the navigation panel jumps to. */
+  id?: string;
   open: boolean;
   onToggle: () => void;
   children: ReactNode;
@@ -17,9 +19,9 @@ interface Props {
  * list — the headings stay put so the shape of the plan is still readable, which a
  * tabbed layout would lose.
  */
-export function ResultSection({ title, summary, open, onToggle, children }: Props) {
+export function ResultSection({ title, summary, id, open, onToggle, children }: Props) {
   return (
-    <section className="card result-section">
+    <section className="card result-section" id={id}>
       <button
         type="button"
         className="section-toggle"
