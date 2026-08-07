@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eventDayOffset, eventSecondsFrom, formatDuration, formatEventClock, maskClockInput, normalizeClockTime, parseClockTimeToSeconds, secondsToClockTime, windowSeconds } from '../time';
+import { eventDayLabel, eventDayOffset, eventSecondsFrom, formatDuration, formatElapsedClock, formatEventClock, maskClockInput, normalizeClockTime, parseClockTimeToSeconds, parseElapsedClock, secondsToClockTime, windowSeconds } from '../time';
 
 describe('parseClockTimeToSeconds', () => {
   it('parses 24-hour HH:MM and HH:MM:SS', () => {
@@ -179,5 +179,45 @@ describe('eventDayOffset', () => {
     expect(eventDayOffset(3600)).toBe(0);
     expect(eventDayOffset(86400)).toBe(1);
     expect(eventDayOffset(2 * 86400 + 9 * 3600)).toBe(2);
+  });
+});
+
+describe('a time limit, as a race states one', () => {
+  it('runs hours past twenty-four rather than rolling them over', () => {
+    // A 100 miles is a 49-hour race. "1:01:00" describes the same fact in a unit that
+    // appears on no entry page and no race card.
+    expect(formatElapsedClock(49 * 3600)).toBe('49:00');
+    expect(formatElapsedClock(28 * 3600 + 30 * 60)).toBe('28:30');
+    expect(formatElapsedClock(6 * 3600 + 30 * 60)).toBe('6:30');
+  });
+
+  it('reads a limit typed either way an organizer types one', () => {
+    expect(parseElapsedClock('28:30')).toBe(28 * 3600 + 30 * 60);
+    expect(parseElapsedClock('28')).toBe(28 * 3600);
+    expect(parseElapsedClock(' 49:00 ')).toBe(49 * 3600);
+  });
+
+  it('refuses what it cannot read rather than guessing', () => {
+    // A limit misread is a cut-off in the wrong place, which is worse than an empty box.
+    expect(parseElapsedClock('')).toBeNull();
+    expect(parseElapsedClock('abc')).toBeNull();
+    expect(parseElapsedClock('28:75')).toBeNull();
+    expect(parseElapsedClock('1:02:03')).toBeNull();
+    expect(parseElapsedClock('-5')).toBeNull();
+  });
+
+  it('round-trips every limit on the VMM card', () => {
+    for (const hours of [49, 28, 21, 18.5, 13, 6.5]) {
+      expect(parseElapsedClock(formatElapsedClock(hours * 3600))).toBe(hours * 3600);
+    }
+  });
+
+  it('turns a start and a limit into the cut-off the card prints', () => {
+    // The 100 miles: Friday 08:00 plus 49 hours is Sunday 09:00, not Saturday 09:00.
+    const start = eventSecondsFrom('08:00', 0)!;
+    const cutoff = start + parseElapsedClock('49:00')!;
+    expect(formatEventClock(cutoff, '2026-09-18')).toBe('Sun 09:00');
+    expect(eventDayOffset(cutoff)).toBe(2);
+    expect(eventDayLabel(cutoff, '2026-09-18')).toBe('Sun');
   });
 });

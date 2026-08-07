@@ -1,6 +1,13 @@
 import { useState } from 'react';
 import type { DistanceInput } from '../lib/pipeline';
 import { TimeInput } from './TimeInput';
+import {
+  eventDayOffset,
+  eventSecondsFrom,
+  formatElapsedClock,
+  parseElapsedClock,
+  secondsToClockTime,
+} from '../lib/time';
 import { useT } from '../lib/i18n';
 
 export interface DistanceFormRow extends Omit<DistanceInput, 'runnerCount'> {
@@ -23,7 +30,7 @@ interface Props {
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /**
- * A name that can be typed into, which sounds like nothing and was not.
+ * A cell that can be typed into, which sounds like nothing and was not.
  *
  * The name of a distance is also what identifies it, and a cell that reported every
  * keystroke turned each one into a rename: the half-typed word was trimmed, checked
@@ -32,18 +39,22 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
  * keyed on its own name, so React tore it down and rebuilt it between letters.
  *
  * So the draft stays here, local and untouched, until it is finished. Nothing outside
- * this cell hears about a name until the operator leaves it or presses Enter, which is
- * also the only moment a duplicate can honestly be judged — "21km Day" is not a name
- * anybody meant to keep, and refusing it mid-word is refusing the wrong thing.
+ * this cell hears about it until the operator leaves it or presses Enter, which is also
+ * the only moment the value can honestly be judged — "21km Day" is not a name anybody
+ * meant to keep, and "2" is not the time limit of someone typing "28:30".
  */
-function NameCell({
+function DraftCell({
   value,
   title,
+  align = 'left',
+  placeholder,
   onCommit,
 }: {
   value: string;
   title: string;
-  onCommit: (name: string) => void;
+  align?: 'left' | 'right';
+  placeholder?: string;
+  onCommit: (text: string) => void;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
 
@@ -57,13 +68,15 @@ function NameCell({
       <input
         type="text"
         title={title}
+        placeholder={placeholder}
+        style={{ textAlign: align }}
         value={draft ?? value}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur();
-          // Escape abandons the draft rather than committing it, so a rename started
-          // by accident costs nothing.
+          // Escape abandons the draft rather than committing it, so an edit started by
+          // accident costs nothing.
           if (e.key === 'Escape') {
             setDraft(null);
             e.currentTarget.blur();
@@ -154,6 +167,50 @@ export function PaceBandForm({ rows, onChange, drivenByResults, raceDate, course
     update(index, { courseName: trimmed, sourceCourseName: routeOf(row) });
   }
 
+  /**
+   * The elapsed limit a row allows, worked out from its gun and its cut-off.
+   *
+   * Derived rather than stored. A limit and a cut-off are two ways of saying one thing —
+   * "28 hours" and "Sunday 09:00" from a Saturday 05:00 gun — and holding both would let
+   * them disagree, at which point the schedule has to pick one and the operator cannot
+   * see which. So the cut-off stays the record and this is a view of it.
+   */
+  function limitOf(row: DistanceFormRow): string {
+    const start = eventSecondsFrom(row.startTimeClock, row.startDayOffset ?? 0);
+    const cutoff = row.organizerCutoffClock
+      ? eventSecondsFrom(row.organizerCutoffClock, row.cutoffDayOffset ?? 0)
+      : null;
+    if (start === null || cutoff === null || cutoff <= start) return '';
+    return formatElapsedClock(cutoff - start);
+  }
+
+  /**
+   * Sets the cut-off from a limit typed in its place.
+   *
+   * The day falls out of the arithmetic rather than being asked for: Friday 08:00 plus
+   * 49 hours is Sunday 09:00, and an organizer who knows the race is 49 hours should not
+   * also have to work out which morning that lands on — getting it wrong by a day is the
+   * single mistake this tool exists to stop.
+   */
+  function setLimit(index: number, text: string) {
+    const row = rows[index];
+    const trimmed = text.trim();
+    if (!trimmed) {
+      update(index, { organizerCutoffClock: '', cutoffDayOffset: 0 });
+      return;
+    }
+
+    const limit = parseElapsedClock(trimmed);
+    const start = eventSecondsFrom(row.startTimeClock, row.startDayOffset ?? 0);
+    if (limit === null || limit <= 0 || start === null) return;
+
+    const cutoff = start + limit;
+    update(index, {
+      organizerCutoffClock: secondsToClockTime(cutoff % 86400).slice(0, 5),
+      cutoffDayOffset: eventDayOffset(cutoff),
+    });
+  }
+
   /** Points a distance at a different route, taking that route's measured length. */
   function reroute(index: number, courseName: string) {
     const course = courses.find((c) => c.name === courseName);
@@ -214,6 +271,12 @@ export function PaceBandForm({ rows, onChange, drivenByResults, raceDate, course
             <th title={t('Which day the cut-off falls on — an ultra finishes on another day')}>
               {t('COT day')}
             </th>
+            <th
+              className="num"
+              title={t('How long this distance has, from its own gun — type either this or the cut-off')}
+            >
+              {t('Time limit')}
+            </th>
             <th aria-label={t('Remove')} />
           </tr>
         </thead>
@@ -223,7 +286,7 @@ export function PaceBandForm({ rows, onChange, drivenByResults, raceDate, course
           {rows.map((row, i) => (
             <tr key={i}>
               <td>
-                <NameCell
+                <DraftCell
                   value={row.courseName}
                   title={t('What this distance is called')}
                   onCommit={(value) => rename(i, value)}
@@ -307,6 +370,15 @@ export function PaceBandForm({ rows, onChange, drivenByResults, raceDate, course
                   onChange={(day) => update(i, { cutoffDayOffset: day })}
                   raceDate={raceDate}
                   title={t('Which day the cut-off falls on')}
+                />
+              </td>
+              <td className="num" style={{ minWidth: 88 }}>
+                <DraftCell
+                  value={limitOf(row)}
+                  align="right"
+                  placeholder="h:mm"
+                  title={t('How long this distance has, from its own gun')}
+                  onCommit={(text) => setLimit(i, text)}
                 />
               </td>
               <td>

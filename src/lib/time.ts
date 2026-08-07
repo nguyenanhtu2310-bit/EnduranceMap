@@ -174,3 +174,43 @@ export function eventSecondsFrom(clock: string, dayOffset = 0): number | null {
   if (seconds === null) return null;
   return seconds + Math.max(0, Math.round(dayOffset)) * 86400;
 }
+
+/**
+ * An elapsed limit as a race states it — "49:00", not "Sun 09:00" and not "2d 1h".
+ *
+ * Hours run past twenty-four rather than rolling over, because that is the number on the
+ * entry page: a 100 miles is a 49-hour race, and calling it "1:01:00" would be describing
+ * the same fact in a unit nobody uses. Minutes stay two digits so a column of these
+ * sorts and reads straight down.
+ */
+export function formatElapsedClock(seconds: number): string {
+  const whole = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(whole / 3600);
+  const minutes = Math.floor((whole % 3600) / 60);
+  return `${hours}:${String(minutes).padStart(2, '0')}`;
+}
+
+/**
+ * Reads a time limit as a race director would write one.
+ *
+ * "28:30" and "28" both mean twenty-eight and a half hours and twenty-eight hours — an
+ * organizer copying from a card types the first, one answering "how long have they got?"
+ * types the second, and refusing either would be pedantry. Anything else is refused
+ * rather than guessed at, because a limit misread is a cut-off in the wrong place.
+ */
+export function parseElapsedClock(text: string): number | null {
+  const trimmed = (text ?? '').trim();
+  if (!trimmed) return null;
+
+  const parts = trimmed.split(':');
+  if (parts.length > 2) return null;
+
+  const hours = Number(parts[0]);
+  const minutes = parts.length === 2 ? Number(parts[1]) : 0;
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  if (hours < 0 || minutes < 0 || minutes >= 60) return null;
+  // Whole minutes only: a cut-off is never published to the second.
+  if (!Number.isInteger(minutes)) return null;
+
+  return Math.round(hours * 3600 + minutes * 60);
+}
