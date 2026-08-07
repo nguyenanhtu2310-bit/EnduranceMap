@@ -48,6 +48,8 @@ import { readMeasuredSplits, type MeasuredSplits } from './lib/measuredSplits';
 import { decodeResults, encodeResults } from './lib/raceFile';
 import { parseCsv } from './lib/csv';
 import { timingStations, TIMING_FOLDER } from './lib/timingStations';
+import { manualPlacemarks, MANUAL_FOLDER, type ManualStation } from './lib/manualStations';
+import { ManualStationsPanel } from './components/ManualStationsPanel';
 import { parseGpx } from './lib/gpx';
 import { mergeCourseSources } from './lib/courseSources';
 import { PaceBandForm, type DistanceFormRow } from './components/PaceBandForm';
@@ -226,6 +228,13 @@ interface RaceSnapshot {
    */
   timedOverrides: Record<string, boolean>;
   /**
+   * Stations typed in from a published distance table rather than pinned on a map.
+   *
+   * Saved with the race: they are an hour of typing and the only copy of it, where a KML
+   * can always be dropped in again.
+   */
+  manualStations: ManualStation[];
+  /**
    * The event's first date, "YYYY-MM-DD". Optional — without one the tool counts days
    * instead of naming them, which is still better than a clock time that could mean
    * either of two mornings.
@@ -264,6 +273,7 @@ function blankSnapshot(): RaceSnapshot {
     gpx: [],
     lvs: [],
     timedOverrides: {},
+    manualStations: [],
     raceDate: '',
     rows: [],
     folders: [],
@@ -290,7 +300,7 @@ function blankSnapshot(): RaceSnapshot {
 
 /** Fields that go into a saved race file — the recomputable ones stay out. */
 const RACE_FILE_FIELDS = [
-  'kml', 'gpx', 'lvs', 'timedOverrides', 'raceDate',
+  'kml', 'gpx', 'lvs', 'timedOverrides', 'manualStations', 'raceDate',
   'rows', 'selectedFolders', 'settings', 'renumber', 'renumberPrefix',
   'results', 'contestMapping', 'stationOrder', 'amenityOverrides', 'amenities', 'raceName',
   'removedStations', 'removedPasses', 'reportSections', 'stationNotes', 'raceOverrides',
@@ -386,6 +396,7 @@ export default function App() {
   const [gpxFiles, setGpxFiles] = useState<LoadedGpx[]>([]);
   const [lvsFiles, setLvsFiles] = useState<LoadedGpx[]>([]);
   const [timedOverrides, setTimedOverrides] = useState<Record<string, boolean>>({});
+  const [manualStations, setManualStations] = useState<ManualStation[]>([]);
   const [raceDate, setRaceDate] = useState('');
 
   /*
@@ -562,6 +573,11 @@ export default function App() {
     [timingPointsByCourse, courses]
   );
 
+  const manualPlaced = useMemo(
+    () => manualPlacemarks(manualStations, new Map(courses.map((c) => [c.name, c.vertices]))),
+    [manualStations, courses]
+  );
+
   /**
    * The layers on offer, the map's own plus the one the timing configuration describes.
    *
@@ -572,12 +588,15 @@ export default function App() {
    * here it is a layer like any other — tickable, countable, and refusable.
    */
   const allFolders = useMemo<FolderSummary[]>(() => {
-    if (timingPlacemarks.placemarks.length === 0) return folders;
-    return [
-      ...folders,
-      { folder: TIMING_FOLDER, placemarkCount: timingPlacemarks.placemarks.length },
-    ];
-  }, [folders, timingPlacemarks]);
+    const extra: FolderSummary[] = [];
+    if (timingPlacemarks.placemarks.length > 0) {
+      extra.push({ folder: TIMING_FOLDER, placemarkCount: timingPlacemarks.placemarks.length });
+    }
+    if (manualPlaced.placemarks.length > 0) {
+      extra.push({ folder: MANUAL_FOLDER, placemarkCount: manualPlaced.placemarks.length });
+    }
+    return extra.length === 0 ? folders : [...folders, ...extra];
+  }, [folders, timingPlacemarks, manualPlaced]);
 
   /**
    * Ticks the timing layer only where nothing else could supply a station.
@@ -592,6 +611,20 @@ export default function App() {
       current.includes(TIMING_FOLDER) ? current : [...current, TIMING_FOLDER]
     );
   }, [timingPlacemarks, folders]);
+
+  /*
+   * Hand-typed stations tick themselves, always.
+   *
+   * Unlike the timing mats, which arrive as a side effect of loading a file for its
+   * names, nobody types a distance table by accident — leaving it unticked would mean an
+   * hour of typing producing nothing until the operator found a checkbox.
+   */
+  useEffect(() => {
+    if (manualPlaced.placemarks.length === 0) return;
+    setSelectedFolders((current) =>
+      current.includes(MANUAL_FOLDER) ? current : [...current, MANUAL_FOLDER]
+    );
+  }, [manualPlaced]);
 
   /*
    * Keeps one form row per course, from whichever file the course arrived in.
@@ -687,7 +720,7 @@ export default function App() {
 
   function captureSnapshot(): RaceSnapshot {
     return {
-      kml, gpx: gpxFiles, lvs: lvsFiles, timedOverrides, raceDate, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
+      kml, gpx: gpxFiles, lvs: lvsFiles, timedOverrides, manualStations, raceDate, rows, folders, selectedFolders, settings, renumber, renumberPrefix, result,
       // The map's own courses, not the merged view — the GPX half is re-derived from its
       // own text on the way back in, so the two can never be saved out of step.
       results, contestMapping, courses: kmlCourses, stationOrder, amenityOverrides, amenities, raceName,
@@ -711,6 +744,7 @@ export default function App() {
     setGpxFiles(snap.gpx ?? []);
     setLvsFiles(snap.lvs ?? []);
     setTimedOverrides(snap.timedOverrides ?? {});
+    setManualStations(snap.manualStations ?? []);
     setRaceDate(snap.raceDate ?? '');
     setStationOrder(snap.stationOrder);
     setAmenityOverrides(snap.amenityOverrides);
@@ -1309,8 +1343,11 @@ export default function App() {
 
   function calculate(overrides?: { stations?: string[]; passes?: string[] }) {
     // A map is no longer required: routes can come from GPX and stations from the timing
-    // configuration, which is every trail race that only cares about timing.
-    if (!kml && timingPlacemarks.placemarks.length === 0) return;
+    // configuration or from a distance table typed in by hand. A race planned months
+    // before anyone draws a KML has neither a map nor an LVS, and it is still a race.
+    const stationsExist =
+      !!kml || timingPlacemarks.placemarks.length > 0 || manualPlaced.placemarks.length > 0;
+    if (!stationsExist) return;
     const excludeStations = overrides?.stations ?? removedStations;
     const excludePasses = overrides?.passes ?? removedPasses;
     setError(null);
@@ -1360,9 +1397,10 @@ export default function App() {
       const computed = runPipeline(kml?.text ?? '', inputs, {
           extraCourses: gpxCourses,
           timingPoints: timingPointsByCourse,
-          extraPlacemarks: selectedFolders.includes(TIMING_FOLDER)
-            ? timingPlacemarks.placemarks
-            : [],
+          extraPlacemarks: [
+            ...(selectedFolders.includes(TIMING_FOLDER) ? timingPlacemarks.placemarks : []),
+            ...(selectedFolders.includes(MANUAL_FOLDER) ? manualPlaced.placemarks : []),
+          ],
           measuredArrivals,
           stationFolders: selectedFolders,
           excludeStations,
@@ -1574,6 +1612,24 @@ export default function App() {
             )}
           </p>
         )}
+
+        <h3 className="sub-head">
+          {t('Stations by hand')} <span className="sub-kind">{t('no file')}</span>
+        </h3>
+        <p className="hint">
+          {t(
+            'From the distance table the race publishes — checkpoint, kilometres from the start, and the cut-off where there is one. The route says where a kilometre is, so that is enough to place a station and model everything that arrives at it.'
+          )}
+        </p>
+        <ManualStationsPanel
+          stations={manualStations}
+          onChange={(next) => {
+            setManualStations(next);
+            setResult(null);
+          }}
+          courses={courses.map((c) => ({ name: c.name, totalKm: c.totalKm }))}
+          warnings={manualPlaced.warnings}
+        />
 
         <h3 className="sub-head">{t('Timing points')} <span className="sub-kind">LVS</span></h3>
         <p className="hint">

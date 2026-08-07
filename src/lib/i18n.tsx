@@ -257,6 +257,14 @@ const VI: Record<string, string> = {
 
   // The field on the course.
   'Master timeline': 'Dòng thời gian tổng',
+  'Stations by hand': 'Nhập trạm thủ công',
+  'no file': 'không cần tệp',
+  'Add a station': 'Thêm một trạm',
+  'Remove this station': 'Xoá trạm này',
+  'Km from start': 'Km tính từ vạch xuất phát',
+  'Measured along': 'Đo theo cung đường',
+  'From the distance table the race publishes — no map pin needed.':
+    'Lấy từ bảng cự ly mà giải đã công bố — không cần ghim trên bản đồ.',
   'Wider': 'Rộng hơn',
   'Taller': 'Cao hơn',
   'Stretch the timeline': 'Kéo giãn trục thời gian',
