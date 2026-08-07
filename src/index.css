@@ -1858,3 +1858,79 @@ button.row-remove:disabled {
   background: var(--color-ok-bg);
   color: var(--color-ok);
 }
+
+/*
+ * Who did not finish, and where they were last counted.
+ *
+ * "Last seen at" throughout, never "stopped at". The gap between two mats on a real
+ * course runs to fourteen kilometres, and a crew sent to the wrong end of one is a crew
+ * in the wrong place — the file knows where a runner was last read and nothing more.
+ */
+.attrition {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+}
+
+.attrition h4 {
+  margin: 0 0 0.3rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.attrition-contest + .attrition-contest {
+  margin-top: 1.1rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--color-divider);
+}
+
+.attrition-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+.attrition-count {
+  color: var(--color-warn);
+}
+
+.attrition-table {
+  font-size: 0.84rem;
+}
+
+.attrition-table td,
+.attrition-table th {
+  padding: 0.3rem 0.6rem;
+}
+
+.attrition-table .attrition-bar {
+  width: 45%;
+  padding-right: 0;
+}
+
+.attrition-bar span {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-neutral-700);
+  min-width: 2px;
+}
+
+/* The leg that broke the race. Named by colour because it is the one operational
+   conclusion in the table, and a reader scanning eleven rows should not have to find it. */
+.attrition-table tr.worst .attrition-bar span {
+  background: var(--color-warn);
+}
+
+.attrition-table tr.worst td {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.attrition-caveat {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
+}

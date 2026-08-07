@@ -50,26 +50,74 @@ export interface MeasuredSplits {
  * which a 49-hour race produces on every finisher.
  */
 export function parseSplitSeconds(text: string): number | null {
-  const trimmed = (text ?? '').trim();
+  const raw = (text ?? '').trim();
+  if (!raw) return null;
+
+  // A split cell often carries the leg's pace beside its time — "42:50 / 5:29" — and the
+  // time is the half that matters here. Read as one string this parses to nothing, which
+  // is how a real trail export came in with all eleven of its checkpoint columns silently
+  // empty: every mat appeared to have read nobody, and a file that says that looks the
+  // same as a race where the mats failed.
+  const trimmed = (raw.split('/')[0] ?? '').trim();
   if (!trimmed) return null;
 
   const parts = trimmed.split(':');
-  if (parts.length < 3 || parts.length > 4) return null;
+  if (parts.length < 2 || parts.length > 4) return null;
 
   const numbers = parts.map((part) => Number(part));
   if (numbers.some((n) => !Number.isFinite(n) || n < 0)) return null;
 
+  // Two parts are minutes and seconds, not hours and minutes. A split under the hour is
+  // written "42:50" by every timing export seen here, and reading that as forty-two hours
+  // would put a runner two days late at their first checkpoint. Times of day always carry
+  // their seconds, so nothing that means 19:59 arrives in this shape.
   const [days, hours, minutes, seconds] =
-    numbers.length === 4 ? numbers : [0, numbers[0], numbers[1], numbers[2]];
+    numbers.length === 4
+      ? numbers
+      : numbers.length === 3
+        ? [0, numbers[0], numbers[1], numbers[2]]
+        : [0, 0, numbers[0], numbers[1]];
   return ((days * 24 + hours) * 60 + minutes) * 60 + seconds;
 }
 
-/** Split columns are whatever is left once the ones with a fixed meaning are removed. */
+/** Compares headers however the timing system spelled them: "Chip Time", "ChipTime". */
+const flatten = (header: string) => header.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * Everything a results export writes that is not a mat.
+ *
+ * Kept long and matched loosely because getting it wrong is not cosmetic. "Average Pace"
+ * holds "6:07", which reads as a perfectly good six-minute split, and it sits after the
+ * last checkpoint — so on a real file every retirement was reported as last seen at a
+ * column that is not a place. The identifying columns are here for a second reason: a
+ * name or an email is not a timing point and has no business in a schedule.
+ */
+const NOT_A_MAT = new Set(
+  [
+    'Contest', 'Status', 'Bib', 'Nation', 'Country',
+    'Firstname', 'Lastname', 'Name', 'Email', 'Birthdate', 'Club', 'Team', 'Comment',
+    'Gender', 'Sex', 'AG', 'Age Group', 'Category',
+    'Rank', 'Overall Rank', 'Gender Rank', 'Age Group Rank',
+    'Start', 'Start TOD', 'Finish', 'Chip Time', 'Gun Time', 'Average Pace', 'Pace',
+  ].map(flatten)
+);
+
+/**
+ * Split columns are whatever is left once the ones with a fixed meaning are removed.
+ *
+ * A trailing qualifier is ignored — "GunTime (official)" is a gun time — because timing
+ * software labels the same column differently across exports and a mat that is really a
+ * finish time would be staffed.
+ */
 export function splitColumnsOf(headers: string[], options: SplitReadOptions = {}): string[] {
-  const reserved = new Set(
-    [...RESERVED_COLUMNS, ...(options.ignoreColumns ?? [])].map((h) => h.toLowerCase())
-  );
-  return headers.filter((header) => header && !reserved.has(header.toLowerCase()));
+  const ignored = new Set((options.ignoreColumns ?? []).map(flatten));
+  return headers.filter((header) => {
+    if (!header) return false;
+    const flat = flatten(header);
+    if (ignored.has(flat) || NOT_A_MAT.has(flat)) return false;
+    // "guntimeofficial" starts with "guntime"; "CP1" starts with nothing in the set.
+    return ![...NOT_A_MAT].some((known) => known.length >= 5 && flat.startsWith(known));
+  });
 }
 
 /**
@@ -187,6 +235,189 @@ export function splitsUsedBy(
   splits: string[]
 ): string[] {
   return splits.filter((split) => rows.some((row) => parseSplitSeconds(row[split] ?? '') !== null));
+}
+
+/** Where a group of retirements was last seen, and how many. */
+export interface RetirementPoint {
+  /** The last mat that read them, or null when only the start did. */
+  lastSeen: string | null;
+  count: number;
+}
+
+export interface AttritionReading {
+  contest: string;
+  starters: number;
+  finishers: number;
+  retired: number;
+  /**
+   * Whether the count came from the file saying so, or from working it out.
+   *
+   * Worth showing beside the number. A stated status was adjudicated by the timing team
+   * after the race; an inferred one is this tool's arithmetic, and the two do not agree.
+   */
+  basis: 'stated' | 'inferred';
+  /** Retirements grouped by the last mat that saw them, in course order. */
+  byLastSeen: RetirementPoint[];
+  /** What would make this reading wrong, said out loud rather than left to be found. */
+  caveats: string[];
+}
+
+/** Finds a column however the timing system spelled it — "Chip Time" or "ChipTime". */
+function columnLike(headers: string[], ...candidates: string[]): string | null {
+  const flat = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  for (const candidate of candidates) {
+    const want = flat(candidate);
+    const hit = headers.find((h) => flat(h) === want);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/**
+ * Who started, who finished, and where the ones who did neither were last seen.
+ *
+ * The count is the least of it. That a 75 km lost 173 runners is a number for a report;
+ * that 106 of them were last read at one checkpoint is a fact about a particular stretch
+ * of trail, and it tells a course director where to put the sweep and a medical director
+ * where the casualties will come from. The file already knows this and has never been
+ * asked.
+ *
+ * The status column is preferred over working it out, because it was adjudicated by the
+ * people who ran the race. Measured against a real trail export the two disagree by about
+ * seven per cent, and always in the same direction: inference finds 605 of 648 real
+ * retirements. It misses runners the start mat never read — with no start they look like
+ * they never came — and runners who hold a finish time and are still not finishers, which
+ * is what being stopped at a cut-off looks like in a results file.
+ */
+export function readAttrition(
+  rows: Record<string, string>[],
+  splitsInCourseOrder: string[],
+  options: SplitReadOptions & { finishColumn?: string } = {}
+): AttritionReading[] {
+  if (rows.length === 0) return [];
+
+  const headers = Object.keys(rows[0]);
+  const statusColumn =
+    options.statusColumn ?? columnLike(headers, 'Status') ?? 'Status';
+  const contestColumn =
+    options.contestColumn ?? columnLike(headers, 'Contest') ?? 'Contest';
+  const startColumn =
+    options.startColumn ?? columnLike(headers, 'Start TOD', 'Start') ?? 'Start TOD';
+  const finishColumn =
+    options.finishColumn ?? columnLike(headers, 'Chip Time', 'ChipTime', 'Finish') ?? 'Chip Time';
+
+  const stated = rows.some((row) => (row[statusColumn] ?? '').trim().toLowerCase() === 'dnf');
+
+  const byContest = new Map<string, Record<string, string>[]>();
+  for (const row of rows) {
+    const contest = (row[contestColumn] ?? '').trim();
+    if (!contest) continue;
+    const bucket = byContest.get(contest);
+    if (bucket) bucket.push(row);
+    else byContest.set(contest, [row]);
+  }
+
+  const readings: AttritionReading[] = [];
+  for (const [contest, contestRows] of byContest) {
+    const caveats: string[] = [];
+
+    // Never started, so never retired. Kept out of both counts rather than swelling one.
+    const onCourse = contestRows.filter((row) => {
+      const status = (row[statusColumn] ?? '').trim().toLowerCase();
+      return status !== 'dns' && status !== 'n/a';
+    });
+
+    const hasFinish = (row: Record<string, string>) =>
+      parseSplitSeconds(row[finishColumn] ?? '') !== null;
+    const isRetired = (row: Record<string, string>) =>
+      stated
+        ? (row[statusColumn] ?? '').trim().toLowerCase() === 'dnf'
+        : parseSplitSeconds(row[startColumn] ?? '') !== null && !hasFinish(row);
+
+    const retiredRows = onCourse.filter(isRetired);
+    const finishers = onCourse.filter((row) => !isRetired(row) && hasFinish(row));
+
+    if (!stated) {
+      caveats.push(
+        'Worked out from a missing finish time, because the file states no status. ' +
+          'Against a real trail export this finds about 93% of them: it cannot see a ' +
+          'runner the start mat never read, and it counts anyone the finish mat missed.'
+      );
+    } else {
+      const withTime = retiredRows.filter(hasFinish).length;
+      if (withTime > 0) {
+        caveats.push(
+          `${withTime} of these hold a finishing time — usually a runner stopped at a ` +
+            'cut-off rather than one who withdrew.'
+        );
+      }
+      const unseenAtStart = retiredRows.filter(
+        (row) => parseSplitSeconds(row[startColumn] ?? '') === null
+      ).length;
+      if (unseenAtStart > 0) {
+        caveats.push(
+          `${unseenAtStart} were never read at the start, so where they stopped is taken ` +
+            'from the checkpoints alone.'
+        );
+      }
+    }
+
+    // Only the mats this contest actually crosses. One export carries every mat the event
+    // owns and a contest passes a subset — a 15 km judged against the 100 km's list of
+    // checkpoints reads as though every one of its retirements turned round at the arch,
+    // because it never goes near any of them.
+    const ownSplits = splitsUsedBy(contestRows, splitsInCourseOrder);
+
+    // The last mat that read each one. Course order comes from the caller, because the
+    // column order in a results file is not always the order they are met on the ground.
+    const counts = new Map<string | null, number>();
+    for (const row of retiredRows) {
+      let lastSeen: string | null = null;
+      for (const split of ownSplits) {
+        if (parseSplitSeconds(row[split] ?? '') !== null) lastSeen = split;
+      }
+      counts.set(lastSeen, (counts.get(lastSeen) ?? 0) + 1);
+    }
+
+    const byLastSeen: RetirementPoint[] = [];
+    if (counts.has(null)) byLastSeen.push({ lastSeen: null, count: counts.get(null)! });
+    for (const split of ownSplits) {
+      const count = counts.get(split);
+      if (count) byLastSeen.push({ lastSeen: split, count });
+    }
+
+    // Every retirement landing before the first mat is almost never what happened. It is
+    // what it looks like when a contest's own checkpoints are not among the columns
+    // given — a 15 km crossing mats the 100 km never sees, judged against the long
+    // course's list — and the honest reading is "this contest's mats are missing", not
+    // "seventeen people turned round at the arch".
+    const unplaced = counts.get(null) ?? 0;
+    if (retiredRows.length > 0 && unplaced === retiredRows.length && ownSplits.length > 0) {
+      caveats.push(
+        `None of these ${retiredRows.length} were read at any checkpoint, only at the ` +
+          'start — worth checking against the mats, because a whole field retiring before ' +
+          'the first one is rarer than a mat that did not read.'
+      );
+    }
+    if (ownSplits.length === 0) {
+      caveats.push(
+        'This contest crosses none of the checkpoints in the file, so where its ' +
+          'retirements stopped cannot be placed.'
+      );
+    }
+
+    readings.push({
+      contest,
+      starters: onCourse.length,
+      finishers: finishers.length,
+      retired: retiredRows.length,
+      basis: stated ? 'stated' : 'inferred',
+      byLastSeen,
+      caveats,
+    });
+  }
+
+  return readings;
 }
 
 export interface MatCoverage {

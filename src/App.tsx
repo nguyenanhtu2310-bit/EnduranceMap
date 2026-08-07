@@ -38,9 +38,16 @@ import { TimingPointsPanel } from './components/TimingPointsPanel';
 import { StationNamingTable } from './components/StationNamingTable';
 import { CourseCommandView } from './components/CourseCommandView';
 import { FieldSlider } from './components/FieldSlider';
+import { AttritionPanel } from './components/AttritionPanel';
 import { readCourseProfile, type CourseProfile } from './lib/courseProfile';
 import { parseTimingPoints, type TimingPoint } from './lib/timingPoints';
-import { readMeasuredSplits, type MeasuredSplits } from './lib/measuredSplits';
+import {
+  readAttrition,
+  readMeasuredSplits,
+  splitColumnsOf,
+  type AttritionReading,
+  type MeasuredSplits,
+} from './lib/measuredSplits';
 import { parseCsv } from './lib/csv';
 import { timingStations, TIMING_FOLDER } from './lib/timingStations';
 import { parseGpx } from './lib/gpx';
@@ -201,6 +208,13 @@ type LoadedResults =
        * profiles model a field onto a future race, these say what happened at this one.
        */
       splits?: MeasuredSplits;
+      /**
+       * Who started, who finished, and where the rest were last read.
+       *
+       * A fact about this file rather than a model of a future race, so it is kept with
+       * the file and shown beside it.
+       */
+      attrition?: AttritionReading[];
     }
   | { kind: 'multisport'; fileName: string; profiles: MultisportProfile[] };
 
@@ -931,13 +945,21 @@ export default function App() {
     // and a file from last year's says how the field behaves. The same export can be
     // either, so both are kept and the operator decides which is being used.
     let splits: MeasuredSplits | undefined;
+    let attrition: AttritionReading[] | undefined;
     try {
-      const read = readMeasuredSplits(parseCsv(text));
+      const rows = parseCsv(text);
+      const read = readMeasuredSplits(rows);
       if (read.contests.some((c) => c.arrivalsBySplit.size > 0)) splits = read;
+      // Column order stands in for course order: a timing export writes its mats in the
+      // order they are met, and the alternative is asking the operator to sort them
+      // before the file can say anything at all.
+      const found = readAttrition(rows, splitColumnsOf(Object.keys(rows[0] ?? {})));
+      if (found.some((r) => r.retired > 0)) attrition = found;
     } catch {
       splits = undefined;
+      attrition = undefined;
     }
-    setResults({ kind: 'single', fileName, profiles: parsed.profiles, splits });
+    setResults({ kind: 'single', fileName, profiles: parsed.profiles, splits, attrition });
     setContestMapping(mapping);
     applyProfilesToRows(parsed.profiles, mapping);
   }
@@ -1337,6 +1359,10 @@ export default function App() {
               Optional. Choose a CSV finish-line result from a comparable race to replace the estimated pace
               band with the real field — every runner's own pace and start offset.
             </p>
+            {results?.kind === 'single' && results.attrition && (
+              <AttritionPanel readings={results.attrition} />
+            )}
+
             {results?.kind === 'single' && results.splits && (
               <div className="notice" style={{ marginBottom: '1rem' }}>
                 <label className="inline-field">
