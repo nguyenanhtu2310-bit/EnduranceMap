@@ -147,6 +147,22 @@ export function eventDayOffset(totalSeconds: number): number {
 }
 
 /**
+ * Just the day part of an event clock — "Sat", or "D+1" with no date to name it by.
+ *
+ * For the line under a time, where the time itself is shown separately because it is
+ * typed into. Every day is named, the first included: a sheet where only the later rows
+ * carry a day does not read as "the rest are day one", it reads as though someone
+ * forgot, and on a race that runs three days that is the wrong thing to leave a crew
+ * chief guessing at four in the morning.
+ */
+export function eventDayLabel(totalSeconds: number, raceDate?: string): string {
+  const formatted = formatEventClock(totalSeconds, raceDate);
+  const space = formatted.lastIndexOf(' ');
+  if (space >= 0) return formatted.slice(0, space);
+  return `Day ${eventDayOffset(totalSeconds) + 1}`;
+}
+
+/**
  * Seconds from the event's first midnight, from a clock time and the day it is on.
  *
  * The day is stated rather than worked out. A 100 miles starting 08:00 Friday and closing

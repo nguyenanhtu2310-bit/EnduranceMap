@@ -7,7 +7,6 @@ import {
   instantiateKnownContest,
   instantiateTemplate,
   planFromCourses,
-  skipsNamingOwnRace,
   unboundCourses,
   validatePlan,
   type MultisportPlan,
@@ -220,29 +219,6 @@ describe('unboundCourses', () => {
     const plan: MultisportPlan = { races: [instantiateTemplate('triathlon', 'ms-1')] };
     const bound = autoBindCourses(plan, SUBIC);
     expect(unboundCourses(bound, [...SUBIC, course('Sprint Bike', 20)])).toEqual(['Sprint Bike']);
-  });
-});
-
-describe('skipsNamingOwnRace', () => {
-  function planNamed(name: string): MultisportPlan {
-    return { races: [instantiateTemplate('triathlon', 'ms-1', name)] };
-  }
-
-  it('says nothing when the skips name other events', () => {
-    expect(skipsNamingOwnRace('Kids, Sprint', planNamed('IRONMAN 70.3'))).toEqual([]);
-  });
-
-  it('catches a seeded skip that would delete the race being planned', () => {
-    // The seed is right on a 70.3 map and disastrous on a sprint one.
-    expect(skipsNamingOwnRace('Kids, Sprint', planNamed('Sunrise Sprint'))).toEqual(['sprint']);
-  });
-
-  it('ignores blank fragments and stray commas', () => {
-    expect(skipsNamingOwnRace(' , Kids ,, ', planNamed('Kids Aquathlon'))).toEqual(['kids']);
-  });
-
-  it('has nothing to say about a single-sport race', () => {
-    expect(skipsNamingOwnRace('Kids, Sprint', null)).toEqual([]);
   });
 });
 

@@ -496,23 +496,6 @@ export function validatePlan(plan: MultisportPlan, courses: Course[]): PlanProbl
   return problems;
 }
 
-/**
- * Skip fragments that name the race being planned.
- *
- * A festival map carries a sprint and a kids race alongside the 70.3, so seeding those
- * into the skip list is right — until the sprint IS the race being planned, at which
- * point the same seed quietly deletes its checkpoints. Matching is on the fragment
- * appearing in the race name, the same way the skip itself matches placemark names.
- */
-export function skipsNamingOwnRace(skipNames: string, plan: MultisportPlan | null): string[] {
-  const fragments = skipNames
-    .split(',')
-    .map((f) => f.trim().toLowerCase())
-    .filter(Boolean);
-  const names = (plan?.races ?? []).map((r) => r.name.toLowerCase());
-  return fragments.filter((fragment) => names.some((name) => name.includes(fragment)));
-}
-
 /** Routes on the map that no leg claims — usually another event sharing the file. */
 export function unboundCourses(plan: MultisportPlan, courses: Course[]): string[] {
   const bound = new Set(

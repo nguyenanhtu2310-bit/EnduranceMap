@@ -2,32 +2,28 @@ import { useMemo, useState } from 'react';
 import type { PipelineStation } from '../lib/pipeline';
 import { peakRunnersPerWindow, type ActivityLevel } from '../lib/schedule';
 import { secondsToClockTime } from '../lib/time';
-import { eventDayOffset, formatEventClock } from '../lib/time';
+import { eventDayLabel, eventDayOffset } from '../lib/time';
 import { useT } from '../lib/i18n';
 import { DEFAULT_HISTOGRAM_BIN_MINUTES } from '../lib/config';
 import type { RaceOverrides, StationOverride } from '../lib/overrides';
 import { EditableCell } from './EditableCell';
-import { formatDuration, windowSeconds } from '../lib/time';
+import { formatDuration } from '../lib/time';
+
+/**
+ * The day a time falls on, shown on the line under it rather than inside it.
+ *
+ * Kept out of the time itself because the open and close cells are typed into: an
+ * operator entering "06:31" should not have to know the tool would rather have had
+ * "Sat 06:31", and an override stored with a day in it would stop matching the value it
+ * was meant to replace.
+ */
+const dayTag = eventDayLabel;
 
 /**
  * When the busiest window falls, beside how many arrive in it. The count says how much
  * to send; the clock says when to have it there, and reading it off a chart in another
  * section was a step the schedule could take for itself.
  */
-/**
- * The day a moment falls on, or nothing when it is the event's first.
- *
- * Shown beside the time rather than inside it, because the open and close cells are
- * typed into: an operator entering "06:31" should not have to know the tool would
- * rather have had "Sat 06:31", and an override stored with a day in it would stop
- * matching the value it was meant to replace.
- */
-function dayTag(totalSeconds: number, raceDate?: string): string {
-  if (eventDayOffset(totalSeconds) === 0) return '';
-  const formatted = formatEventClock(totalSeconds, raceDate);
-  return formatted.slice(0, formatted.lastIndexOf(' '));
-}
-
 function peakWindow(station: PipelineStation): string {
   const bin = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
   if (!bin) return '—';
@@ -79,12 +75,22 @@ const SORT_LABELS: Record<Exclude<SortKey, 'course'>, string> = {
   duration: 'Longest open first',
 };
 
+/**
+ * When a station opens and how long it stands, on the event's clock rather than a wall's.
+ *
+ * Taken from the schedule's own seconds, which count from the event's first midnight and
+ * therefore keep the day. Deriving these from the two clock strings — which is what they
+ * used to do — silently capped every window at twenty-four hours: a station open Saturday
+ * 05:37 and closed Sunday 11:48 reported six hours twelve, not thirty hours eleven, and
+ * that number is what a shift is planned against. The same wrap put a Sunday close before
+ * a Saturday one whenever the table was sorted.
+ */
 function openSeconds(station: PipelineStation): number {
-  return windowSeconds('00:00:00', station.schedule.openClockTime) ?? 0;
+  return station.schedule.openSeconds;
 }
 
 function stationWindowSeconds(station: PipelineStation): number {
-  return windowSeconds(station.schedule.openClockTime, station.schedule.closeClockTime) ?? 0;
+  return Math.max(0, station.schedule.closeSeconds - station.schedule.openSeconds);
 }
 
 export function StationScheduleTable({
@@ -110,7 +116,7 @@ export function StationScheduleTable({
     if (sort === 'open') ranked.sort((a, b) => openSeconds(a) - openSeconds(b));
     // Latest closing and longest open are both "most exposed first", so they descend.
     if (sort === 'close') {
-      ranked.sort((a, b) => openSeconds(b) + stationWindowSeconds(b) - (openSeconds(a) + stationWindowSeconds(a)));
+      ranked.sort((a, b) => b.schedule.closeSeconds - a.schedule.closeSeconds);
     }
     if (sort === 'duration') ranked.sort((a, b) => stationWindowSeconds(b) - stationWindowSeconds(a));
     return ranked;

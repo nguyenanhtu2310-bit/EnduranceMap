@@ -3,7 +3,7 @@ import { isEndZoneStop, passKey, type PipelineResult, type PipelineStation } fro
 import { useT } from '../lib/i18n';
 import type { CrossingOverride, RaceOverrides } from '../lib/overrides';
 import { EditableCell } from './EditableCell';
-import { parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
+import { eventDayLabel, parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
 import {
   DEFAULT_AMENITIES,
   resolveAmenities,
@@ -15,6 +15,8 @@ import {
 
 interface Props {
   result: PipelineResult;
+  /** The event's first date, so a station standing past midnight can name its days. */
+  raceDate?: string;
   rules: AmenityRules;
   /** The columns this race provisions, which the operator names and orders. */
   amenities?: Amenity[];
@@ -84,6 +86,7 @@ function buildRun(result: PipelineResult, courseName: string): Stop[] {
 
 export function DistanceRunView({
   result,
+  raceDate,
   rules,
   amenities = DEFAULT_AMENITIES,
   overrides,
@@ -221,8 +224,20 @@ export function DistanceRunView({
                     )}
                     {stop.gapKm.toFixed(1)}
                   </td>
-                  <td className="num">{hm(stop.station.schedule.openClockTime)}</td>
-                  <td className="num">{hm(stop.station.schedule.closeClockTime)}</td>
+                  {/* Each end names its own day — a station opening Saturday and closing
+                      Sunday says so here rather than only in the schedule. */}
+                  <td className="num">
+                    {hm(stop.station.schedule.openClockTime)}
+                    <span className="colocated">
+                      {eventDayLabel(stop.station.schedule.openSeconds, raceDate)}
+                    </span>
+                  </td>
+                  <td className="num">
+                    {hm(stop.station.schedule.closeClockTime)}
+                    <span className="colocated">
+                      {eventDayLabel(stop.station.schedule.closeSeconds, raceDate)}
+                    </span>
+                  </td>
                   <td className="num">
                     {onCrossingEdit ? (
                       <EditableCell

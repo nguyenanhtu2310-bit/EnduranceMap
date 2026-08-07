@@ -3,10 +3,12 @@ import type { Course } from '../lib/snap';
 import { passKey, type PipelineResult, type PipelineStation } from '../lib/pipeline';
 import type { CrossingOverride, RaceOverrides } from '../lib/overrides';
 import { EditableCell } from './EditableCell';
-import { parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
+import { eventDayLabel, parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
 
 interface Props {
   result: PipelineResult;
+  /** The event's first date, so a window that runs past midnight can name its days. */
+  raceDate?: string;
   notes?: Record<string, string>;
   /** Supplying this makes the note editable here as well as in the schedule. */
   onNoteChange?: (mapName: string, note: string) => void;
@@ -46,7 +48,7 @@ function cellFor(station: PipelineStation, courseName: string): Cell {
   };
 }
 
-export function TimingMatrix({ result, notes, onNoteChange, overrides, onCrossingEdit }: Props) {
+export function TimingMatrix({ result, raceDate, notes, onNoteChange, overrides, onCrossingEdit }: Props) {
   const t = useT();
   const courses = orderedCourses(result);
   const startByCourse = new Map(result.distanceInputs.map((d) => [d.courseName, d.startTimeClock]));
@@ -104,8 +106,17 @@ export function TimingMatrix({ result, notes, onNoteChange, overrides, onCrossin
                   notes?.[station.mapName] && <span className="colocated note">{notes[station.mapName]}</span>
                 )}
               </td>
+              {/* Both ends carry their day. A window reading "05:37–11:48" is either six
+                  hours or thirty, and on a course staffed across three days the reader
+                  has no way to tell which from the clock alone. */}
               <td className="km">
                 {hm(station.schedule.openClockTime)}–{hm(station.schedule.closeClockTime)}
+                <span className="colocated">
+                  {eventDayLabel(station.schedule.openSeconds, raceDate)}
+                  {eventDayLabel(station.schedule.closeSeconds, raceDate) !==
+                    eventDayLabel(station.schedule.openSeconds, raceDate) &&
+                    `–${eventDayLabel(station.schedule.closeSeconds, raceDate)}`}
+                </span>
               </td>
               {courses.map((course) => {
                 const cell = cellFor(station, course.name);

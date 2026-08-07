@@ -53,7 +53,6 @@ import {
   detectPlacemarkLeg,
   instantiateTemplate,
   planFromCourses,
-  skipsNamingOwnRace,
   validatePlan,
   type MultisportLeg,
   type MultisportPlan,
@@ -251,8 +250,6 @@ interface RaceSnapshot {
    * separate format flag that could disagree with the legs it holds.
    */
   multisport: MultisportPlan | null;
-  /** Comma-separated name fragments whose placemarks are left out of the schedule. */
-  skipNames: string;
 }
 
 function blankSnapshot(): RaceSnapshot {
@@ -282,7 +279,6 @@ function blankSnapshot(): RaceSnapshot {
     stationNotes: {},
     raceOverrides: EMPTY_OVERRIDES,
     multisport: null,
-    skipNames: '',
   };
 }
 
@@ -292,7 +288,7 @@ const RACE_FILE_FIELDS = [
   'rows', 'selectedFolders', 'settings', 'renumber', 'renumberPrefix',
   'results', 'contestMapping', 'stationOrder', 'amenityOverrides', 'amenities', 'raceName',
   'removedStations', 'removedPasses', 'reportSections', 'stationNotes', 'raceOverrides',
-  'multisport', 'skipNames',
+  'multisport',
 ] as const;
 
 /**
@@ -554,7 +550,6 @@ export default function App() {
   const [stationNotes, setStationNotes] = useState<Record<string, string>>({});
   const [raceOverrides, setRaceOverrides] = useState<RaceOverrides>(EMPTY_OVERRIDES);
   const [multisport, setMultisport] = useState<MultisportPlan | null>(null);
-  const [skipNames, setSkipNames] = useState('');
 
   const [tabs, setTabs] = useState<{ id: string; label: string }[]>([{ id: 'race-1', label: 'Race 1' }]);
   const [activeTab, setActiveTab] = useState('race-1');
@@ -612,7 +607,7 @@ export default function App() {
       // own text on the way back in, so the two can never be saved out of step.
       results, contestMapping, courses: kmlCourses, stationOrder, amenityOverrides, amenities, raceName,
       removedStations, removedPasses, reportSections, stationNotes, raceOverrides,
-      multisport, skipNames,
+      multisport,
     };
   }
 
@@ -642,7 +637,6 @@ export default function App() {
     setStationNotes(snap.stationNotes);
     setRaceOverrides(snap.raceOverrides ?? EMPTY_OVERRIDES);
     setMultisport(snap.multisport ?? null);
-    setSkipNames(snap.skipNames ?? '');
     setError(null);
   }
 
@@ -980,16 +974,8 @@ export default function App() {
       return;
     }
     setMultisport(planFromCourses(template, courses));
-    if (!skipNames.trim()) setSkipNames('Kids, Sprint');
     setResult(null);
   }
-
-  /**
-   * Catches a skip fragment that names the race being planned — seeding "Sprint" is
-   * right on a 70.3 map and disastrous on a sprint one, and the difference is only
-   * visible once a race has been named.
-   */
-  const selfSkips = useMemo(() => skipsNamingOwnRace(skipNames, multisport), [skipNames, multisport]);
 
   /**
    * Adds a second race to the same map — a 70.3 and a 140.6 usually share most of their
@@ -1173,7 +1159,6 @@ export default function App() {
           stationFolders: [...selectedFolders, TIMING_FOLDER],
           excludeStations,
           excludePasses,
-          excludePlacemarkContaining: skipNames.split(',').map((f) => f.trim()).filter(Boolean),
           restrictCoursesFor: multisport
             ? buildCourseRestriction(multisport, detectPlacemarkLeg)
             : undefined,
@@ -1191,11 +1176,6 @@ export default function App() {
       const ordered = {
         ...computed,
         warnings: [
-          ...selfSkips.map(
-            (fragment) =>
-              `"${fragment}" is in the skip list and also names the race being planned — ` +
-              `its own points are being left out. Clear it from step 2 if that is not what you want.`
-          ),
           ...built.warnings,
           ...timingPlacemarks.warnings,
           ...computed.warnings,
@@ -1340,8 +1320,6 @@ export default function App() {
               renumberPrefix={renumberPrefix}
               onRenumberChange={setRenumber}
               onRenumberPrefixChange={setRenumberPrefix}
-              skipNames={skipNames}
-              onSkipNamesChange={setSkipNames}
             />
           </section>
 
@@ -1764,6 +1742,7 @@ export default function App() {
             />
             <DistanceRunView
               result={planned}
+              raceDate={raceDate}
               rules={DEFAULT_AMENITY_RULES}
               amenities={amenities}
               overrides={amenityOverrides}
@@ -1793,6 +1772,7 @@ export default function App() {
           </p>
             <TimingMatrix
               result={planned}
+              raceDate={raceDate}
               notes={stationNotes}
               onNoteChange={changeStationNote}
               overrides={raceOverrides}

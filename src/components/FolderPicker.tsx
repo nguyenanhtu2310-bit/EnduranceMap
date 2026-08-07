@@ -9,9 +9,6 @@ interface Props {
   renumberPrefix: string;
   onRenumberChange: (renumber: boolean) => void;
   onRenumberPrefixChange: (prefix: string) => void;
-  /** Comma-separated name fragments whose placemarks are left out entirely. */
-  skipNames: string;
-  onSkipNamesChange: (value: string) => void;
 }
 
 export function FolderPicker({
@@ -22,8 +19,6 @@ export function FolderPicker({
   renumberPrefix,
   onRenumberChange,
   onRenumberPrefixChange,
-  skipNames,
-  onSkipNamesChange,
 }: Props) {
   const t = useT();
   function toggle(folder: string) {
@@ -60,24 +55,6 @@ export function FolderPicker({
         {t(
           'Only the folders you tick get scheduled. Cut-off times are still read from the whole map, so a station that shares a spot with a cut-off point keeps that closing time even when the cut-off folder is unticked.'
         )}
-      </p>
-
-      <div className="renumber-row">
-        <label className="field" style={{ margin: 0, flex: '1 1 22rem' }}>
-          {t('Skip points whose name contains')}
-          <input
-            type="text"
-            value={skipNames}
-            placeholder="Kids, Sprint"
-            onChange={(e) => onSkipNamesChange(e.target.value)}
-            style={{ marginTop: '0.25rem' }}
-          />
-        </label>
-      </div>
-      <p className="hint" style={{ margin: '0.5rem 0 0' }}>
-        Separate fragments with commas. One map often carries several events at once, and their points sit in
-        the same folders as the race being planned — close enough to merge into its stations — so ticking
-        folders alone cannot separate them.
       </p>
 
       <div className="renumber-row">

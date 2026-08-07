@@ -64,8 +64,17 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * Wide enough for the widest table, which is the race card.
+ *
+ * 1180px was a reading measure, set when the page was mostly prose and short tables. The
+ * race card now carries fourteen columns — name, route, gun, day, spread, field, three
+ * paces, cut-off, cut-off day, remove — and at that width the last of them sat off the
+ * edge behind a scrollbar, so the cut-off column could be filled in only by someone who
+ * knew to look for it. Prose keeps its own measure further down; this is the frame.
+ */
 .app {
-  max-width: 1180px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 2.5rem 1.25rem 3rem;
 }
@@ -1692,6 +1701,17 @@ button.row-remove:disabled {
   fill: var(--color-warn);
   font-size: 9px;
   font-weight: 600;
+}
+
+/* The band's number, keyed to the row of the same number in the table below. */
+.climb-band .climb-number {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.climb-index {
+  color: var(--color-warn);
+  font-weight: 700;
 }
 
 /* The guns, drawn against the timeline the slider runs along. */

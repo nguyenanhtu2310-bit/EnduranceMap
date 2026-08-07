@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildCourse } from '../geo';
 import { runPipeline, type DistanceInput } from '../pipeline';
 import { fieldWindow, runnerPaces, type FieldInput } from '../fieldPosition';
-import { eventSecondsFrom, formatEventClock } from '../time';
+import { eventSecondsFrom, formatEventClock, windowSeconds } from '../time';
 
 /**
  * The real VMM 2026 card: six distances going off across three days, and the cut-offs
@@ -223,6 +223,31 @@ describe('the VMM 2026 card', () => {
       expect(station.schedule.openSeconds).toBeLessThan(86400);
       // And the ultras run to the Sunday, so nothing closes before the Saturday.
       expect(station.schedule.closeSeconds).toBeGreaterThan(86400);
+    }
+  });
+
+  it('measures a station’s shift across days, not around a clock face', () => {
+    // The trap this guards: a window was derived from the two clock strings, which can
+    // only ever express less than a day. A station open Saturday 05:37 and closed Sunday
+    // 11:48 reported six hours twelve instead of thirty hours eleven — and that is the
+    // number a shift, a generator and a crew rotation are all planned against.
+    const out = runPipeline(KML(CARD.map((e) => [e.name, e.km])), inputs, { stationFolders: ['CP'] });
+    const longest = Math.max(
+      ...out.stations.map((s) => s.schedule.closeSeconds - s.schedule.openSeconds)
+    );
+    expect(longest / 3600).toBeGreaterThan(24);
+
+    for (const station of out.stations) {
+      const { openSeconds, closeSeconds, openClockTime, closeClockTime } = station.schedule;
+      const fromSeconds = closeSeconds - openSeconds;
+      const fromClocks = windowSeconds(openClockTime, closeClockTime)!;
+
+      // The two agree about the clock face and differ by whole days: the clock strings
+      // say where the hands are, the seconds also remember how often they went round.
+      // A second of slack because the strings are whole seconds and the schedule is not.
+      expect(fromSeconds).toBeGreaterThanOrEqual(fromClocks - 1);
+      const remainder = (fromSeconds - fromClocks + 86400) % 86400;
+      expect(Math.min(remainder, 86400 - remainder)).toBeLessThanOrEqual(2);
     }
   });
 

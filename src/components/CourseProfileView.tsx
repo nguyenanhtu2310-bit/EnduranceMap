@@ -114,31 +114,25 @@ export function CourseProfileView({ course }: Props) {
           shows that a course goes up; it does not say which of the ups is the one a crew
           and a medical team have to plan around.
         */}
-        {climbs.map((climb) => {
+        {climbs.map((climb, index) => {
           const x1 = xOfKm(climb.startKm);
           const x2 = xOfKm(climb.endKm);
-          // A short sharp climb shades without a label rather than printing one wider
-          // than the ground it describes.
-          // Stacked on two lines rather than one: a climb on a 100 km course is fifty
-          // units wide, and "+785 m · 13.6%" needs eighty. Split, each line needs thirty.
           const width = x2 - x1;
+          // Numbered rather than captioned. "+785 m · 13.6%" needs about eighty units and
+          // a climb on a 100 km course is fifty wide, so the figures either overflowed the
+          // ground they described or were dropped for being too wide to fit — which meant
+          // the steepest, shortest climbs, the ones most worth marking, were the ones that
+          // went unlabelled. A digit always fits, and the table below carries the figures.
           return (
             <g className="climb-band" key={`${climb.startKm}-${climb.endKm}`}>
               <title>
-                {`${t('km')} ${climb.startKm.toFixed(1)}–${climb.endKm.toFixed(1)} · ` +
+                {`${index + 1}. ${t('km')} ${climb.startKm.toFixed(1)}–${climb.endKm.toFixed(1)} · ` +
                   `+${Math.round(climb.changeMetres)} m · ${climb.gradientPercent.toFixed(1)}%`}
               </title>
               <rect x={x1} y={0} width={Math.max(1, width)} height={PLOT_H} />
-              {width > 34 && (
-                <>
-                  <text x={(x1 + x2) / 2} y={PLOT_H - 18} textAnchor="middle">
-                    +{Math.round(climb.changeMetres)} m
-                  </text>
-                  <text x={(x1 + x2) / 2} y={PLOT_H - 6} textAnchor="middle">
-                    {climb.gradientPercent.toFixed(1)}%
-                  </text>
-                </>
-              )}
+              <text className="climb-number" x={(x1 + x2) / 2} y={16} textAnchor="middle">
+                {index + 1}
+              </text>
             </g>
           );
         })}
@@ -177,6 +171,7 @@ export function CourseProfileView({ course }: Props) {
         <table className="climb-table">
           <thead>
             <tr>
+              <th className="num">#</th>
               <th>{t('Biggest climbs')}</th>
               <th>{t('Length')}</th>
               <th>{t('Climb')}</th>
@@ -184,8 +179,10 @@ export function CourseProfileView({ course }: Props) {
             </tr>
           </thead>
           <tbody>
-            {climbs.map((climb) => (
+            {climbs.map((climb, index) => (
               <tr key={climb.startKm}>
+                {/* The number that marks this climb's band on the chart above. */}
+                <td className="num climb-index">{index + 1}</td>
                 <td>
                   {t('km')} {climb.startKm.toFixed(1)} – {climb.endKm.toFixed(1)}
                 </td>
