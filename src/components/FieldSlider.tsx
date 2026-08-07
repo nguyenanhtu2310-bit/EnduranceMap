@@ -28,10 +28,17 @@ const LABEL_ROW_H = 13;
 const LABEL_PAD = 8;
 const BIN_KM = 1;
 const RULER_ROW_H = 12;
-/** Height of the strip carrying whoever is running ground the spine never reaches. */
-const OFF_H = 26;
-/** Room to the left of the plot for the two scales, in the same units the plot uses. */
-const GUTTER = 42;
+/** Height of the band showing how much of the field is home, out, and still to go. */
+const STATUS_H = 54;
+/**
+ * Room to the left of the plot for the two scales, in the same units the plot uses.
+ *
+ * Wide enough for the longest unit word at the size it is now drawn. The units are the
+ * thing an operator hunts for on an unfamiliar chart — is that axis metres or runners? —
+ * so they are set in the brand green and large enough to find, and "runners" at that size
+ * needs more than the forty-two units that fitted it when it was grey and small.
+ */
+const GUTTER = 60;
 /** Room at the top of the ruler for the marker that says which moment is being shown. */
 const NOW_BAND_H = 15;
 
@@ -193,13 +200,20 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
   const top = labelH;
   const fieldTop = top + PLOT_H;
   const baseline = fieldTop + FIELD_H;
-  // A distance mostly off the spine gets its own strip rather than a position it does
-  // not have. A third of one real 10 km runs its own roads, and those runners are on
-  // course and need a crew whether or not the long course goes anywhere near them.
-  const offByCourse = inputs
-    .map((input, i) => ({ name: input.courseName, count: snapshot.offSpineByCourse[i] }))
-    .filter((entry) => entry.count > 0);
-  const offBand = offByCourse.length > 0 ? OFF_H : 0;
+  /**
+   * How the whole event stands at this moment: home, out, still to go.
+   *
+   * The strip here used to count runners the axis could not place and called it "off
+   * route", which reads as "lost" and meant "on their own roads". That count still
+   * matters and is stated above; what belongs under the chart is the question a director
+   * asks all day, which is how much of the race is left.
+   */
+  const segments = [
+    { key: 'finished', label: t('Finished'), count: snapshot.finished, className: 'is-finished' },
+    { key: 'racing', label: t('On course'), count: snapshot.onCourse, className: 'is-racing' },
+    { key: 'waiting', label: t('Still to start'), count: snapshot.waiting, className: 'is-waiting' },
+  ].filter((s) => s.count > 0);
+  const statusBand = snapshot.fieldSize > 0 ? STATUS_H : 0;
 
   const { minMetres, maxMetres } = profile.totals;
   const span = Math.max(1, maxMetres - minMetres);
@@ -249,15 +263,23 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
         )}
         {offSpine > 0 && (
           <div>
-            <dt>{t('Off this course')}</dt>
-            <dd title={t('Running ground the longest course never touches')}>{offSpine}</dd>
+            {/* "Off route" read as lost. These runners are on their own roads and fine —
+                it is the axis that cannot reach them, not the course marshals. */}
+            <dt>{t('On their own roads')}</dt>
+            <dd
+              title={t(
+                'On course and running ground the longest distance never touches, so they have no kilometre on this axis'
+              )}
+            >
+              {offSpine}
+            </dd>
           </div>
         )}
       </dl>
 
       <svg
         className="command-chart"
-        viewBox={`${-GUTTER} 0 ${COLUMNS + GUTTER} ${baseline + offBand + AXIS_H}`}
+        viewBox={`${-GUTTER} 0 ${COLUMNS + GUTTER} ${baseline + statusBand + AXIS_H}`}
         role="img"
         aria-label={t('The field on the course at the chosen moment')}
       >
@@ -323,8 +345,17 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
             </text>
           </g>
         ))}
-        <text className="scale-unit" x={-7} y={top - 4} textAnchor="end">
-          {t('m')}
+        {/* Rotated against the scale it belongs to, at the outside of the gutter. Set
+            above the top tick it collided with the number there, and the collision only
+            got worse once the units were made large enough to be worth reading. */}
+        <text
+          className="scale-unit"
+          x={-GUTTER + 9}
+          y={top + PLOT_H / 2}
+          textAnchor="middle"
+          transform={`rotate(-90 ${-GUTTER + 9} ${top + PLOT_H / 2})`}
+        >
+          {t('metres')}
         </text>
 
         {[tallest, tallest / 2, 0].map((count) => {
@@ -338,7 +369,13 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
             </g>
           );
         })}
-        <text className="scale-unit" x={-7} y={fieldTop - 4} textAnchor="end">
+        <text
+          className="scale-unit"
+          x={-GUTTER + 9}
+          y={fieldTop + FIELD_H / 2}
+          textAnchor="middle"
+          transform={`rotate(-90 ${-GUTTER + 9} ${fieldTop + FIELD_H / 2})`}
+        >
           {t('runners')}
         </text>
 
@@ -346,32 +383,40 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
         <line className="profile-axis" x1={0} y1={fieldTop} x2={COLUMNS} y2={fieldTop} />
 
         {/*
-          Off the spine, on its own strip. These runners have no kilometre on this axis
-          because the course under it does not go where they are — drawn as a bar of its
-          own so the count is visible and the position is not invented.
+          The whole field as one bar: home, out, still to go. It moves with the slider, so
+          dragging across the day shows the race draining from right to left.
         */}
-        {offByCourse.length > 0 && (
-          <g className="off-spine">
-            <text x={-7} y={baseline + OFF_H - 8} textAnchor="end">
-              {t('off route')}
+        {snapshot.fieldSize > 0 && (
+          <g className="field-status">
+            {(() => {
+              const barY = baseline + 16;
+              const barH = 16;
+              let x0 = 0;
+              return segments.map((segment) => {
+                const width = (segment.count / snapshot.fieldSize) * COLUMNS;
+                const share = (segment.count / snapshot.fieldSize) * 100;
+                const left = x0;
+                x0 += width;
+                return (
+                  <g className={segment.className} key={segment.key}>
+                    <title>{`${segment.label} — ${segment.count} of ${snapshot.fieldSize} (${share.toFixed(0)}%)`}</title>
+                    <rect x={left} y={barY} width={width} height={barH} />
+                    {/* Only a segment wide enough to hold its own figures prints them;
+                        a sliver would spill across its neighbours and read as theirs. */}
+                    {width > 92 && (
+                      <text x={left + 6} y={barY + barH - 4}>
+                        {segment.label} {segment.count} · {share.toFixed(0)}%
+                      </text>
+                    )}
+                  </g>
+                );
+              });
+            })()}
+            {/* The key sits under the bar so a narrow segment is still named. */}
+            <text className="status-key" x={0} y={baseline + STATUS_H - 4}>
+              {segments.map((s) => `${s.label} ${s.count}`).join('   ·   ')}
+              {`   ·   ${t('of')} ${snapshot.fieldSize}`}
             </text>
-            {offByCourse.map((entry, index) => {
-              const width = COLUMNS / Math.max(3, offByCourse.length);
-              return (
-                <g key={entry.name}>
-                  <rect
-                    x={index * (width + 6)}
-                    y={baseline + 6}
-                    width={width}
-                    height={OFF_H - 12}
-                    fill={seriesVar(courseIndex(entry.name))}
-                  />
-                  <text x={index * (width + 6) + 6} y={baseline + OFF_H - 8}>
-                    {entry.name} · {entry.count}
-                  </text>
-                </g>
-              );
-            })}
           </g>
         )}
         {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
@@ -379,7 +424,7 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
             key={fraction}
             className="profile-tick"
             x={Math.min(COLUMNS - 2, Math.max(2, fraction * COLUMNS))}
-            y={baseline + offBand + AXIS_H - 5}
+            y={baseline + statusBand + AXIS_H - 5}
             textAnchor={fraction === 0 ? 'start' : fraction === 1 ? 'end' : 'middle'}
           >
             {(spineKm * fraction).toFixed(0)} km

@@ -69,11 +69,35 @@ export function positionAt(
   runner: RunnerPace,
   courseKm: number
 ): number | null {
+  const state = runnerStateAt(seconds, startSeconds, runner, courseKm);
+  return state.km;
+}
+
+/** Waiting for their own gun, out on the course, or already home. */
+export type RunnerState = 'waiting' | 'racing' | 'finished';
+
+/**
+ * Which of the three a runner is in at a moment, and how far along if they are racing.
+ *
+ * Told apart because they are three different answers to "where is everybody" and the
+ * position alone cannot distinguish them: a runner with no kilometre is either still in
+ * the pen or already showered, and a director planning a sweep, a bag drop and a finish
+ * line needs to know which. Counting both as "not on course" was the same mistake as
+ * counting an unmarked row as day one.
+ */
+export function runnerStateAt(
+  seconds: number,
+  startSeconds: number,
+  runner: RunnerPace,
+  courseKm: number
+): { state: RunnerState; km: number | null } {
   const elapsed = seconds - startSeconds - runner.startOffsetSeconds;
-  if (elapsed <= 0) return null;
-  if (runner.paceMinPerKm <= 0) return null;
+  if (elapsed <= 0) return { state: 'waiting', km: null };
+  // A pace of zero is a runner the model cannot place. They are not home, so they wait.
+  if (runner.paceMinPerKm <= 0) return { state: 'waiting', km: null };
   const km = elapsed / (runner.paceMinPerKm * 60);
-  return km > courseKm ? null : km;
+  if (km > courseKm) return { state: 'finished', km: null };
+  return { state: 'racing', km };
 }
 
 export interface FieldSnapshot {
@@ -84,6 +108,19 @@ export interface FieldSnapshot {
   /** On course but not yet placed on the spine plus those that were, per course. */
   onCourseByCourse: number[];
   totalOnCourse: number;
+  /**
+   * The whole field at this moment, split three ways.
+   *
+   * There is deliberately no DNF here. A runner who abandons never reaches the finish
+   * file the model is built from, so the field it replays is the field that finished —
+   * counting a retirement would mean inventing one. Attrition is knowable only from
+   * recorded splits, and claiming it from a model would be the worst kind of confident
+   * wrong number: it looks like an operational fact and is arithmetic about nobody.
+   */
+  waiting: number;
+  onCourse: number;
+  finished: number;
+  fieldSize: number;
 }
 
 export interface SnapshotOptions {
@@ -113,6 +150,9 @@ export function fieldSnapshot(
   const offSpineByCourse: number[] = [];
   const onCourseByCourse: number[] = [];
   let totalOnCourse = 0;
+  let waiting = 0;
+  let finished = 0;
+  let fieldSize = 0;
 
   for (const input of inputs) {
     const bins = new Array<number>(binCount).fill(0);
@@ -122,13 +162,22 @@ export function fieldSnapshot(
     let offSpine = 0;
     let onCourse = 0;
 
+    fieldSize += paces.length;
+
     if (startSeconds !== null) {
       for (const runner of paces) {
-        const km = positionAt(seconds, startSeconds, runner, input.courseKm);
-        if (km === null) continue;
+        const { state, km } = runnerStateAt(seconds, startSeconds, runner, input.courseKm);
+        if (state === 'waiting') {
+          waiting += 1;
+          continue;
+        }
+        if (state === 'finished') {
+          finished += 1;
+          continue;
+        }
         onCourse += 1;
 
-        const spineKm = mapping ? spineKmOf(mapping, km) : km;
+        const spineKm = mapping ? spineKmOf(mapping, km!) : km!;
         if (spineKm === null) {
           offSpine += 1;
           continue;
@@ -136,6 +185,9 @@ export function fieldSnapshot(
         const bin = Math.min(binCount - 1, Math.max(0, Math.floor(spineKm / binKm)));
         bins[bin] += 1;
       }
+    } else {
+      // A distance whose gun cannot be read has not started, rather than vanishing.
+      waiting += paces.length;
     }
 
     binsByCourse.push(bins);
@@ -144,7 +196,16 @@ export function fieldSnapshot(
     totalOnCourse += onCourse;
   }
 
-  return { binsByCourse, offSpineByCourse, onCourseByCourse, totalOnCourse };
+  return {
+    binsByCourse,
+    offSpineByCourse,
+    onCourseByCourse,
+    totalOnCourse,
+    waiting,
+    onCourse: totalOnCourse,
+    finished,
+    fieldSize,
+  };
 }
 
 /**

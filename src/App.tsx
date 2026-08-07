@@ -96,9 +96,10 @@ import {
 } from './lib/config';
 import { DEFAULT_START_SPREAD_MINUTES } from './lib/paceModel';
 
-/** The five sections of the RESULT part, in the order they are produced. */
+/** The sections of the RESULT part, in the order they are produced. */
 type ResultSectionKey =
   | 'command'
+  | 'timeline'
   | 'naming'
   | 'schedule'
   | 'amenities'
@@ -334,6 +335,7 @@ export default function App() {
    */
   const [openSections, setOpenSections] = useState<Record<ResultSectionKey, boolean>>({
     command: true,
+    timeline: true,
     naming: true,
     schedule: true,
     amenities: true,
@@ -349,17 +351,21 @@ export default function App() {
 
   const allOpen = Object.values(openSections).every(Boolean);
 
+  /**
+   * Opens or shuts every section, whatever the sections happen to be.
+   *
+   * Derived from the current keys rather than listing them again. A second hand-written
+   * list of the same thing is a list that drifts: this one already had to be found by the
+   * compiler when a section was added, and the saved-race field list — the same shape of
+   * mistake — silently dropped a whole season of trail work instead.
+   */
   function setAllSections(open: boolean) {
-    setOpenSections({
-      command: open,
-      naming: open,
-      schedule: open,
-      amenities: open,
-      splits: open,
-      distribution: open,
-      traffic: open,
-      cutoffs: open,
-    });
+    setOpenSections((current) =>
+      Object.fromEntries(Object.keys(current).map((key) => [key, open])) as Record<
+        ResultSectionKey,
+        boolean
+      >
+    );
   }
   const [folders, setFolders] = useState<FolderSummary[]>([]);
   const [selectedFolders, setSelectedFolders] = useState<string[]>([]);
@@ -1596,8 +1602,17 @@ export default function App() {
               )}
             </p>
             <CourseCommandView result={planned} profiles={courseProfiles} />
+          </ResultSection>
 
-            <h3 style={{ margin: '1.6rem 0 0.3rem', fontSize: '1rem' }}>{t('Where the field is')}</h3>
+          {/* Its own section, not a heading inside the profile. This is the view an
+              organiser stands in front of on the day, and it was buried under another
+              one that answers a different question. */}
+          <ResultSection
+            title={t('Master timeline')}
+            summary={t('The whole field, at any moment')}
+            open={openSections.timeline}
+            onToggle={() => toggleSection('timeline')}
+          >
             <p className="hint">
               {t(
                 'Slide to a moment and see every distance on the course at once, under the climbs they are on and beside the stations that serve them.'

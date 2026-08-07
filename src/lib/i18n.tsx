@@ -256,7 +256,17 @@ const VI: Record<string, string> = {
   'No mat — staffed, but nobody is counted': 'Không có thảm — vẫn có nhân sự, nhưng không ai được đếm',
 
   // The field on the course.
-  'Where the field is': 'VĐV đang ở đâu',
+  'Master timeline': 'Dòng thời gian tổng',
+  'The whole field, at any moment': 'Toàn bộ VĐV, tại bất kỳ thời điểm nào',
+  'Finished': 'Đã về đích',
+  'Still to start': 'Chưa xuất phát',
+  'On their own roads': 'Trên cung đường riêng',
+  'On course and running ground the longest distance never touches, so they have no kilometre on this axis':
+    'Vẫn đang thi đấu trên đoạn đường mà cự ly dài nhất không đi qua, nên không có km trên trục này',
+  'Time limit': 'Giới hạn thời gian',
+  'How long this distance has, from its own gun': 'Cự ly này có bao lâu, tính từ giờ xuất phát của nó',
+  'How long this distance has, from its own gun — type either this or the cut-off':
+    'Cự ly này có bao lâu tính từ giờ xuất phát — nhập ô này hoặc ô COT',
   'When each distance starts': 'Giờ xuất phát của từng cự ly',
   'It catches': 'Loại bao nhiêu',
   'It demands': 'Đòi hỏi nhanh hơn',

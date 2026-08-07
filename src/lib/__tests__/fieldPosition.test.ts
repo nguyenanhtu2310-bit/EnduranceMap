@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fieldSnapshot, fieldWindow, positionAt, runnerPaces, type FieldInput } from '../fieldPosition';
+import { fieldSnapshot, fieldWindow, positionAt, runnerPaces, runnerStateAt, type FieldInput } from '../fieldPosition';
 import type { SpineMapping } from '../spine';
 
 const band: FieldInput = {
@@ -151,5 +151,58 @@ describe('fieldWindow', () => {
       ['42K', runnerPaces(saturday)],
     ]);
     expect(fieldWindow([friday, saturday], paces).startSeconds).toBe(8 * 3600);
+  });
+});
+
+describe('the field split three ways', () => {
+  const paces = new Map([[band.courseName, runnerPaces(band)]]);
+  const mappings = new Map([[band.courseName, identity('42K', 42)]]);
+  const at = (seconds: number) =>
+    fieldSnapshot(seconds, [band], mappings, paces, { spineKm: 42, binKm: 1 });
+
+  it('tells a runner still in the pen from one already showered', () => {
+    // Both have no kilometre on the course, and they are not the same problem: one needs
+    // a start line and the other needs a bag drop.
+    const runner = { startOffsetSeconds: 0, paceMinPerKm: 6 };
+    expect(runnerStateAt(0, 3600, runner, 42).state).toBe('waiting');
+    expect(runnerStateAt(3600 + 60 * 60, 3600, runner, 42).state).toBe('racing');
+    expect(runnerStateAt(3600 + 42 * 6 * 60 + 1, 3600, runner, 42).state).toBe('finished');
+  });
+
+  it('has the whole field waiting before the gun', () => {
+    const before = at(4 * 3600);
+    expect(before.waiting).toBe(100);
+    expect(before.onCourse).toBe(0);
+    expect(before.finished).toBe(0);
+  });
+
+  it('has the whole field home once the slowest is in', () => {
+    // The slowest runs 9 min/km over 42 km — nine hours from a five o'clock gun.
+    const after = at(5 * 3600 + 42 * 9 * 60 + 60);
+    expect(after.finished).toBe(100);
+    expect(after.onCourse).toBe(0);
+    expect(after.waiting).toBe(0);
+  });
+
+  it('accounts for every runner at every moment', () => {
+    // The three counts are a partition, not three separate tallies that might disagree.
+    for (let hour = 3; hour <= 16; hour++) {
+      const snap = at(hour * 3600);
+      expect(snap.waiting + snap.onCourse + snap.finished).toBe(snap.fieldSize);
+      expect(snap.fieldSize).toBe(100);
+    }
+  });
+
+  it('counts everyone on the spine or off it, never twice', () => {
+    const mid = at(8 * 3600);
+    const binned = mid.binsByCourse[0].reduce((sum, n) => sum + n, 0);
+    expect(binned + mid.offSpineByCourse[0]).toBe(mid.onCourse);
+  });
+
+  it('finishes people gradually rather than all at once', () => {
+    // The point of the band: at six hours some are home and some are not.
+    const midRace = at(5 * 3600 + 6 * 3600);
+    expect(midRace.finished).toBeGreaterThan(0);
+    expect(midRace.onCourse).toBeGreaterThan(0);
   });
 });

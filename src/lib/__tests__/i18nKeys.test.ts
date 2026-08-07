@@ -21,8 +21,23 @@ describe('the Vietnamese dictionary', () => {
   });
 
   it('translates each English string exactly once', () => {
-    const seen = new Set<string>();
-    const duplicates = keys.filter((key) => !seen.add(key));
+    // Counted rather than filtered through a Set: `seen.add(key)` returns the Set, which
+    // is always truthy, so the obvious `!seen.add(key)` is always false and this test
+    // passed against every duplicate it existed to catch — including one added the same
+    // afternoon it was checked. The compiler caught that one, as it had caught the five
+    // before it, which is exactly what this was written to stop relying on.
+    const counts = new Map<string, number>();
+    for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1);
+    const duplicates = [...counts].filter(([, n]) => n > 1).map(([key]) => key);
     expect(duplicates).toEqual([]);
+  });
+
+  it('fails when a key really is written twice', () => {
+    // The guard above is only worth having if it bites, and the version it replaced did
+    // not. This checks the check.
+    const doubled = [...keys, keys[0]];
+    const counts = new Map<string, number>();
+    for (const key of doubled) counts.set(key, (counts.get(key) ?? 0) + 1);
+    expect([...counts].filter(([, n]) => n > 1).map(([key]) => key)).toEqual([keys[0]]);
   });
 });

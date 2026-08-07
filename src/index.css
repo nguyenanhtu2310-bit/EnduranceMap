@@ -1759,22 +1759,52 @@ button.row-remove:disabled {
 }
 
 .command-chart .scale-unit {
-  fill: var(--color-muted);
-  font-size: 8.5px;
-  font-weight: 600;
+  fill: var(--color-accent);
+  font-size: 10px;
+  font-weight: 700;
   letter-spacing: 0.04em;
 }
 
-/* Runners on ground the spine never reaches: counted, not placed. */
-.command-chart .off-spine rect {
-  opacity: 0.55;
+/*
+ * How much of the race is home, out, and still to go, at the moment being looked at.
+ *
+ * Three states rather than four: there is no DNF segment, because the field the model
+ * replays is the field that finished and a retirement never enters it. Attrition is
+ * knowable from recorded splits and nowhere else, and a zero drawn here would read as
+ * "nobody dropped out" rather than "this cannot be known".
+ */
+.command-chart .field-status rect {
   rx: 2;
 }
 
-.command-chart .off-spine text {
+.command-chart .field-status .is-finished rect {
+  fill: var(--color-accent);
+}
+
+.command-chart .field-status .is-racing rect {
+  fill: var(--color-accent-2);
+}
+
+.command-chart .field-status .is-waiting rect {
+  fill: var(--color-neutral-700);
+}
+
+.command-chart .field-status text {
+  fill: var(--color-bg);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+/* Sitting outside the bar, this one takes the page's ink rather than the bar's. */
+.command-chart .field-status .status-key {
   fill: var(--color-muted);
   font-size: 9px;
   font-weight: 600;
+}
+
+/* The waiting segment is dark enough that the bar's own ink would vanish on it. */
+.command-chart .field-status .is-waiting text {
+  fill: var(--color-neutral-100);
 }
 
 /* A number taken from chip reads rather than from a model. */
