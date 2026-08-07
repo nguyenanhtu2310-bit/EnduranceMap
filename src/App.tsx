@@ -38,6 +38,7 @@ import { TimingPointsPanel } from './components/TimingPointsPanel';
 import { StationNamingTable } from './components/StationNamingTable';
 import { CourseCommandView } from './components/CourseCommandView';
 import { FieldSlider } from './components/FieldSlider';
+import { NavPanel, type NavItem } from './components/NavPanel';
 import { readCourseProfile, type CourseProfile } from './lib/courseProfile';
 import { parseTimingPoints, type TimingPoint } from './lib/timingPoints';
 import { readMeasuredSplits, type MeasuredSplits } from './lib/measuredSplits';
@@ -1199,6 +1200,48 @@ export default function App() {
     }
   }
 
+  /**
+   * The rail's contents, derived from the same conditions the sections render under.
+   *
+   * Kept next to them rather than written out separately: a navigation panel that offers
+   * a jump to a section which is not on the page is worse than no panel, and the way that
+   * happens is two lists of the same thing drifting apart.
+   */
+  const navRequest: NavItem[] = [
+    {
+      id: 'req-course',
+      label: t('Course input'),
+      ready: true,
+      note: courses.length > 0 ? `${courses.length} ${t('routes')}` : t('drop a file'),
+    },
+    { id: 'req-pace', label: t('Pace distribution'), ready: rows.length > 0 },
+    {
+      id: 'req-race',
+      label: t('Race details'),
+      ready: rows.length > 0,
+      note: rows.length > 0 ? `${rows.length} ${t('distances')}` : undefined,
+    },
+    {
+      id: 'req-cp',
+      label: t('CP type'),
+      ready: rows.length > 0,
+      note: selectedFolders.length > 0 ? `${selectedFolders.length} ${t('layers')}` : undefined,
+    },
+    { id: 'req-operating', label: t('Operating details'), ready: rows.length > 0 },
+  ];
+
+  const navResult: NavItem[] = [
+    { id: 'res-overview', label: t('Course overview'), ready: !!result },
+    { id: 'res-timeline', label: t('Master timeline'), ready: !!result },
+    { id: 'res-naming', label: t('Station naming'), ready: !!result && hasTimingConfig },
+    { id: 'res-schedule', label: t('Station operating schedule'), ready: !!result },
+    { id: 'res-amenities', label: t('Course amenities'), ready: !!result },
+    { id: 'res-splits', label: t('Split calculation'), ready: !!result },
+    { id: 'res-distribution', label: t('Crossing time distribution'), ready: !!result },
+    { id: 'res-traffic', label: t('Traffic at each station'), ready: !!result },
+    { id: 'res-cutoffs', label: t('Cut-off times'), ready: !!result },
+  ];
+
   return (
     <div className="app">
       <div className="race-tabs">
@@ -1274,33 +1317,39 @@ export default function App() {
 
       {error && <div className="error">{error}</div>}
 
-      <section className="card">
+      <NavPanel request={navRequest} result={navResult} hasResult={!!result} />
+
+      {/* The three files that describe the course, in one place. They answer one
+          question between them — what is the route and what is on it — and having them
+          as three cards made the first thing an organiser saw a wall of dropzones. */}
+      <section className="card" id="req-course">
         <h2>
-          <span className="step">1</span>{t('Course map')}
+          <span className="step">1</span>{t('Course input')}
         </h2>
+
+        <h3 className="sub-head">{t('Course map')} <span className="sub-kind">KML</span></h3>
         <p className="hint">
           {t(
             'Choose an exported KML from Google My Maps, with each CP type on its own layer. Race routes can live in a layer here too, or come from the route files below.'
           )}
         </p>
         <KmlDropzone fileName={kml?.fileName} onLoad={loadKml} onError={setError} />
-      </section>
 
-      <section className="card">
-        <h2>{t('Course profile')}</h2>
+        <h3 className="sub-head">{t('Course profile')} <span className="sub-kind">GPX</span></h3>
         <p className="hint">
           {t(
             'Drop the route GPX for each distance to read its climbing. A GPX carries elevation on every point; a KML usually loses it.'
           )}
         </p>
         <GpxPanel files={gpxFiles} onChange={setGpxFiles} />
-        <h3 style={{ margin: '1.4rem 0 0.3rem', fontSize: '1rem' }}>{t('Timing points')}</h3>
+
+        <h3 className="sub-head">{t('Timing points')} <span className="sub-kind">LVS</span></h3>
         <p className="hint">
           {t(
             'Optional. Supply the timing configuration and every station takes the name the timing system uses, so nothing needs renaming on the map.'
           )}
         </p>
-                <TimingPointsPanel files={lvsFiles} onChange={setLvsFiles} courses={courses} />
+        <TimingPointsPanel files={lvsFiles} onChange={setLvsFiles} courses={courses} />
         {mergedCourses.replaced.map(({ kml: drawn, gpx: surveyed }) => (
           <p className="hint" key={drawn.name}>
             {`"${drawn.name}" (${drawn.totalKm.toFixed(2)} km) `}
@@ -1313,52 +1362,14 @@ export default function App() {
 
       {rows.length > 0 && (
         <>
-          <section className="card">
+          <section className="card" id="req-pace">
             <h2>
-              <span className="step">2</span>{t('CP type')}
-            </h2>
-            <p className="hint">{t('Choose the layer that contains the type of CP you want to calculate.')}</p>
-            <FolderPicker
-              folders={folders}
-              selected={selectedFolders}
-              onChange={setSelectedFolders}
-              renumber={renumber}
-              renumberPrefix={renumberPrefix}
-              onRenumberChange={setRenumber}
-              onRenumberPrefixChange={setRenumberPrefix}
-            />
-          </section>
-
-          <section className="card">
-            <h2>
-              <span className="step">3</span>{t('Pace distribution')}
+              <span className="step">2</span>{t('Pace distribution')}
             </h2>
             <p className="hint">
               Optional. Choose a CSV finish-line result from a comparable race to replace the estimated pace
               band with the real field — every runner's own pace and start offset.
             </p>
-            {results?.kind === 'single' && results.splits && (
-              <div className="notice" style={{ marginBottom: '1rem' }}>
-                <label className="inline-field">
-                  <input
-                    type="checkbox"
-                    checked={useRecordedArrivals}
-                    onChange={(e) => setUseRecordedArrivals(e.target.checked)}
-                  />
-                  {t('This file is this race — use its recorded crossings')}
-                </label>
-                <p className="hint" style={{ margin: '0.35rem 0 0' }}>
-                  {useRecordedArrivals
-                    ? t(
-                        'Traffic at every mat in the file is counted from chip reads rather than modelled. Turn this off to plan a future race from the same file as a pace model.'
-                      )
-                    : t(
-                        'The file is being used as a pace model only. Turn this on where it describes the race being reported.'
-                      )}
-                </p>
-              </div>
-            )}
-
             <ResultsPanel
               fileName={results?.kind === 'single' ? results.fileName : undefined}
               profiles={results?.kind === 'single' ? results.profiles : []}
@@ -1385,9 +1396,9 @@ export default function App() {
             )}
           </section>
 
-          <section className="card">
+          <section className="card" id="req-race">
             <h2>
-              <span className="step">4</span>{t('Race details and pace band')}
+              <span className="step">3</span>{t('Race details')}
             </h2>
             <p className="hint">
               {multisport
@@ -1439,11 +1450,29 @@ export default function App() {
             )}
           </section>
 
-          <section className="card">
+          <section className="card" id="req-cp">
+            <h2>
+              <span className="step">4</span>{t('CP type')}
+            </h2>
+            <p className="hint">{t('Choose the layer that contains the type of CP you want to calculate.')}</p>
+            <FolderPicker folders={folders} selected={selectedFolders} onChange={setSelectedFolders} />
+          </section>
+
+          <section className="card" id="req-operating">
             <h2>
               <span className="step">5</span>{t('Operating details')}
             </h2>
-            <SettingsPanel settings={settings} onChange={setSettings} />
+            <SettingsPanel
+              settings={settings}
+              onChange={setSettings}
+              renumber={renumber}
+              renumberPrefix={renumberPrefix}
+              onRenumberChange={setRenumber}
+              onRenumberPrefixChange={setRenumberPrefix}
+              canUseRecorded={results?.kind === 'single' && !!results.splits}
+              useRecorded={useRecordedArrivals}
+              onUseRecordedChange={setUseRecordedArrivals}
+            />
           </section>
 
           <div className="actions" style={{ marginBottom: '1.75rem', justifyContent: 'center' }}>
@@ -1591,7 +1620,8 @@ export default function App() {
           </div>
 
           <ResultSection
-            title={t('Course profile')}
+            title={t('Course overview')}
+            id="res-overview"
             summary={`${planned.stations.length} ${t('stations on course')}`}
             open={openSections.command}
             onToggle={() => toggleSection('command')}
@@ -1609,6 +1639,7 @@ export default function App() {
               one that answers a different question. */}
           <ResultSection
             title={t('Master timeline')}
+            id="res-timeline"
             summary={t('The whole field, at any moment')}
             open={openSections.timeline}
             onToggle={() => toggleSection('timeline')}
@@ -1624,6 +1655,7 @@ export default function App() {
 {hasTimingConfig && (
           <ResultSection
             title={t('Station naming')}
+            id="res-naming"
             summary={`${result.stations.filter((s) => s.isTimed).length}/${result.stations.length} ${t('timed')}`}
             open={openSections.naming}
             onToggle={() => toggleSection('naming')}
@@ -1642,6 +1674,7 @@ export default function App() {
 
           <ResultSection
             title={t('Station operating schedule')}
+            id="res-schedule"
             summary={`${planned.stations.length} stations`}
             open={openSections.schedule}
             onToggle={() => toggleSection('schedule')}
@@ -1717,6 +1750,7 @@ export default function App() {
 
           <ResultSection
             title={t('Course amenities')}
+            id="res-amenities"
             summary={`${planned.courses.length} distances`}
             open={openSections.amenities}
             onToggle={() => toggleSection('amenities')}
@@ -1776,6 +1810,7 @@ export default function App() {
 
           <ResultSection
             title={t('Split calculation')}
+            id="res-splits"
             summary="Every point, by distance"
             open={openSections.splits}
             onToggle={() => toggleSection('splits')}
@@ -1797,6 +1832,7 @@ export default function App() {
 
           <ResultSection
             title={t('Crossing time distribution')}
+            id="res-distribution"
             summary="The race day on one clock"
             open={openSections.distribution}
             onToggle={() => toggleSection('distribution')}
@@ -1811,6 +1847,7 @@ export default function App() {
 
           <ResultSection
             title={t('Traffic at each station')}
+            id="res-traffic"
             summary={`${planned.stations.length} stations, one page each`}
             open={openSections.traffic}
             onToggle={() => toggleSection('traffic')}
@@ -1821,6 +1858,7 @@ export default function App() {
 
           <ResultSection
             title={t('Cut-off times')}
+            id="res-cutoffs"
             summary={`${planned.cutoffTable.length} proposals`}
             open={openSections.cutoffs}
             onToggle={() => toggleSection('cutoffs')}

@@ -12,6 +12,23 @@ export interface Settings {
 interface Props {
   settings: Settings;
   onChange: (settings: Settings) => void;
+  /**
+   * The two decisions that are neither a buffer nor a threshold, gathered here anyway.
+   *
+   * They used to sit in the sections they happen to affect — station numbering beside the
+   * folder list, recorded crossings beside the results file — which is tidy by topic and
+   * useless in practice: they are the two switches that most change what comes out, and
+   * an organiser who misses one gets a plan that looks right and is not. Everything that
+   * has to be checked before pressing Calculate is now checked in one place.
+   */
+  renumber: boolean;
+  renumberPrefix: string;
+  onRenumberChange: (renumber: boolean) => void;
+  onRenumberPrefixChange: (prefix: string) => void;
+  /** Only offered where a results file carrying real crossings has been loaded. */
+  canUseRecorded?: boolean;
+  useRecorded?: boolean;
+  onUseRecordedChange?: (value: boolean) => void;
 }
 
 interface Field {
@@ -56,7 +73,17 @@ const FIELDS: Field[] = [
   },
 ];
 
-export function SettingsPanel({ settings, onChange }: Props) {
+export function SettingsPanel({
+  settings,
+  onChange,
+  renumber,
+  renumberPrefix,
+  onRenumberChange,
+  onRenumberPrefixChange,
+  canUseRecorded,
+  useRecorded,
+  onUseRecordedChange,
+}: Props) {
   const t = useT();
   return (
     <>
@@ -99,6 +126,54 @@ export function SettingsPanel({ settings, onChange }: Props) {
           'Activity tags come from the busiest counting window at each station, the same figure the schedule and the report show. A mass-start road race and a trail race with a rolling start need very different numbers.'
         )}
       </p>
+
+      <div className="setting-switches">
+        <label className={renumber ? 'folder-item on' : 'folder-item'} style={{ flex: '0 1 auto' }}>
+          <input type="checkbox" checked={renumber} onChange={(e) => onRenumberChange(e.target.checked)} />
+          <span className="folder-name">{t('Number stations along the course')}</span>
+        </label>
+        {renumber && (
+          <label className="field" style={{ margin: 0 }}>
+            {t('Label')}
+            <input
+              type="text"
+              value={renumberPrefix}
+              placeholder="Station"
+              onChange={(e) => onRenumberPrefixChange(e.target.value)}
+              style={{ marginTop: '0.25rem' }}
+            />
+          </label>
+        )}
+      </div>
+      <p className="hint" style={{ margin: '0.5rem 0 0' }}>
+        {t(
+          'Renames stations "Station 1" onward in course order. The map’s own names stay listed underneath so the numbering can be checked against the signs on the ground.'
+        )}
+      </p>
+
+      {canUseRecorded && (
+        <>
+          <div className="setting-switches">
+            <label className={useRecorded ? 'folder-item on' : 'folder-item'} style={{ flex: '0 1 auto' }}>
+              <input
+                type="checkbox"
+                checked={!!useRecorded}
+                onChange={(e) => onUseRecordedChange?.(e.target.checked)}
+              />
+              <span className="folder-name">{t('This file is this race — use its recorded crossings')}</span>
+            </label>
+          </div>
+          <p className="hint" style={{ margin: '0.5rem 0 0' }}>
+            {useRecorded
+              ? t(
+                  'Traffic at every mat in the file is counted from chip reads rather than modelled. Turn this off to plan a future race from the same file as a pace model.'
+                )
+              : t(
+                  'The file is being used as a pace model only. Turn this on where it describes the race being reported.'
+                )}
+          </p>
+        </>
+      )}
     </>
   );
 }

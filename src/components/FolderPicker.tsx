@@ -5,20 +5,12 @@ interface Props {
   folders: FolderSummary[];
   selected: string[];
   onChange: (selected: string[]) => void;
-  renumber: boolean;
-  renumberPrefix: string;
-  onRenumberChange: (renumber: boolean) => void;
-  onRenumberPrefixChange: (prefix: string) => void;
 }
 
 export function FolderPicker({
   folders,
   selected,
   onChange,
-  renumber,
-  renumberPrefix,
-  onRenumberChange,
-  onRenumberPrefixChange,
 }: Props) {
   const t = useT();
   function toggle(folder: string) {
@@ -57,27 +49,6 @@ export function FolderPicker({
         )}
       </p>
 
-      <div className="renumber-row">
-        <label className={renumber ? 'folder-item on' : 'folder-item'} style={{ flex: '0 1 auto' }}>
-          <input type="checkbox" checked={renumber} onChange={(e) => onRenumberChange(e.target.checked)} />
-          <span className="folder-name">{t('Number stations along the course')}</span>
-        </label>
-        {renumber && (
-          <label className="field" style={{ margin: 0 }}>
-            Label
-            <input
-              type="text"
-              value={renumberPrefix}
-              onChange={(e) => onRenumberPrefixChange(e.target.value)}
-              style={{ width: 130, marginTop: '0.25rem' }}
-            />
-          </label>
-        )}
-      </div>
-      <p className="hint" style={{ margin: '0.5rem 0 0' }}>
-        Renames stations “{renumberPrefix || 'Station'} 1” onward in course order. The map’s own names stay
-        listed underneath so the numbering can be checked against the signs on the ground.
-      </p>
     </>
   );
 }

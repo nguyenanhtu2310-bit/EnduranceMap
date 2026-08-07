@@ -1873,3 +1873,154 @@ button.row-remove:disabled {
   background: var(--color-ok-bg);
   color: var(--color-ok);
 }
+
+/*
+ * Where everything is, in one rail.
+ *
+ * Thirteen sections down a single scroll is fine while the app is being built and hostile
+ * once it is being used: an organiser arrives wanting the station schedule and has to
+ * recognise it going past. Sticky, because the question "where am I" is asked halfway
+ * down, not at the top.
+ */
+.nav-panel {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
+  padding: 0.7rem 1rem;
+  background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+  backdrop-filter: blur(6px);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.nav-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.nav-group h3 {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+/* RESULT before Calculate: present, so the shape of the work is visible, but not offered. */
+.nav-group.waiting h3 {
+  color: var(--color-faint);
+}
+
+.nav-group ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  min-height: 0;
+  font-size: 0.78rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.nav-item:hover:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-divider);
+}
+
+.nav-item.on {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.nav-item.off,
+.nav-item:disabled {
+  color: var(--color-faint);
+  cursor: default;
+  opacity: 0.55;
+}
+
+.nav-index {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.7rem;
+  color: var(--color-faint);
+}
+
+.nav-item.on .nav-index {
+  color: var(--color-accent);
+}
+
+.nav-note {
+  font-size: 0.68rem;
+  color: var(--color-faint);
+}
+
+.nav-hint {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--color-faint);
+  align-self: center;
+}
+
+/* The sub-heads inside the merged course-input card. */
+.sub-head {
+  margin: 1.5rem 0 0.3rem;
+  font-size: 0.98rem;
+  font-weight: 500;
+}
+
+.sub-head:first-of-type {
+  margin-top: 0.9rem;
+}
+
+.sub-kind {
+  margin-left: 0.45rem;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--color-faint);
+  font-weight: 600;
+}
+
+/* A jumped-to section should not land under the sticky rail. */
+[id^='req-'],
+[id^='res-'] {
+  scroll-margin-top: 4.5rem;
+}
+
+@media (max-width: 760px) {
+  .nav-panel {
+    position: static;
+  }
+}
+
+/* The switches gathered into operating details, set apart from the number fields. */
+.setting-switches {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding-top: 0.95rem;
+  border-top: 1px solid var(--color-divider);
+}
