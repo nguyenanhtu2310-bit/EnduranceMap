@@ -6,11 +6,12 @@
  * cut-off is not a prediction anybody got wrong, it is a decision about who stops here.
  *
  * Measured against a real published card, the proposal missed the director's own times by
- * up to two and a half hours — and every one of those gaps turned out to be a choice
- * rather than an error. The 100 km's intermediate cut-offs sit tighter than its own
- * finish, so a runner pacing to use all 28 hours is eliminated at CP2. The 50 km's are
- * looser, because they are the 70 km's cut-offs and the shorter race inherits them with
- * slack. Neither is visible from a proposal. Both are visible from this.
+ * hours in both directions — and every one of those gaps turned out to be a choice rather
+ * than an error. The 100 km's intermediate cut-offs sit tighter than its own finish, so a
+ * runner pacing to use all 28 hours is eliminated at CP2. The 50 km's are looser, because
+ * they are the 70 km's cut-offs unchanged and the shorter race, starting two and a half
+ * hours later over three-quarters the ground, inherits them with slack. Neither is
+ * visible from a proposal. Both are visible from this.
  */
 
 export interface CutoffEffect {
