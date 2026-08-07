@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { axisTicks } from '../lib/axisTicks';
 import { useT } from '../lib/i18n';
 import type { LeadArrival, PipelineResult } from '../lib/pipeline';
-import { secondsToClockTime } from '../lib/time';
+import { eventDayLabel, eventDayOffset, secondsToClockTime } from '../lib/time';
 import { seriesVar as slotVar } from '../lib/series';
 import { splitStartFinish, trafficStationName, type TrafficStation } from '../lib/startFinish';
 import {
@@ -14,6 +15,8 @@ import {
 
 interface Props {
   result: PipelineResult;
+  /** The event's first date, so an axis crossing midnight can name its days. */
+  raceDate?: string;
 }
 
 function formatHm(seconds: number): string {
@@ -29,6 +32,9 @@ function formatHm(seconds: number): string {
  * and the slider adds height rather than taking it away.
  */
 const ROW_BODY = 16;
+/** Room one axis label needs, including the air that stops two of them touching. */
+const LABEL_ROOM_PX = 58;
+
 const AXIS_HEIGHT = 26;
 const RIGHT_PAD = 12;
 const LABEL_GUTTER = 24;
@@ -85,7 +91,7 @@ interface LeadHover extends Anchor {
 
 type Hover = BinHover | LeadHover;
 
-export function CrossingDistribution({ result }: Props) {
+export function CrossingDistribution({ result, raceDate }: Props) {
   const t = useT();
   const [hover, setHover] = useState<Hover | null>(null);
   /** 'chart' is the race day at a glance; 'table' is its accessible twin. */
@@ -177,12 +183,20 @@ export function CrossingDistribution({ result }: Props) {
   const rowHeight = rowBody + markerBand;
   const chartHeight = stations.length * rowHeight + AXIS_HEIGHT;
 
-  // Hour ticks across the shared axis, thinning to the quarter hour once stretched far
-  // enough that every bin edge has room for its own time.
-  const tickStep = binWidth >= 46 ? 900 : binWidth >= 16 ? 1800 : 3600;
-  const ticks: number[] = [];
-  const firstTick = Math.ceil(timeRangeSeconds.start / tickStep) * tickStep;
-  for (let t = firstTick; t <= timeRangeSeconds.end; t += tickStep) ticks.push(t);
+  /*
+   * Times along the shared axis, as many as the width can hold and no more.
+   *
+   * The step used to be chosen from the bin width alone and stopped coarsening at the
+   * hour, which is fine for a morning and a wall of text for a race that runs for two
+   * days: forty-nine labels along an axis with room for a dozen. Reading the budget off
+   * the plot's own width keeps the old behaviour where it was right — stretching the
+   * timeline really does earn more labels — and puts a ceiling on it where it was not.
+   */
+  const ticks = axisTicks(
+    timeRangeSeconds.start,
+    timeRangeSeconds.end,
+    Math.max(2, Math.floor(plotWidth / LABEL_ROOM_PX))
+  ).map((t) => t.seconds);
 
   const hoveredStation =
     hover?.kind === 'bin' ? stations.find((s) => rowName(s) === hover.station) : undefined;
@@ -190,9 +204,24 @@ export function CrossingDistribution({ result }: Props) {
 
   return (
     <div className="viz-root" ref={boxRef}>
-      <div className="chart-legend">
-        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: '0.6rem', alignItems: 'center' }}>
-          {view === 'chart' && (
+      {/*
+        One toolbar, not two rows of chrome above the plot.
+        What it does and how it is drawn were split across a button row and a slider row,
+        which read as two unrelated sets of controls and pushed the chart itself a third
+        of the way down the card. The sliders are also half the width they were: they
+        adjust a picture that is already on screen, and a 190px track for a value between
+        one and four was reading as data rather than as a control.
+      */}
+      <div className="chart-toolbar">
+        <button
+          className="secondary"
+          onClick={() => setView((v) => (v === 'table' ? 'chart' : 'table'))}
+        >
+          {view === 'table' ? t('Show chart') : t('Show table')}
+        </button>
+
+        {view === 'chart' && (
+          <>
             <button
               className="secondary"
               onClick={() => setSharedScale((v) => !v)}
@@ -204,54 +233,53 @@ export function CrossingDistribution({ result }: Props) {
             >
               {sharedScale ? t('Scale: shared') : t('Scale: per station')}
             </button>
-          )}
-          <button className="secondary" onClick={() => setView((v) => (v === 'table' ? 'chart' : 'table'))}>
-            {view === 'table' ? t('Show chart') : t('Show table')}
-          </button>
-        </span>
-      </div>
 
-      {view === 'chart' && (
-        <div className="chart-controls">
-          <label className="zoom-control">
-            <span className="muted small">{t('Stretch')}</span>
-            <input
-              type="range"
-              min={MIN_ZOOM}
-              max={MAX_ZOOM}
-              step={0.5}
-              value={zoom}
-              onChange={(e) => setZoom(Number(e.target.value))}
-              aria-label="Stretch the timeline"
-            />
-            <span className="muted small tabular">{zoom.toFixed(1)}×</span>
-          </label>
-          <label className="zoom-control">
-            <span className="muted small">{t('Height')}</span>
-            <input
-              type="range"
-              min={MIN_HEIGHT}
-              max={MAX_HEIGHT}
-              step={0.1}
-              value={height}
-              onChange={(e) => setHeight(Number(e.target.value))}
-              aria-label="Row height"
-            />
-            <span className="muted small tabular">{height.toFixed(1)}×</span>
-          </label>
-          {(zoom !== MIN_ZOOM || height !== MIN_HEIGHT) && (
-            <button
-              className="secondary"
-              onClick={() => {
-                setZoom(MIN_ZOOM);
-                setHeight(MIN_HEIGHT);
-              }}
-            >
-              {t('Fit')}
-            </button>
-          )}
-        </div>
-      )}
+            <span className="toolbar-gap" />
+
+            {/* Labelled by what pushing them right does, rather than by the dimension
+                they happen to act on. */}
+            <label className="zoom-control">
+              <span className="muted small">{t('Wider')}</span>
+              <input
+                type="range"
+                min={MIN_ZOOM}
+                max={MAX_ZOOM}
+                step={0.5}
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                aria-label={t('Stretch the timeline')}
+              />
+              <span className="muted small tabular">{zoom.toFixed(1)}×</span>
+            </label>
+
+            <label className="zoom-control">
+              <span className="muted small">{t('Taller')}</span>
+              <input
+                type="range"
+                min={MIN_HEIGHT}
+                max={MAX_HEIGHT}
+                step={0.1}
+                value={height}
+                onChange={(e) => setHeight(Number(e.target.value))}
+                aria-label={t('Row height')}
+              />
+              <span className="muted small tabular">{height.toFixed(1)}×</span>
+            </label>
+
+            {(zoom !== MIN_ZOOM || height !== MIN_HEIGHT) && (
+              <button
+                className="secondary"
+                onClick={() => {
+                  setZoom(MIN_ZOOM);
+                  setHeight(MIN_HEIGHT);
+                }}
+              >
+                {t('Fit')}
+              </button>
+            )}
+          </>
+        )}
+      </div>
 
       {view === 'chart' && (
         <p className="hint" style={{ margin: '-0.35rem 0 0.85rem' }}>
@@ -298,7 +326,9 @@ export function CrossingDistribution({ result }: Props) {
             aria-label="Runner arrivals over time at each station"
             onMouseLeave={() => setHover(null)}
           >
-            {ticks.map((t) => (
+            {/* Each label carries its day the first time that day appears — a two-day
+                chart otherwise says "06:00" twice and means two different mornings. */}
+            {ticks.map((t, i) => (
               <g key={t}>
                 <line
                   x1={xForSeconds(t)}
@@ -308,7 +338,9 @@ export function CrossingDistribution({ result }: Props) {
                   className="grid-line"
                 />
                 <text x={xForSeconds(t)} y={chartHeight - 8} textAnchor="middle" className="axis-text">
-                  {formatHm(t)}
+                  {i > 0 && eventDayOffset(t) === eventDayOffset(ticks[i - 1])
+                    ? formatHm(t)
+                    : `${eventDayLabel(t, raceDate)} ${formatHm(t)}`}
                 </text>
               </g>
             ))}

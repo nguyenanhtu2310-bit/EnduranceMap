@@ -44,6 +44,7 @@ import { NavPanel, type NavItem } from './components/NavPanel';
 import { readCourseProfile, type CourseProfile } from './lib/courseProfile';
 import { parseTimingPoints, type TimingPoint } from './lib/timingPoints';
 import { readMeasuredSplits, type MeasuredSplits } from './lib/measuredSplits';
+import { decodeResults, encodeResults } from './lib/raceFile';
 import { parseCsv } from './lib/csv';
 import { timingStations, TIMING_FOLDER } from './lib/timingStations';
 import { parseGpx } from './lib/gpx';
@@ -763,6 +764,10 @@ export default function App() {
     const snap = captureSnapshot();
     const body: Record<string, unknown> = {};
     for (const key of RACE_FILE_FIELDS) body[key] = snap[key];
+    // JSON has no Map, and turns one into `{}` without saying so. The measured splits
+    // are held in a Map, so without this they leave the building silently and the file
+    // that comes back crashes whatever iterates them.
+    body.results = encodeResults(snap.results as never);
     const file = {
       app: 'EnduranceMap',
       kind: 'race',
@@ -796,6 +801,7 @@ export default function App() {
       }
       const saved = data.snapshot as Partial<RaceSnapshot>;
       const snap: RaceSnapshot = { ...blankSnapshot(), ...saved, result: null, courses: [], folders: [] };
+      snap.results = decodeResults(snap.results as never) as RaceSnapshot['results'];
       snap.amenityOverrides = migrateAmenityOverrides(snap.amenityOverrides);
       // Files written before multisport support have no discriminator on their results.
       if (snap.results && !('kind' in snap.results)) {
@@ -812,8 +818,12 @@ export default function App() {
         if (snap.multisport) snap.multisport = autoBindCourses(snap.multisport, snap.courses);
       }
       newTab(data.label || file.name.replace(/\.race\.json$/i, ''), snap);
-    } catch {
-      setError(`Could not read "${file.name}" as a race file.`);
+    } catch (problem) {
+      // The reason, not just the fact. This swallowed a crash that emptied the whole app
+      // and left one sentence on screen that named neither the field nor the cause, so
+      // an hour of configuration looked simply unopenable.
+      const reason = problem instanceof Error ? problem.message : String(problem);
+      setError(`Could not read "${file.name}" as a race file — ${reason}`);
     }
   }
 
@@ -2036,7 +2046,7 @@ export default function App() {
               run in course order, so the field can be seen moving down the route. The cap marks each station’s
               busiest window.
             </p>
-            <CrossingDistribution result={planned} />
+            <CrossingDistribution result={planned} raceDate={raceDate} />
           </ResultSection>
 
           <ResultSection

@@ -257,6 +257,10 @@ const VI: Record<string, string> = {
 
   // The field on the course.
   'Master timeline': 'Dòng thời gian tổng',
+  'Wider': 'Rộng hơn',
+  'Taller': 'Cao hơn',
+  'Stretch the timeline': 'Kéo giãn trục thời gian',
+  'Row height': 'Chiều cao mỗi hàng',
   'Remove this timing file': 'Xoá tệp bấm giờ này',
   'Remove all timing files': 'Xoá tất cả tệp bấm giờ',
   'Stations then come from the map layers alone.': 'Khi đó trạm chỉ lấy từ các lớp trên bản đồ.',

@@ -1,5 +1,8 @@
 import { isEndZoneStop, type PipelineResult, type PipelineStation } from './pipeline';
+import { axisTicks } from './axisTicks';
 import {
+  eventDayLabel,
+  eventDayOffset,
   formatDuration,
   formatEventClock,
   parseClockTimeToSeconds,
@@ -147,12 +150,20 @@ const DARK_SERIES = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#5e
  * shared scale would flatten exactly the rows a reader opens the chart to see. The
  * table beneath carries the absolute numbers.
  */
-function buildDistributionSvg(result: PipelineResult, series: string[], ink: { label: string; axis: string; grid: string; base: string; peak: string }, stations: TrafficStation[]): string {
+function buildDistributionSvg(result: PipelineResult, series: string[], ink: { label: string; axis: string; grid: string; base: string; peak: string }, stations: TrafficStation[], raceDate?: string): string {
   const binCount = stations[0]?.distribution.length ?? 0;
   if (binCount === 0) return '';
 
   const ROW_BODY = 40;
   const AXIS_H = 26;
+  /*
+   * How many times the axis may name, sized for the page it is printed on.
+   *
+   * A landscape A4 gives the plot roughly 900pt. A label reading "Sat 08:00" needs about
+   * 55pt of that with air either side, so a dozen is what fits — past that they touch,
+   * and touching labels on paper are worse than fewer of them.
+   */
+  const AXIS_LABELS = 12;
   const LABEL_W = 190;
   const PLOT_W = Math.max(560, Math.min(860, binCount * 8));
   const width = LABEL_W + PLOT_W + 12;
@@ -176,10 +187,24 @@ function buildDistributionSvg(result: PipelineResult, series: string[], ink: { l
   const height = stations.length * ROW_H + AXIS_H;
 
   const parts: string[] = [];
-  const firstHour = Math.ceil(result.timeRangeSeconds.start / 3600) * 3600;
-  for (let t = firstHour; t <= result.timeRangeSeconds.end; t += 3600) {
-    parts.push(`<line x1="${x(t).toFixed(1)}" y1="0" x2="${x(t).toFixed(1)}" y2="${height - AXIS_H}" stroke="${ink.grid}" stroke-width="1"/>`);
-    parts.push(`<text x="${x(t).toFixed(1)}" y="${height - 8}" text-anchor="middle" fill="${ink.axis}" font-size="11">${secondsToClockTime(t).slice(0, 5)}</text>`);
+
+  /*
+   * An hourly tick is right for a road race and unreadable for a trail one: a 49-hour
+   * course wrote forty-nine labels along an axis with room for a dozen, and on paper they
+   * merged into a grey band. The interval follows the span, and each label carries its
+   * day the first time that day appears — otherwise a two-day chart says "09:00" twice
+   * and means two different mornings.
+   */
+  let lastDay = -1;
+  for (const tick of axisTicks(result.timeRangeSeconds.start, result.timeRangeSeconds.end, AXIS_LABELS)) {
+    const at = x(tick.seconds).toFixed(1);
+    parts.push(`<line x1="${at}" y1="0" x2="${at}" y2="${height - AXIS_H}" stroke="${ink.grid}" stroke-width="1"/>`);
+
+    const day = eventDayOffset(tick.seconds);
+    const clock = secondsToClockTime(tick.seconds).slice(0, 5);
+    const label = day === lastDay ? clock : `${eventDayLabel(tick.seconds, raceDate)} ${clock}`;
+    lastDay = day;
+    parts.push(`<text x="${at}" y="${height - 8}" text-anchor="middle" fill="${ink.axis}" font-size="11">${esc(label)}</text>`);
   }
 
   stations.forEach((station, row) => {
@@ -464,7 +489,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         const legend = courses
           .map((c, i) => `<span class="key"><span class="swatch" style="background:${series[i % series.length]}"></span>${esc(c.name)}</span>`)
           .join('');
-        const svg = buildDistributionSvg(result, series, ink, entries);
+        const svg = buildDistributionSvg(result, series, ink, entries, options.raceDate);
         return `<h2>Crossing time distribution</h2>
         <p class="note">Runner arrivals per ${result.binMinutes} minutes on one shared clock, stacked by distance. Each row is scaled to its own peak; the table beneath carries the absolute numbers.</p>
         <div class="legend">${legend}<span class="key"><span class="swatch peak"></span>Peak window</span>${

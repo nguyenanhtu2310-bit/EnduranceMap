@@ -392,3 +392,68 @@ describe('traffic at each station', () => {
     expect(view.active[view.active.length - 1].total).toBeGreaterThan(0);
   });
 });
+
+describe('the crossing-time axis on a page', () => {
+  /**
+   * Every time written along the bottom of the distribution chart.
+   *
+   * Matched on the axis label's own signature — middle-anchored at font-size 11 — rather
+   * than by slicing the first <svg> in the document, which is a different chart.
+   */
+  const axisLabels = (reportHtml: string) =>
+    [...reportHtml.matchAll(/text-anchor="middle"[^>]*font-size="11">([^<]*)</g)].map((m) => m[1]);
+
+  /** A race whose tail sets the span, as its own report. */
+  const reportFor = (typical: number, slowest: number, raceDate?: string) =>
+    buildReportHtml(
+      runPipeline(kml, [
+        {
+          courseName: '10km',
+          startTimeClock: '05:00',
+          runnerCount: 200,
+          startSpreadMinutes: 5,
+          fastestMinPerKm: 6,
+          typicalMinPerKm: typical,
+          slowestMinPerKm: slowest,
+        },
+      ]),
+      { raceName: 'Span fixture', rules: DEFAULT_AMENITY_RULES, overrides: {}, raceDate }
+    );
+
+  it('does not write a label an hour on a race that runs for days', () => {
+    // The complaint this fixes: forty-nine hourly ticks merging into a grey band on paper.
+    const labels = axisLabels(reportFor(60, 180));
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels.length).toBeLessThanOrEqual(14);
+  });
+
+  it('still writes a short race finely', () => {
+    // Coarsening a ninety-minute race to three-hourly marks is the opposite mistake.
+    expect(axisLabels(html).length).toBeGreaterThan(3);
+    expect(axisLabels(html)[1]).toMatch(/^\d{2}:\d{2}$/);
+  });
+
+  it('names the day only where the day changes', () => {
+    // "06:00" twice on a two-day chart means two different mornings, and on paper there
+    // is nothing else to tell them apart — but naming every label is a wall of text.
+    const labels = axisLabels(reportFor(60, 180));
+    const dayed = labels.filter((l) => /^(Day \d|D\+\d|Fri|Sat|Sun|Mon|Tue|Wed|Thu)\s/.test(l));
+    expect(dayed.length).toBeGreaterThanOrEqual(2);
+    expect(dayed.length).toBeLessThan(labels.length);
+  });
+
+  it('uses the weekday where a race date was given', () => {
+    const labels = axisLabels(reportFor(60, 180, '2026-09-18'));
+    expect(labels.some((l) => /^Fri\s/.test(l))).toBe(true);
+    expect(labels.some((l) => /^Sat\s/.test(l))).toBe(true);
+  });
+
+  it('keeps its ticks on the interval, not on the gun', () => {
+    // A 05:00 start on a three-hourly axis reads 06:00, 09:00, 12:00 — hours a crew chief
+    // can find without arithmetic.
+    for (const label of axisLabels(reportFor(60, 180))) {
+      const clock = label.split(' ').pop()!;
+      expect(clock).toMatch(/^\d{2}:00$/);
+    }
+  });
+});

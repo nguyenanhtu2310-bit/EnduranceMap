@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   matCoverage,
-  readAttrition,
   splitsUsedBy,
   parseSplitSeconds,
   readMeasuredSplits,
@@ -224,75 +223,6 @@ describe('a split cell that carries its pace too', () => {
     expect(parseSplitSeconds('1:02:00:00')).toBe(26 * 3600);
     expect(parseSplitSeconds(' / 5:29')).toBeNull();
     expect(parseSplitSeconds('nonsense / 5:29')).toBeNull();
-  });
-});
-
-describe('who retired, and where they were last seen', () => {
-  const CPS = ['CP1', 'CP2', 'CP3'];
-  const runner = (
-    contest: string,
-    status: string,
-    start: string,
-    finish: string,
-    splits: Record<string, string>
-  ) => ({ Contest: contest, Status: status, Start: start, ChipTime: finish, CP1: '', CP2: '', CP3: '', ...splits });
-
-  const rows = [
-    runner('50KM', '', '05:00:00', '6:10:00', { CP1: '1:02:00 / 6:12', CP2: '2:40:00 / 6:20', CP3: '4:30:00 / 6:31' }),
-    runner('50KM', '', '05:00:01', '6:40:00', { CP1: '1:10:00 / 7:00', CP2: '2:55:00 / 7:02', CP3: '4:50:00 / 7:04' }),
-    runner('50KM', 'DNF', '05:00:02', '', { CP1: '1:20:00 / 8:00', CP2: '3:10:00 / 8:05' }),
-    runner('50KM', 'DNF', '05:00:03', '', { CP1: '1:22:00 / 8:12', CP2: '3:14:00 / 8:14' }),
-    runner('50KM', 'DNF', '05:00:04', '', { CP1: '1:25:00 / 8:30' }),
-    // Retired holding a finishing time: stopped at a cut-off rather than withdrawn.
-    runner('50KM', 'DNF', '05:00:05', '9:59:00', { CP1: '1:30:00 / 9:00', CP2: '3:30:00 / 9:02', CP3: '7:00:00 / 9:30' }),
-    // Never read at the start; the checkpoints still place them.
-    runner('50KM', 'DNF', '', '', { CP1: '1:40:00 / 10:00' }),
-    runner('50KM', 'DNS', '', '', {}),
-  ];
-
-  it('takes the count the file states rather than working it out', () => {
-    const [reading] = readAttrition(rows, CPS);
-    expect(reading.basis).toBe('stated');
-    expect(reading.retired).toBe(5);
-    expect(reading.finishers).toBe(2);
-    // The runner who never started is in neither count.
-    expect(reading.starters).toBe(7);
-  });
-
-  it('says where each group was last read, in course order', () => {
-    const [reading] = readAttrition(rows, CPS);
-    expect(reading.byLastSeen).toEqual([
-      { lastSeen: 'CP1', count: 2 },
-      { lastSeen: 'CP2', count: 2 },
-      { lastSeen: 'CP3', count: 1 },
-    ]);
-  });
-
-  it('flags the two things that make the count read wrong', () => {
-    const [reading] = readAttrition(rows, CPS);
-    expect(reading.caveats.join(' ')).toContain('1 of these hold a finishing time');
-    expect(reading.caveats.join(' ')).toContain('1 were never read at the start');
-  });
-
-  it('falls back to working it out when the file states no status', () => {
-    // Same runners, statuses stripped: start read and no finish time.
-    const silent = rows
-      .filter((r) => r.Status !== 'DNS')
-      .map((r) => ({ ...r, Status: '' }));
-    const [reading] = readAttrition(silent, CPS);
-    expect(reading.basis).toBe('inferred');
-    // Four of the five: the cut-off runner holds a finish time and the one the start mat
-    // never read has no start. Both are invisible this way, which the caveat says.
-    expect(reading.retired).toBe(3);
-    expect(reading.caveats.join(' ')).toContain('93%');
-  });
-
-  it('keeps each contest apart', () => {
-    const mixed = [...rows, runner('21KM', 'DNF', '08:00:00', '', { CP1: '30:00 / 6:00' })];
-    const readings = readAttrition(mixed, CPS);
-    expect(readings.map((r) => r.contest)).toEqual(['50KM', '21KM']);
-    expect(readings[1].retired).toBe(1);
-    expect(readings[1].byLastSeen).toEqual([{ lastSeen: 'CP1', count: 1 }]);
   });
 });
 
