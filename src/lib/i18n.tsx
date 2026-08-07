@@ -257,6 +257,10 @@ const VI: Record<string, string> = {
 
   // The field on the course.
   'Master timeline': 'Dòng thời gian tổng',
+  'Home so far': 'Đã về',
+  'of finishers': 'trên tổng số về đích',
+  'How much of each distance’s field is home at this moment. This is progress through the race, not a finish rate — the model carries no retirements, so everyone arrives in the end.':
+    'Bao nhiêu VĐV của mỗi cự ly đã về đích tại thời điểm này. Đây là tiến độ cuộc đua, không phải tỉ lệ hoàn thành — mô hình không tính người bỏ cuộc, nên cuối cùng ai cũng về.',
   'The whole field, at any moment': 'Toàn bộ VĐV, tại bất kỳ thời điểm nào',
   'Finished': 'Đã về đích',
   'Still to start': 'Chưa xuất phát',

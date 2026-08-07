@@ -27,7 +27,14 @@ const AXIS_H = 20;
 const LABEL_ROW_H = 13;
 const LABEL_PAD = 8;
 const BIN_KM = 1;
-const RULER_ROW_H = 12;
+/**
+ * Height of one row of gun labels.
+ *
+ * The ruler is drawn 900 units wide and displayed at about three-quarters of that, so
+ * every size here is smaller on screen than it reads in the source. At twelve units the
+ * labels came out around seven pixels — present, and not actually readable.
+ */
+const RULER_ROW_H = 16;
 /**
  * Room to the left of the plot for the two scales, in the same units the plot uses.
  *
@@ -181,7 +188,7 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
           x: s.fraction * COLUMNS,
           text: `${s.name} ${formatEventClock(s.seconds, raceDate)}`,
         })),
-        { width: COLUMNS, maxRows: 3 }
+        { width: COLUMNS, maxRows: 4 }
       ),
     [starts, raceDate]
   );
@@ -406,6 +413,19 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
       */}
       {progress.length > 0 && (
         <div className="finisher-rows">
+          {/*
+            The share is headed "of finishers" and not left bare, because bare it reads as
+            a finish rate and is not one. The model carries no retirements, so every
+            runner in it arrives eventually and every distance reaches 100% — as progress
+            through the field that is exactly right, and as a finish rate it would be a
+            claim the tool is in no position to make.
+          */}
+          <div className="finisher-row finisher-head">
+            <span className="finisher-name">{t('Distance')}</span>
+            <span />
+            <span className="finisher-count">{t('Home so far')}</span>
+            <span className="finisher-share">{t('of finishers')}</span>
+          </div>
           {progress.map((row) => {
             const share = row.fieldSize > 0 ? (row.finished / row.fieldSize) * 100 : 0;
             return (
@@ -426,7 +446,9 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
             );
           })}
           <p className="hint finisher-note">
-            {t('Finished, against each distance’s own field. Retirements are not modelled.')}
+            {t(
+              'How much of each distance’s field is home at this moment. This is progress through the race, not a finish rate — the model carries no retirements, so everyone arrives in the end.'
+            )}
           </p>
         </div>
       )}
@@ -452,9 +474,12 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
                 stroke={seriesVar(courseIndex(start.name))}
               />
               {placed && (
+                // Held a few units inside the frame. A label anchored at the very left
+                // has its first glyph bearing slightly negative, so the leading digit of
+                // "100 Miles" was sliced off by the edge of the drawing.
                 <text
-                  x={sx}
-                  y={NOW_BAND_H + placed.row * RULER_ROW_H + 9}
+                  x={Math.min(COLUMNS - 3, Math.max(3, sx))}
+                  y={NOW_BAND_H + placed.row * RULER_ROW_H + 11}
                   textAnchor={placed.anchor}
                   fill={seriesVar(courseIndex(start.name))}
                 >
