@@ -54,6 +54,16 @@ export const REPORT_SECTIONS: { key: keyof ReportSections; label: string; hint: 
   { key: 'cutoffs', label: 'Cut-off times', hint: 'Proposed cut-offs against modelled arrivals' },
 ];
 
+/**
+ * Every section off, as the base for taking exactly one away.
+ *
+ * Derived from the section list rather than written out, so a seventh section cannot be
+ * added and silently left on in a document meant to hold one thing.
+ */
+export const NO_REPORT_SECTIONS: ReportSections = Object.fromEntries(
+  REPORT_SECTIONS.map((section) => [section.key, false])
+) as unknown as ReportSections;
+
 export const ALL_REPORT_SECTIONS: ReportSections = {
   schedule: true,
   perDistance: true,

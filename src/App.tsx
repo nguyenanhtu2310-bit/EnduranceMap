@@ -23,6 +23,7 @@ import {
 import { AmenityEditor } from './components/AmenityEditor';
 import {
   ALL_REPORT_SECTIONS,
+  NO_REPORT_SECTIONS,
   REPORT_SECTIONS,
   buildReportHtml,
   downloadReport,
@@ -1119,6 +1120,51 @@ export default function App() {
   }
 
   /**
+   * Takes one section away on its own, in either format.
+   *
+   * Built from the same report as the whole thing, with every other section switched
+   * off — so a section downloaded alone is the same section, laid out the same way, and
+   * cannot drift from its own appearance in the full document. The alternative is a
+   * second renderer per section and six more things to keep in step.
+   */
+  function exportSection(key: keyof ReportSections, format: 'html' | 'xlsx') {
+    if (!planned) return;
+    const name = raceName.trim() || kml?.fileName.replace(/\.kml$/i, '') || 'Race';
+    const base = name.replace(/[^\w\d -]+/g, '').trim() || 'race';
+    const only = { ...NO_REPORT_SECTIONS, [key]: true } as ReportSections;
+    const label = REPORT_SECTIONS.find((s) => s.key === key)?.label ?? key;
+    const safeLabel = label.replace(/[^\w\d -]+/g, '').trim();
+
+    if (format === 'xlsx') {
+      const sheets = buildReportSheets(planned, {
+        raceName: name,
+        raceDate,
+        rules: DEFAULT_AMENITY_RULES,
+        overrides: amenityOverrides,
+        amenities,
+        notes: stationNotes,
+        sections: only,
+      });
+      downloadXlsx(sheets, `${base} - ${safeLabel}.xlsx`);
+      return;
+    }
+
+    const html = buildReportHtml(planned, {
+      raceName: name,
+      raceDate,
+      theme: 'light',
+      notes: stationNotes,
+      sections: only,
+      rules: DEFAULT_AMENITY_RULES,
+      overrides: amenityOverrides,
+      amenities,
+      sourceFileName: kml?.fileName,
+      resultsFileName: results?.fileName,
+    });
+    downloadReport(html, `${base} - ${safeLabel}.html`);
+  }
+
+  /**
    * Switches between a single-sport race and a multisport one, starting the legs off
    * bound to whatever the map already holds.
    *
@@ -1879,6 +1925,7 @@ export default function App() {
           <ResultSection
             title={t('Station operating schedule')}
             id="res-schedule"
+            onExport={(format) => exportSection('schedule', format)}
             summary={`${planned.stations.length} stations`}
             open={openSections.schedule}
             onToggle={() => toggleSection('schedule')}
@@ -1956,6 +2003,7 @@ export default function App() {
           <ResultSection
             title={t('Course amenities')}
             id="res-amenities"
+            onExport={(format) => exportSection('perDistance', format)}
             summary={`${planned.courses.length} distances`}
             open={openSections.amenities}
             onToggle={() => toggleSection('amenities')}
@@ -2016,6 +2064,7 @@ export default function App() {
           <ResultSection
             title={t('Split calculation')}
             id="res-splits"
+            onExport={(format) => exportSection('splits', format)}
             summary="Every point, by distance"
             open={openSections.splits}
             onToggle={() => toggleSection('splits')}
@@ -2038,6 +2087,7 @@ export default function App() {
           <ResultSection
             title={t('Crossing time distribution')}
             id="res-distribution"
+            onExport={(format) => exportSection('distribution', format)}
             summary="The race day on one clock"
             open={openSections.distribution}
             onToggle={() => toggleSection('distribution')}
@@ -2053,6 +2103,7 @@ export default function App() {
           <ResultSection
             title={t('Traffic at each station')}
             id="res-traffic"
+            onExport={(format) => exportSection('stationTraffic', format)}
             summary={`${planned.stations.length} stations, one page each`}
             open={openSections.traffic}
             onToggle={() => toggleSection('traffic')}
@@ -2064,6 +2115,7 @@ export default function App() {
           <ResultSection
             title={t('Cut-off times')}
             id="res-cutoffs"
+            onExport={(format) => exportSection('cutoffs', format)}
             summary={`${planned.cutoffTable.length} proposals`}
             open={openSections.cutoffs}
             onToggle={() => toggleSection('cutoffs')}
