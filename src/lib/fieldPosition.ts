@@ -109,16 +109,22 @@ export interface FieldSnapshot {
   onCourseByCourse: number[];
   totalOnCourse: number;
   /**
-   * The whole field at this moment, split three ways.
+   * Runners home at this moment, per course and in total.
    *
-   * There is deliberately no DNF here. A runner who abandons never reaches the finish
-   * file the model is built from, so the field it replays is the field that finished —
-   * counting a retirement would mean inventing one. Attrition is knowable only from
-   * recorded splits, and claiming it from a model would be the worst kind of confident
-   * wrong number: it looks like an operational fact and is arithmetic about nobody.
+   * Per course because an event is several races, not one. Six distances going off across
+   * a morning are at six different points in their own day — the 10 km can be packed up
+   * while the 100 miles has not reached its first checkpoint — and one number averaged
+   * over all of them describes none of them. "39% finished" across that card is true of
+   * nobody and would be read as progress.
+   *
+   * There is deliberately no DNF. A runner who abandons never reaches the finish file the
+   * model is built from, so the field it replays is the field that finished — counting a
+   * retirement would mean inventing one. Attrition is knowable only from recorded splits,
+   * and claiming it from a model would be the worst kind of confident wrong number: it
+   * looks like an operational fact and is arithmetic about nobody.
    */
-  waiting: number;
-  onCourse: number;
+  finishedByCourse: number[];
+  fieldSizeByCourse: number[];
   finished: number;
   fieldSize: number;
 }
@@ -150,9 +156,10 @@ export function fieldSnapshot(
   const offSpineByCourse: number[] = [];
   const onCourseByCourse: number[] = [];
   let totalOnCourse = 0;
-  let waiting = 0;
   let finished = 0;
   let fieldSize = 0;
+  const finishedByCourse: number[] = [];
+  const fieldSizeByCourse: number[] = [];
 
   for (const input of inputs) {
     const bins = new Array<number>(binCount).fill(0);
@@ -161,18 +168,14 @@ export function fieldSnapshot(
     const mapping = mappings.get(input.courseName);
     let offSpine = 0;
     let onCourse = 0;
-
-    fieldSize += paces.length;
+    let home = 0;
 
     if (startSeconds !== null) {
       for (const runner of paces) {
         const { state, km } = runnerStateAt(seconds, startSeconds, runner, input.courseKm);
-        if (state === 'waiting') {
-          waiting += 1;
-          continue;
-        }
+        if (state === 'waiting') continue;
         if (state === 'finished') {
-          finished += 1;
+          home += 1;
           continue;
         }
         onCourse += 1;
@@ -185,15 +188,16 @@ export function fieldSnapshot(
         const bin = Math.min(binCount - 1, Math.max(0, Math.floor(spineKm / binKm)));
         bins[bin] += 1;
       }
-    } else {
-      // A distance whose gun cannot be read has not started, rather than vanishing.
-      waiting += paces.length;
     }
 
     binsByCourse.push(bins);
     offSpineByCourse.push(offSpine);
     onCourseByCourse.push(onCourse);
+    finishedByCourse.push(home);
+    fieldSizeByCourse.push(paces.length);
     totalOnCourse += onCourse;
+    finished += home;
+    fieldSize += paces.length;
   }
 
   return {
@@ -201,8 +205,8 @@ export function fieldSnapshot(
     offSpineByCourse,
     onCourseByCourse,
     totalOnCourse,
-    waiting,
-    onCourse: totalOnCourse,
+    finishedByCourse,
+    fieldSizeByCourse,
     finished,
     fieldSize,
   };

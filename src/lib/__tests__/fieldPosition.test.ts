@@ -154,7 +154,7 @@ describe('fieldWindow', () => {
   });
 });
 
-describe('the field split three ways', () => {
+describe('how many are home', () => {
   const paces = new Map([[band.courseName, runnerPaces(band)]]);
   const mappings = new Map([[band.courseName, identity('42K', 42)]]);
   const at = (seconds: number) =>
@@ -169,26 +169,24 @@ describe('the field split three ways', () => {
     expect(runnerStateAt(3600 + 42 * 6 * 60 + 1, 3600, runner, 42).state).toBe('finished');
   });
 
-  it('has the whole field waiting before the gun', () => {
+  it('has nobody home before the gun', () => {
     const before = at(4 * 3600);
-    expect(before.waiting).toBe(100);
-    expect(before.onCourse).toBe(0);
     expect(before.finished).toBe(0);
+    expect(before.totalOnCourse).toBe(0);
   });
 
   it('has the whole field home once the slowest is in', () => {
     // The slowest runs 9 min/km over 42 km — nine hours from a five o'clock gun.
     const after = at(5 * 3600 + 42 * 9 * 60 + 60);
     expect(after.finished).toBe(100);
-    expect(after.onCourse).toBe(0);
-    expect(after.waiting).toBe(0);
+    expect(after.totalOnCourse).toBe(0);
   });
 
-  it('accounts for every runner at every moment', () => {
-    // The three counts are a partition, not three separate tallies that might disagree.
+  it('never reports more finishers than the field holds', () => {
     for (let hour = 3; hour <= 16; hour++) {
       const snap = at(hour * 3600);
-      expect(snap.waiting + snap.onCourse + snap.finished).toBe(snap.fieldSize);
+      expect(snap.finished).toBeLessThanOrEqual(snap.fieldSize);
+      expect(snap.finished + snap.totalOnCourse).toBeLessThanOrEqual(snap.fieldSize);
       expect(snap.fieldSize).toBe(100);
     }
   });
@@ -196,13 +194,54 @@ describe('the field split three ways', () => {
   it('counts everyone on the spine or off it, never twice', () => {
     const mid = at(8 * 3600);
     const binned = mid.binsByCourse[0].reduce((sum, n) => sum + n, 0);
-    expect(binned + mid.offSpineByCourse[0]).toBe(mid.onCourse);
+    expect(binned + mid.offSpineByCourse[0]).toBe(mid.totalOnCourse);
   });
 
   it('finishes people gradually rather than all at once', () => {
-    // The point of the band: at six hours some are home and some are not.
     const midRace = at(5 * 3600 + 6 * 3600);
     expect(midRace.finished).toBeGreaterThan(0);
-    expect(midRace.onCourse).toBeGreaterThan(0);
+    expect(midRace.totalOnCourse).toBeGreaterThan(0);
+  });
+});
+
+describe('several races at once', () => {
+  // The reason the count is kept per distance: a short race can be packed up while a long
+  // one has not reached its first checkpoint, and one aggregate describes neither.
+  const short: FieldInput = { ...band, courseName: '10K', courseKm: 10, runnerCount: 40 };
+  const long: FieldInput = { ...band, courseName: '100K', courseKm: 100, runnerCount: 60 };
+  const paces = new Map([
+    [short.courseName, runnerPaces(short)],
+    [long.courseName, runnerPaces(long)],
+  ]);
+  const mappings = new Map([
+    [short.courseName, identity('10K', 10)],
+    [long.courseName, identity('100K', 100)],
+  ]);
+  const at = (seconds: number) =>
+    fieldSnapshot(seconds, [short, long], mappings, paces, { spineKm: 100, binKm: 1 });
+
+  it('keeps a finisher count per distance, in the order given', () => {
+    const snap = at(5 * 3600 + 2 * 3600);
+    expect(snap.finishedByCourse).toHaveLength(2);
+    expect(snap.fieldSizeByCourse).toEqual([40, 60]);
+  });
+
+  it('has the short race done while the long one is barely started', () => {
+    // Two hours in: the 10 km is home at every pace in the band, the 100 km at none.
+    const snap = at(5 * 3600 + 2 * 3600);
+    expect(snap.finishedByCourse[0]).toBe(40);
+    expect(snap.finishedByCourse[1]).toBe(0);
+
+    // The aggregate this replaced would have called that "40% finished", which is true of
+    // neither race — one is over and the other has ninety kilometres to run.
+    expect(snap.finished / snap.fieldSize).toBeCloseTo(0.4, 2);
+  });
+
+  it('totals the per-course counts exactly', () => {
+    for (let hour = 4; hour <= 20; hour++) {
+      const snap = at(hour * 3600);
+      expect(snap.finishedByCourse.reduce((a, b) => a + b, 0)).toBe(snap.finished);
+      expect(snap.fieldSizeByCourse.reduce((a, b) => a + b, 0)).toBe(snap.fieldSize);
+    }
   });
 });

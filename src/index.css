@@ -1766,45 +1766,91 @@ button.row-remove:disabled {
 }
 
 /*
- * How much of the race is home, out, and still to go, at the moment being looked at.
+ * How far through its own race each distance is, at the moment being looked at.
  *
- * Three states rather than four: there is no DNF segment, because the field the model
- * replays is the field that finished and a retirement never enters it. Attrition is
- * knowable from recorded splits and nowhere else, and a zero drawn here would read as
- * "nobody dropped out" rather than "this cannot be known".
+ * A row per distance, not one bar for the event. Six distances on one card are six races
+ * at six different points in their own day, and an aggregate over them reports a number
+ * true of none: a finished 10 km and an untouched 100 miles average to "39% finished".
+ *
+ * Finishers only. Attrition needs recorded splits — a DNF taken from a model built out of
+ * finishers would be arithmetic about nobody.
  */
-.command-chart .field-status rect {
-  rx: 2;
+.finisher-rows {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.35rem;
 }
 
-.command-chart .field-status .is-finished rect {
-  fill: var(--color-accent);
+.finisher-row {
+  display: grid;
+  grid-template-columns: minmax(6rem, 12rem) 1fr auto 2.9rem;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.84rem;
 }
 
-.command-chart .field-status .is-racing rect {
-  fill: var(--color-accent-2);
+.finisher-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--color-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.command-chart .field-status .is-waiting rect {
-  fill: var(--color-neutral-700);
+/* The distance's own colour, the same one it takes in the chart above. */
+.finisher-name i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
 }
 
-.command-chart .field-status text {
-  fill: var(--color-bg);
-  font-size: 9.5px;
-  font-weight: 700;
+.finisher-track {
+  height: 9px;
+  border-radius: 999px;
+  background: var(--color-neutral-800);
+  overflow: hidden;
 }
 
-/* Sitting outside the bar, this one takes the page's ink rather than the bar's. */
-.command-chart .field-status .status-key {
-  fill: var(--color-muted);
-  font-size: 9px;
+.finisher-fill {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: 999px;
+  transition: width 0.12s linear;
+}
+
+.finisher-count {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.finisher-count em {
+  font-style: normal;
+  color: var(--color-faint);
+}
+
+.finisher-share {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accent);
   font-weight: 600;
 }
 
-/* The waiting segment is dark enough that the bar's own ink would vanish on it. */
-.command-chart .field-status .is-waiting text {
-  fill: var(--color-neutral-100);
+.finisher-note {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+}
+
+@media (max-width: 620px) {
+  .finisher-row {
+    grid-template-columns: 1fr auto 2.9rem;
+  }
+  .finisher-name {
+    grid-column: 1 / -1;
+  }
 }
 
 /* A number taken from chip reads rather than from a model. */

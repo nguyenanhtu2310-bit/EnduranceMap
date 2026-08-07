@@ -28,8 +28,6 @@ const LABEL_ROW_H = 13;
 const LABEL_PAD = 8;
 const BIN_KM = 1;
 const RULER_ROW_H = 12;
-/** Height of the band showing how much of the field is home, out, and still to go. */
-const STATUS_H = 54;
 /**
  * Room to the left of the plot for the two scales, in the same units the plot uses.
  *
@@ -201,19 +199,24 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
   const fieldTop = top + PLOT_H;
   const baseline = fieldTop + FIELD_H;
   /**
-   * How the whole event stands at this moment: home, out, still to go.
+   * How far through its own race each distance is, at this moment.
    *
-   * The strip here used to count runners the axis could not place and called it "off
-   * route", which reads as "lost" and meant "on their own roads". That count still
-   * matters and is stated above; what belongs under the chart is the question a director
-   * asks all day, which is how much of the race is left.
+   * One row per distance rather than one bar for the event. Six distances going off
+   * across a morning are at six different points in their own day — the 10 km can be
+   * packed up while the 100 miles has not reached its first checkpoint — and a single
+   * aggregate reports "39% finished", which is true of no race on the card.
+   *
+   * Finishers only. Attrition needs recorded splits, and a DNF figure taken from a model
+   * built out of finishers would be arithmetic about nobody.
    */
-  const segments = [
-    { key: 'finished', label: t('Finished'), count: snapshot.finished, className: 'is-finished' },
-    { key: 'racing', label: t('On course'), count: snapshot.onCourse, className: 'is-racing' },
-    { key: 'waiting', label: t('Still to start'), count: snapshot.waiting, className: 'is-waiting' },
-  ].filter((s) => s.count > 0);
-  const statusBand = snapshot.fieldSize > 0 ? STATUS_H : 0;
+  const progress = inputs
+    .map((input, i) => ({
+      name: input.courseName,
+      index: i,
+      finished: snapshot.finishedByCourse[i] ?? 0,
+      fieldSize: snapshot.fieldSizeByCourse[i] ?? 0,
+    }))
+    .filter((row) => row.fieldSize > 0);
 
   const { minMetres, maxMetres } = profile.totals;
   const span = Math.max(1, maxMetres - minMetres);
@@ -279,7 +282,7 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
 
       <svg
         className="command-chart"
-        viewBox={`${-GUTTER} 0 ${COLUMNS + GUTTER} ${baseline + statusBand + AXIS_H}`}
+        viewBox={`${-GUTTER} 0 ${COLUMNS + GUTTER} ${baseline + AXIS_H}`}
         role="img"
         aria-label={t('The field on the course at the chosen moment')}
       >
@@ -382,55 +385,51 @@ export function FieldSlider({ result, profiles, raceDate }: Props) {
         <line className="profile-axis" x1={0} y1={baseline} x2={COLUMNS} y2={baseline} />
         <line className="profile-axis" x1={0} y1={fieldTop} x2={COLUMNS} y2={fieldTop} />
 
-        {/*
-          The whole field as one bar: home, out, still to go. It moves with the slider, so
-          dragging across the day shows the race draining from right to left.
-        */}
-        {snapshot.fieldSize > 0 && (
-          <g className="field-status">
-            {(() => {
-              const barY = baseline + 16;
-              const barH = 16;
-              let x0 = 0;
-              return segments.map((segment) => {
-                const width = (segment.count / snapshot.fieldSize) * COLUMNS;
-                const share = (segment.count / snapshot.fieldSize) * 100;
-                const left = x0;
-                x0 += width;
-                return (
-                  <g className={segment.className} key={segment.key}>
-                    <title>{`${segment.label} — ${segment.count} of ${snapshot.fieldSize} (${share.toFixed(0)}%)`}</title>
-                    <rect x={left} y={barY} width={width} height={barH} />
-                    {/* Only a segment wide enough to hold its own figures prints them;
-                        a sliver would spill across its neighbours and read as theirs. */}
-                    {width > 92 && (
-                      <text x={left + 6} y={barY + barH - 4}>
-                        {segment.label} {segment.count} · {share.toFixed(0)}%
-                      </text>
-                    )}
-                  </g>
-                );
-              });
-            })()}
-            {/* The key sits under the bar so a narrow segment is still named. */}
-            <text className="status-key" x={0} y={baseline + STATUS_H - 4}>
-              {segments.map((s) => `${s.label} ${s.count}`).join('   ·   ')}
-              {`   ·   ${t('of')} ${snapshot.fieldSize}`}
-            </text>
-          </g>
-        )}
         {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
           <text
             key={fraction}
             className="profile-tick"
             x={Math.min(COLUMNS - 2, Math.max(2, fraction * COLUMNS))}
-            y={baseline + statusBand + AXIS_H - 5}
+            y={baseline + AXIS_H - 5}
             textAnchor={fraction === 0 ? 'start' : fraction === 1 ? 'end' : 'middle'}
           >
             {(spineKm * fraction).toFixed(0)} km
           </text>
         ))}
       </svg>
+
+      {/*
+        One row per distance, each measured against its own field rather than the event's.
+        Laid out as rows instead of stacked bars because a card with six distances is six
+        races, and six full-width bars would be six things to compare by eye when the
+        question is only ever "how far through is this one".
+      */}
+      {progress.length > 0 && (
+        <div className="finisher-rows">
+          {progress.map((row) => {
+            const share = row.fieldSize > 0 ? (row.finished / row.fieldSize) * 100 : 0;
+            return (
+              <div className="finisher-row" key={row.name}>
+                <span className="finisher-name">
+                  <i style={{ background: seriesVar(courseIndex(row.name)) }} />
+                  {row.name}
+                </span>
+                <span className="finisher-track">
+                  <span className="finisher-fill" style={{ width: `${share}%` }} />
+                </span>
+                <span className="finisher-count">
+                  {row.finished.toLocaleString()}
+                  <em>/{row.fieldSize.toLocaleString()}</em>
+                </span>
+                <span className="finisher-share">{share.toFixed(0)}%</span>
+              </div>
+            );
+          })}
+          <p className="hint finisher-note">
+            {t('Finished, against each distance’s own field. Retirements are not modelled.')}
+          </p>
+        </div>
+      )}
 
       <svg
         className="timeline-ruler"
