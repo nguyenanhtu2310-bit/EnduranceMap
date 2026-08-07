@@ -7,6 +7,7 @@ import {
   type AmenitySet,
 } from './amenities';
 import {
+  eventSecondsFrom,
   formatDuration,
   formatEventClock,
   parseClockTimeToSeconds,
@@ -264,9 +265,12 @@ function distributionSheet(result: PipelineResult, options: WorkbookOptions): Sh
       });
     }
 
+    // Dated like every other time in the workbook. The lead marker was the one cell
+    // still printing a bare clock, which on a race spanning two mornings is a time that
+    // could be either of them — and the HTML report beside it names the day.
     const lead = (sex: 'M' | 'F'): CellValue[] => {
       const first = firstLeadOfSex(station, sex);
-      return first ? [hm(secondsToClockTime(first.seconds)), first.courseName] : ['', ''];
+      return first ? [day(first.seconds), first.courseName] : ['', ''];
     };
 
     rows.push([
@@ -284,6 +288,7 @@ function distributionSheet(result: PipelineResult, options: WorkbookOptions): Sh
 
 /** A cover sheet, so a shared file explains itself without the covering email. */
 function summarySheet(result: PipelineResult, options: WorkbookOptions): Sheet {
+  const day = (seconds: number) => formatEventClock(seconds, options.raceDate);
   const rows: CellValue[][] = [
     ['Race', options.raceName || 'Untitled race'],
     ['Generated', new Date().toISOString().slice(0, 16).replace('T', ' ')],
@@ -299,7 +304,16 @@ function summarySheet(result: PipelineResult, options: WorkbookOptions): Sheet {
         (c) => c.courseName === course.name && !isEndZoneStop(s.mapName, c.kmFromStart, course.totalKm)
       )
     ).length;
-    rows.push([course.name, Number(course.totalKm.toFixed(2)), input ? hm(input.startTimeClock) : '', onCourse]);
+    // The gun with the day it goes off on. A card where the 100 miles starts Friday and
+    // everything else Saturday has two distances reading "08:00", and the summary sheet
+    // is the one page somebody prints to see the shape of the event.
+    const gun = input ? eventSecondsFrom(input.startTimeClock, input.startDayOffset) : null;
+    rows.push([
+      course.name,
+      Number(course.totalKm.toFixed(2)),
+      gun === null ? '' : day(gun),
+      onCourse,
+    ]);
   }
 
   if (result.warnings.length > 0) {

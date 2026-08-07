@@ -511,3 +511,56 @@ describe('dates in the report', () => {
     for (const lead of leads) expect(lead).toMatch(/^(Fri|Sat|Sun)\s\d{2}:\d{2}$/);
   });
 });
+
+describe('the two report themes', () => {
+  const opts = {
+    raceName: 'Both themes',
+    rules: DEFAULT_AMENITY_RULES,
+    overrides: {},
+    raceDate: '2026-09-18',
+    sections: { ...ALL_REPORT_SECTIONS, stationTraffic: true },
+  };
+  const light = buildReportHtml(result, { ...opts, theme: 'light' as const });
+  const dark = buildReportHtml(result, { ...opts, theme: 'dark' as const });
+
+  /** The report with its stylesheet and colour attributes taken out. */
+  const contentOf = (html: string) =>
+    html
+      .replace(/<style>[\s\S]*?<\/style>/g, '')
+      .replace(/(fill|stroke|background|color)="[^"]*"/g, '')
+      .replace(/style="[^"]*"/g, '')
+      .replace(/\s+/g, ' ');
+
+  it('says exactly the same thing in both themes', () => {
+    // A theme is a set of colours. Anything else differing between the two is a report
+    // that tells two stories, and the reader has no way of knowing which they were given.
+    expect(contentOf(dark)).toBe(contentOf(light));
+  });
+
+  it('carries every section in both', () => {
+    for (const heading of [
+      'Station operating schedule',
+      'Cut-off times',
+      'Traffic at each station',
+      'Crossing time distribution',
+    ]) {
+      expect(light).toContain(heading);
+      expect(dark).toContain(heading);
+    }
+  });
+
+  it('dates its times in both', () => {
+    for (const html of [light, dark]) {
+      expect(html).toMatch(/<span class="col-day">(Fri|Sat|Sun)<\/span>/);
+      const cutoffs = html.slice(html.indexOf('<h2>Cut-off times</h2>'));
+      expect(cutoffs).toMatch(/(Fri|Sat|Sun)\s\d{2}:\d{2}/);
+    }
+  });
+
+  it('differs only in its colours', () => {
+    // The check above would also pass if neither had any colour at all.
+    expect(dark).not.toBe(light);
+    expect(dark).toContain('color-scheme: dark');
+    expect(light).not.toContain('color-scheme: dark');
+  });
+});

@@ -1807,7 +1807,7 @@ export default function App() {
                 className="secondary"
                 onClick={() => {
                   const name = raceName.trim() || kml?.fileName.replace(/\.kml$/i, '') || 'Race';
-                  const html = buildCrewSheetsHtml(result, { raceName: name, t });
+                  const html = buildCrewSheetsHtml(result, { raceName: name, raceDate, t });
                   const base = name.replace(/[^\w\d -]+/g, '').trim() || 'race';
                   downloadReport(html, `${base} - crew sheets.html`);
                 }}

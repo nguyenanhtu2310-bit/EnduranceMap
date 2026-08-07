@@ -1,5 +1,5 @@
 import type { PipelineResult } from './pipeline';
-import { eventDayOffset, formatEventClock } from './time';
+import { eventDayLabel, eventDayOffset, formatEventClock } from './time';
 import { firstLeadOfSex, leadsForStation } from './leadMarkers';
 import { buildStationTraffic, courseTotal } from './stationTraffic';
 import { TRAFFIC_BANDS, buildStationTrafficSvg, trafficSvgWidth } from './stationTrafficSvg';
@@ -154,6 +154,8 @@ export function buildCrewSheetsHtml(result: PipelineResult, options: CrewSheetOp
   tbody tr:last-child td { border-bottom: none; font-weight: 700; border-top: 1.5px solid var(--ink); }
 
   .day-turn { border-left: 2px solid var(--ink); }
+  /* The day above the hour, so a labelled column is no wider than a bare one. */
+  .col-day { display: block; font-weight: 700; }
 
   .foot { margin-top: 5px; font-size: 9px; color: var(--muted); display: flex; justify-content: space-between; }
 
@@ -179,6 +181,8 @@ function sheet(
   raceDate?: string
 ): string {
   const day = (seconds: number) => formatEventClock(seconds, raceDate);
+  /** Just the day part, for the column head that carries it above the time. */
+  const dayName = (seconds: number) => eventDayLabel(seconds, raceDate);
   const view = buildStationTraffic(station, result.courseOrder);
   if (!view) return '';
 
@@ -219,7 +223,16 @@ function sheet(
       const binDay = eventDayOffset(bin.binStartSeconds);
       const turned = binDay !== lastDay;
       lastDay = binDay;
-      return `<th${turned ? ' class="day-turn"' : ''}>${hm(bin.binStartSeconds)}</th>`;
+      // The rule says the day turned; the label says which day it turned into. The rule
+      // alone was consistent with itself and with nothing else — every other export
+      // names its days, and a crew chief holding one page has no other sheet to check
+      // it against.
+      const first = bin === view.active[0];
+      const label =
+        turned || first
+          ? `<span class="col-day">${esc(dayName(bin.binStartSeconds))}</span>${hm(bin.binStartSeconds)}`
+          : hm(bin.binStartSeconds);
+      return `<th${turned ? ' class="day-turn"' : ''}>${label}</th>`;
     })
     .join('');
   const body = view.present

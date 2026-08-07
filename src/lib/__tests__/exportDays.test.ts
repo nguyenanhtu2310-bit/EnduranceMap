@@ -66,3 +66,41 @@ describe('a race that runs past midnight', () => {
     expect(html).not.toMatch(/D\+\d/);
   });
 });
+
+describe('every export agrees about days', () => {
+  const sheets = buildReportSheets(result, {
+    raceName: 'Test', raceDate: RACE_DATE, rules: DEFAULT_AMENITY_RULES, overrides: {},
+  });
+  const crew = buildCrewSheetsHtml(result, { raceName: 'Test', raceDate: RACE_DATE });
+
+  it('labels the crew sheet’s columns, not just rules them off', () => {
+    // The sheet marked where the day turned with a border and never said which day it
+    // turned into. A crew chief holding one page has no other sheet to check against.
+    expect(crew).toMatch(/<span class="col-day">(Fri|Sat|Sun)<\/span>/);
+  });
+
+  it('names the weekday rather than counting, once a date is known', () => {
+    // Without the race date reaching it the sheet reads "D+1", which is the same fact in
+    // the one form nobody standing on a course at four in the morning wants it in.
+    expect(crew).toMatch(/(Fri|Sat|Sun)/);
+    expect(crew).not.toMatch(/D\+\d/);
+  });
+
+  it('dates the lead-athlete time in the spreadsheet too', () => {
+    // Every other time in the workbook carried its day; this was the one cell left
+    // printing a bare clock, while the HTML report beside it named the day.
+    const flat = sheets.flatMap((sheet) => sheet.rows.flat()).map(String);
+    const leadLike = flat.filter((cell) => /^\d{2}:\d{2}$/.test(cell));
+    expect(leadLike).toEqual([]);
+  });
+
+  it('puts a day on something in all three exports', () => {
+    const report = buildReportHtml(result, {
+      raceName: 'Test', raceDate: RACE_DATE, rules: DEFAULT_AMENITY_RULES, overrides: {},
+    });
+    const workbookText = sheets.flatMap((s) => s.rows.flat()).map(String).join(' ');
+    for (const output of [report, crew, workbookText]) {
+      expect(output).toMatch(/(Fri|Sat|Sun)\s\d{2}:\d{2}/);
+    }
+  });
+});
