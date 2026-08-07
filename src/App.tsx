@@ -38,6 +38,7 @@ import { TimingPointsPanel } from './components/TimingPointsPanel';
 import { StationNamingTable } from './components/StationNamingTable';
 import { CourseCommandView } from './components/CourseCommandView';
 import { FieldSlider } from './components/FieldSlider';
+import { coursesWithoutProfile, matchProfiles } from './lib/profileMatch';
 import { NavPanel, type NavItem } from './components/NavPanel';
 import { readCourseProfile, type CourseProfile } from './lib/courseProfile';
 import { parseTimingPoints, type TimingPoint } from './lib/timingPoints';
@@ -416,8 +417,10 @@ export default function App() {
    * Parsed here rather than in the panel that shows them, so the command view and the
    * file list read the same 4 MB parse instead of each doing their own.
    */
-  const courseProfiles = useMemo(() => {
+  const readProfiles = useMemo(() => {
     const byName = new Map<string, CourseProfile>();
+    const clashes = new Map<string, string[]>();
+
     for (const file of gpxFiles) {
       let tracks;
       try {
@@ -427,17 +430,57 @@ export default function App() {
       }
       for (const track of tracks) {
         const read = readCourseProfile(track, { fallbackName: file.fileName.replace(/\.gpx$/i, '') });
+        // Two tracks under one name used to overwrite each other here while the course
+        // list, which flat-maps the same files, kept both. Six route files went in and
+        // three profiles came out, and the only visible sign was half the distances
+        // quietly missing from every view that draws a profile. The first is kept and
+        // the collision is reported, because the fix is to rename a track and nothing
+        // this code can do will guess which one was meant.
+        if (byName.has(read.name)) {
+          clashes.set(read.name, [...(clashes.get(read.name) ?? []), file.fileName]);
+          continue;
+        }
         byName.set(read.name, read);
       }
     }
-    return byName;
+    return { byName, clashes };
   }, [gpxFiles]);
+
+  const courseProfiles = readProfiles.byName;
+  /** Route files whose track names collide, named so one of them can be renamed. */
+  const profileNameClashes = readProfiles.clashes;
 
   const mergedCourses = useMemo(
     () => mergeCourseSources(kmlCourses, gpxCourses),
     [kmlCourses, gpxCourses]
   );
   const courses = mergedCourses.courses;
+
+  /**
+   * The same profiles, keyed by the course names the plan actually uses.
+   *
+   * Profiles come out of the GPX under the name written inside the track; courses are
+   * named by the plan. They agree by habit rather than by anything enforcing it, and when
+   * they came apart the failure was silent and one-sided — the route file list still
+   * showed every distance, because it reads the profiles directly, while every view that
+   * went through a course name quietly dropped the ones that did not match. A
+   * six-distance race offered three and said nothing about the other three.
+   */
+  const profilesByCourse = useMemo(
+    () =>
+      matchProfiles(
+        courses.map((c) => c.name),
+        courseProfiles,
+        { routeOf: new Map(rows.map((r) => [r.courseName, r.sourceCourseName ?? r.courseName])) }
+      ),
+    [courses, courseProfiles, rows]
+  );
+
+  /** Distances with no elevation behind them, named so the gap is stated not just shown. */
+  const withoutProfile = useMemo(
+    () => (courseProfiles.size === 0 ? [] : coursesWithoutProfile(courses.map((c) => c.name), profilesByCourse)),
+    [courses, courseProfiles, profilesByCourse]
+  );
 
   /*
    * Each timing config matched to the course it describes, by the length it declares
@@ -1348,6 +1391,26 @@ export default function App() {
         </p>
         <GpxPanel files={gpxFiles} onChange={setGpxFiles} />
 
+        {profileNameClashes.size > 0 && (
+          <div className="notice" style={{ marginTop: '0.6rem' }}>
+            {[...profileNameClashes].map(([name, files]) => (
+              <p className="hint" style={{ margin: 0 }} key={name}>
+                {t('Two route files name their track')} <strong>{name}</strong> —{' '}
+                {files.join(', ')}. {t('Only the first is used. Rename the track inside one of them.')}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {withoutProfile.length > 0 && (
+          <p className="hint" style={{ marginTop: '0.6rem' }}>
+            {t('No route file matched')}: <strong>{withoutProfile.join(', ')}</strong>.{' '}
+            {t(
+              'These distances plan normally but draw no climbing. A route file matches on the name inside it, so a track named for the file rather than the distance needs renaming — or the distance does.'
+            )}
+          </p>
+        )}
+
         <h3 className="sub-head">{t('Timing points')} <span className="sub-kind">LVS</span></h3>
         <p className="hint">
           {t(
@@ -1670,7 +1733,7 @@ export default function App() {
                 'The climbs and the crews on one picture. Timed stations are solid and named; the ones with no mat are hollow — a chip is read at the first and not the second.'
               )}
             </p>
-            <CourseCommandView result={planned} profiles={courseProfiles} />
+            <CourseCommandView result={planned} profiles={profilesByCourse} />
           </ResultSection>
 
           {/* Its own section, not a heading inside the profile. This is the view an
@@ -1688,7 +1751,7 @@ export default function App() {
                 'Slide to a moment and see every distance on the course at once, under the climbs they are on and beside the stations that serve them.'
               )}
             </p>
-            <FieldSlider result={planned} profiles={courseProfiles} raceDate={raceDate} />
+            <FieldSlider result={planned} profiles={profilesByCourse} raceDate={raceDate} />
           </ResultSection>
 
 
