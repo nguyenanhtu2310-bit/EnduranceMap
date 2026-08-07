@@ -257,6 +257,9 @@ const VI: Record<string, string> = {
 
   // The field on the course.
   'Master timeline': 'Dòng thời gian tổng',
+  'Remove this timing file': 'Xoá tệp bấm giờ này',
+  'Remove all timing files': 'Xoá tất cả tệp bấm giờ',
+  'Stations then come from the map layers alone.': 'Khi đó trạm chỉ lấy từ các lớp trên bản đồ.',
   'Stops': 'Chặn',
   'Runners this cut-off stops here': 'Số VĐV bị cut-off này chặn tại đây',
   'What this cut-off asks of a runner, against the pace the finish limit already asks':

@@ -109,6 +109,17 @@ export function TimingPointsPanel({ files, onChange, courses }: Props) {
       </div>
 
       {read.length > 0 && (
+        <div className="actions" style={{ margin: '0.85rem 0 0' }}>
+          <button className="secondary" onClick={() => onChange([])}>
+            {t('Remove all timing files')}
+          </button>
+          <span className="hint" style={{ margin: 0 }}>
+            {t('Stations then come from the map layers alone.')}
+          </span>
+        </div>
+      )}
+
+      {read.length > 0 && (
         <div className="gpx-results">
           {read.map((file) => {
             const course = courseFor(file.declaredKm);
@@ -124,6 +135,18 @@ export function TimingPointsPanel({ files, onChange, courses }: Props) {
                       {course ? ` · ${course.name}` : ` · ${t('no matching course loaded')}`}
                     </span>
                   )}
+                  {/* A file that can be dropped in has to be droppable back out. Without
+                      this the only way to plan a race without its timing configuration
+                      was to start the race again. */}
+                  <button
+                    type="button"
+                    className="row-remove"
+                    title={t('Remove this timing file')}
+                    aria-label={`${t('Remove this timing file')}: ${file.fileName}`}
+                    onClick={() => onChange(files.filter((f) => f.fileName !== file.fileName))}
+                  >
+                    ×
+                  </button>
                 </div>
                 {file.error && <p className="hint error-text">{file.error}</p>}
                 {file.warnings.map((warning) => (

@@ -371,6 +371,7 @@ export default function App() {
     );
   }
   const [folders, setFolders] = useState<FolderSummary[]>([]);
+
   const [selectedFolders, setSelectedFolders] = useState<string[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [renumber, setRenumber] = useState(true);
@@ -558,6 +559,37 @@ export default function App() {
       ),
     [timingPointsByCourse, courses]
   );
+
+  /**
+   * The layers on offer, the map's own plus the one the timing configuration describes.
+   *
+   * The timing points used to be bolted onto whatever the operator ticked, always and
+   * invisibly. That is right for a race planned from an LVS with no station layer at all,
+   * and wrong for every race that has one: picking the "CP" layer got the CP layer *and*
+   * every mat in the timing file, merged, with nothing on screen admitting it. Listed
+   * here it is a layer like any other — tickable, countable, and refusable.
+   */
+  const allFolders = useMemo<FolderSummary[]>(() => {
+    if (timingPlacemarks.placemarks.length === 0) return folders;
+    return [
+      ...folders,
+      { folder: TIMING_FOLDER, placemarkCount: timingPlacemarks.placemarks.length },
+    ];
+  }, [folders, timingPlacemarks]);
+
+  /**
+   * Ticks the timing layer only where nothing else could supply a station.
+   *
+   * A race planned from a timing file and a route with no map still works untouched; a
+   * race that brought its own station layer is left alone, which is the whole complaint.
+   */
+  useEffect(() => {
+    if (timingPlacemarks.placemarks.length === 0) return;
+    if (folders.length > 0) return;
+    setSelectedFolders((current) =>
+      current.includes(TIMING_FOLDER) ? current : [...current, TIMING_FOLDER]
+    );
+  }, [timingPlacemarks, folders]);
 
   /*
    * Keeps one form row per course, from whichever file the course arrived in.
@@ -863,7 +895,7 @@ export default function App() {
    * needs a map at all — GPX plus LVS is a complete card for a race that cares about
    * timing, which is most trail races.
    */
-  const hasStationSource = selectedFolders.length > 0 || timingPlacemarks.placemarks.length > 0;
+  const hasStationSource = selectedFolders.length > 0;
   const cannotCalculate =
     !hasStationSource ||
     rows.length === 0 ||
@@ -1272,9 +1304,11 @@ export default function App() {
       const computed = runPipeline(kml?.text ?? '', inputs, {
           extraCourses: gpxCourses,
           timingPoints: timingPointsByCourse,
-          extraPlacemarks: timingPlacemarks.placemarks,
+          extraPlacemarks: selectedFolders.includes(TIMING_FOLDER)
+            ? timingPlacemarks.placemarks
+            : [],
           measuredArrivals,
-          stationFolders: [...selectedFolders, TIMING_FOLDER],
+          stationFolders: selectedFolders,
           excludeStations,
           excludePasses,
           restrictCoursesFor: multisport
@@ -1600,7 +1634,7 @@ export default function App() {
               <span className="step">4</span>{t('CP type')}
             </h2>
             <p className="hint">{t('Choose the layer that contains the type of CP you want to calculate.')}</p>
-            <FolderPicker folders={folders} selected={selectedFolders} onChange={setSelectedFolders} />
+            <FolderPicker folders={allFolders} selected={selectedFolders} onChange={setSelectedFolders} />
           </section>
 
           {/*
