@@ -39,6 +39,7 @@ import { StationNamingTable } from './components/StationNamingTable';
 import { CourseCommandView } from './components/CourseCommandView';
 import { FieldSlider } from './components/FieldSlider';
 import { coursesWithoutProfile, matchProfiles } from './lib/profileMatch';
+import { routeForContest, seedRaceFromContest } from './lib/contestRace';
 import { NavPanel, type NavItem } from './components/NavPanel';
 import { readCourseProfile, type CourseProfile } from './lib/courseProfile';
 import { parseTimingPoints, type TimingPoint } from './lib/timingPoints';
@@ -895,6 +896,73 @@ export default function App() {
     );
   }
 
+  /**
+   * Adds a contest from the results file to the race card as a distance of its own.
+   *
+   * The route is the part that cannot be invented: every row is reconciled against the
+   * courses the files describe, and one running nothing is dropped on the next pass. So
+   * the contest is pinned to the route nearest its measured length, and where none is
+   * near enough no race is offered at all.
+   */
+  function createRaceFromContest(contest: string) {
+    if (results?.kind !== 'single') return;
+    const profile = results.profiles.find((p) => p.contest === contest);
+    if (!profile) return;
+
+    const seed = seedRaceFromContest(profile, courses, rows.map((r) => r.courseName));
+    if (!seed) {
+      setError(
+        `"${contest}" measures ${profile.distanceKm.toFixed(2)} km and no route on the card is ` +
+          `close enough to be the one it ran. Drop its GPX, or correct its distance.`
+      );
+      return;
+    }
+
+    setRows((current) => [
+      ...current,
+      {
+        ...seed,
+        startTimeClock: current[0]?.startTimeClock ?? '05:00',
+        startDayOffset: current[0]?.startDayOffset ?? 0,
+        organizerCutoffClock: '',
+        cutoffDayOffset: 0,
+      } as DistanceFormRow,
+    ]);
+    // Mapped straight away, so the new row replays this contest's real field rather than
+    // the band that was just copied out of it.
+    setContestMapping((current) => ({ ...current, [contest]: seed.courseName }));
+    setResult(null);
+  }
+
+  /**
+   * Contests that already have a race of their own.
+   *
+   * A row named for the contest, not merely a contest pointed at some course. Those are
+   * different things and conflating them refused the button in exactly the case it exists
+   * for: a 5K Family mapped onto the 5 km's row lends that row its paces, and the
+   * operator still wants the Family counted as its own field on the same trail.
+   */
+  const racedContests = useMemo(
+    () => new Set(rows.map((r) => r.courseName)),
+    [rows]
+  );
+
+  /**
+   * Contests no route is close enough to.
+   *
+   * Worked out up front so the button can say why it is off rather than failing on a
+   * click — the reason is fixable, by dropping a GPX or correcting the distance, and a
+   * dead control that explains nothing is a support question waiting to happen.
+   */
+  const unroutableContests = useMemo(() => {
+    if (results?.kind !== 'single') return new Set<string>();
+    return new Set(
+      results.profiles
+        .filter((p) => routeForContest(p.distanceKm, courses) === null)
+        .map((p) => p.contest)
+    );
+  }, [results, courses]);
+
   function changeContestMapping(mapping: Record<string, string>) {
     setContestMapping(mapping);
     setResult(null);
@@ -1453,6 +1521,9 @@ export default function App() {
               onMappingChange={changeContestMapping}
                 onDistanceChange={changeContestDistance}
                 onRemoveContest={removeContest}
+                onCreateRace={createRaceFromContest}
+                racedContests={racedContests}
+                unroutableContests={unroutableContests}
               onClear={clearResults}
               onError={setError}
             />

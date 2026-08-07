@@ -79,6 +79,18 @@ interface Props {
    * every distance decision has to be made around them.
    */
   onRemoveContest?: (contest: string) => void;
+  /**
+   * Adds this contest to the race card as a distance of its own.
+   *
+   * For the contests a map does not describe — a 5K Family on the 5 km's roads, an elite
+   * wave, a relay. They have runners and need a crew, and building each by hand is ten
+   * minutes retyping figures already on the screen beside it.
+   */
+  onCreateRace?: (contest: string) => void;
+  /** Contests that already have a race, so the button does not offer a second one. */
+  racedContests?: Set<string>;
+  /** Contests no route is close enough to, so the button can say why it is off. */
+  unroutableContests?: Set<string>;
   onClear: () => void;
   onError: (message: string) => void;
 }
@@ -92,6 +104,9 @@ export function ResultsPanel({
   onMappingChange,
   onDistanceChange,
   onRemoveContest,
+  onCreateRace,
+  racedContests,
+  unroutableContests,
   onClear,
   onError,
 }: Props) {
@@ -172,6 +187,7 @@ export function ResultsPanel({
               <th className="num">{t('Pace P1 / P50 / P99')}</th>
               <th className="num">{t('Start spread')}</th>
               <th>{t('Use for')}</th>
+              <th aria-label={t('Add as a race')} />
             </tr>
           </thead>
           <tbody>
@@ -237,6 +253,32 @@ export function ResultsPanel({
                         ×
                       </button>
                     )}
+                  </td>
+                  <td>
+                    {onCreateRace &&
+                      (racedContests?.has(profile.contest) ? (
+                        <span className="muted small">{t('has a race')}</span>
+                      ) : unroutableContests?.has(profile.contest) ? (
+                        // Named rather than merely disabled: the reason is fixable, and a
+                        // dead button that says nothing is a bug report waiting to happen.
+                        <span
+                          className="muted small"
+                          title={t(
+                            'No route is close enough in length to be the one this contest ran. Drop its GPX, or correct the distance on the left.'
+                          )}
+                        >
+                          {t('no route fits')}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="secondary small-button"
+                          title={t('Add this contest to the race card, with its own field and paces')}
+                          onClick={() => onCreateRace(profile.contest)}
+                        >
+                          + {t('Race')}
+                        </button>
+                      ))}
                   </td>
                 </tr>
               );

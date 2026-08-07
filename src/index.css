@@ -2149,3 +2149,11 @@ button.row-remove:disabled {
   background: var(--color-danger-bg);
   color: var(--color-danger);
 }
+
+/* A button that has to sit inside a table row without setting its height. */
+.small-button {
+  min-height: 28px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
