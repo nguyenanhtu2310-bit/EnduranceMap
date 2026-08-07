@@ -68,6 +68,17 @@ export function GpxPanel({ files, onChange }: Props) {
     return out;
   }, [files]);
 
+  /**
+   * Adds what was dropped to what is already loaded.
+   *
+   * It used to replace the lot. Route files arrive one at a time — a distance is
+   * confirmed, its GPX is exported, and the next one follows a week later — so dropping
+   * the second silently discarded the first, and the only way to hold six was to find
+   * all six and drop them together.
+   *
+   * A file dropped again replaces its own earlier copy rather than sitting beside it,
+   * because re-dropping is what someone does after correcting a file.
+   */
   async function accept(list: FileList | null | undefined) {
     if (!list || list.length === 0) return;
     const loaded: LoadedGpx[] = [];
@@ -77,7 +88,9 @@ export function GpxPanel({ files, onChange }: Props) {
       if (!/\.gpx$/i.test(file.name)) continue;
       loaded.push({ fileName: file.name, text: await file.text() });
     }
-    onChange(loaded);
+    if (loaded.length === 0) return;
+    const replaced = new Set(loaded.map((f) => f.fileName));
+    onChange([...files.filter((f) => !replaced.has(f.fileName)), ...loaded]);
   }
 
   return (
@@ -112,12 +125,34 @@ export function GpxPanel({ files, onChange }: Props) {
       </div>
 
       {read.length > 0 && (
+        <div className="actions" style={{ margin: '0.85rem 0 0' }}>
+          <button className="secondary" onClick={() => onChange([])}>
+            {t('Remove all route files')}
+          </button>
+          <span className="hint" style={{ margin: 0 }}>
+            {t('Routes then come from the map alone.')}
+          </span>
+        </div>
+      )}
+
+      {read.length > 0 && (
         <div className="gpx-results">
           {read.map((file) => (
             <div className="gpx-file" key={file.fileName}>
               <div className="gpx-file-head">
                 <strong className="loaded-file">{file.fileName}</strong>
                 {file.error && <span className="tag bad">{t('Unreadable')}</span>}
+                {/* A file that can be dropped in has to be droppable back out. Without
+                    this, one wrong route meant starting the race over. */}
+                <button
+                  type="button"
+                  className="row-remove"
+                  title={t('Remove this route file')}
+                  aria-label={`${t('Remove this route file')}: ${file.fileName}`}
+                  onClick={() => onChange(files.filter((f) => f.fileName !== file.fileName))}
+                >
+                  ×
+                </button>
               </div>
               {file.error && <p className="hint error-text">{file.error}</p>}
               {file.warnings.map((warning) => (

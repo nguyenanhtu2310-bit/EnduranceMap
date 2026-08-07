@@ -56,6 +56,17 @@ export function TimingPointsPanel({ files, onChange, courses }: Props) {
     return out;
   }, [files]);
 
+  /**
+   * Adds what was dropped to what is already loaded.
+   *
+   * It used to replace the lot. Route files arrive one at a time — a distance is
+   * confirmed, its GPX is exported, and the next one follows a week later — so dropping
+   * the second silently discarded the first, and the only way to hold six was to find
+   * all six and drop them together.
+   *
+   * A file dropped again replaces its own earlier copy rather than sitting beside it,
+   * because re-dropping is what someone does after correcting a file.
+   */
   async function accept(list: FileList | null | undefined) {
     if (!list || list.length === 0) return;
     const loaded: LoadedGpx[] = [];
@@ -63,7 +74,9 @@ export function TimingPointsPanel({ files, onChange, courses }: Props) {
       if (!/\.lvs$/i.test(file.name)) continue;
       loaded.push({ fileName: file.name, text: await file.text() });
     }
-    onChange(loaded);
+    if (loaded.length === 0) return;
+    const replaced = new Set(loaded.map((f) => f.fileName));
+    onChange([...files.filter((f) => !replaced.has(f.fileName)), ...loaded]);
   }
 
   /** The course a file describes, by measured length against the length it declares. */

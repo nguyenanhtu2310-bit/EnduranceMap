@@ -1298,7 +1298,15 @@ export default function App() {
     // known to be untimed either — and a road race, where the water stations never carry
     // one, would be filtered down to nothing.
     if (!planTimedOnly || !hasTimingConfig) return result;
-    return { ...result, stations: result.stations.filter((s) => s.isTimed) };
+    // A station typed in by hand is spared. The filter exists to drop map pins that
+    // turned out not to be mats, and nobody types a checkpoint and a distance by
+    // accident: on a card where most stations come from the timing file and one water
+    // station does not, the one that was added on purpose is exactly the one this would
+    // otherwise throw away without saying so.
+    return {
+      ...result,
+      stations: result.stations.filter((s) => s.isTimed || s.folder === MANUAL_FOLDER),
+    };
   }, [result, planTimedOnly, hasTimingConfig]);
 
   /**
