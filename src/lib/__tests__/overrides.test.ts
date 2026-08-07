@@ -101,20 +101,60 @@ describe('applying overrides to a computed plan', () => {
     }
   });
 
-  it('carries an edited cut-off into the cut-off table', () => {
+  /** The row, the crossing that owns it, and the key that edits that crossing. */
+  function firstCutoff() {
     const row = base.cutoffTable[0];
     const owner = base.stations.find((s) => s.schedule.name === row.stationName)!;
     const pass = owner.crossings.find(
       (c) => c.courseName === row.courseName && Math.abs(c.kmFromStart - row.kmFromStart) < 1e-6
     )!;
-    const key = passKey(owner.mapName, row.courseName, pass.passIndex);
+    return { row, owner, pass, key: passKey(owner.mapName, row.courseName, pass.passIndex) };
+  }
 
+  it('carries an edited cut-off in as the organiser’s, not as a new proposal', () => {
+    // A cut-off typed by hand is a decision the race has made. It used to land on the
+    // proposal instead, which put the tool's own suggestion and the director's decision
+    // in one column and left nothing to compare against.
+    const { owner, pass, key } = firstCutoff();
     const o = setCrossingOverride(EMPTY_OVERRIDES, key, 'cutoffClock', '10:45');
     const applied = applyRaceOverrides(base, o);
 
-    expect(applied.cutoffTable[0].suggestedClockTime).toBe('10:45:00');
+    expect(applied.cutoffTable[0].mapClockTime).toBe('10:45:00');
+    expect(applied.cutoffTable[0].suggestedClockTime).toBe(base.cutoffTable[0].suggestedClockTime);
+
     const editedStation = applied.stations.find((s) => s.mapName === owner.mapName)!;
     expect(editedStation.crossings.find((c) => c.passIndex === pass.passIndex)!.officialCutoffClock).toBe('10:45:00');
+  });
+
+  it('puts an edited cut-off on the day it was given, not the first', () => {
+    // The whole reason the day is stored beside the clock: "01:30" at a checkpoint is the
+    // small hours of the Saturday for one distance and of the Sunday for another, and a
+    // 100 miles has both. Compared as a bare clock it lands before the arrivals it is
+    // meant to sit after, and the margin comes out hours negative.
+    const { key } = firstCutoff();
+    let o = setCrossingOverride(EMPTY_OVERRIDES, key, 'cutoffClock', '01:30');
+    o = setCrossingOverride(o, key, 'cutoffDayOffset', 2);
+    const applied = applyRaceOverrides(base, o);
+
+    expect(applied.cutoffTable[0].mapSeconds).toBe(2 * 86400 + 90 * 60);
+    // And the seconds agree with the clock rather than being left behind by it.
+    expect(applied.cutoffTable[0].mapClockTime).toBe('01:30:00');
+  });
+
+  it('says whether an edited cut-off is tighter than the proposal', () => {
+    const { key } = firstCutoff();
+    const suggested = base.cutoffTable[0].suggestedSeconds;
+
+    const tight = applyRaceOverrides(
+      base,
+      setCrossingOverride(EMPTY_OVERRIDES, key, 'cutoffClock', '00:01')
+    );
+    expect(tight.cutoffTable[0].mapSeconds!).toBeLessThan(suggested);
+    expect(tight.cutoffTable[0].mapIsTighter).toBe(true);
+
+    let loose = setCrossingOverride(EMPTY_OVERRIDES, key, 'cutoffClock', '01:00');
+    loose = setCrossingOverride(loose, key, 'cutoffDayOffset', 3);
+    expect(applyRaceOverrides(base, loose).cutoffTable[0].mapIsTighter).toBe(false);
   });
 
   it('keeps a renamed station attached to its cut-off rows', () => {

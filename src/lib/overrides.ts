@@ -1,6 +1,6 @@
 import { passKey, type PipelineResult, type PipelineStation } from './pipeline';
 import type { ActivityLevel } from './schedule';
-import { parseClockTimeToSeconds, secondsToClockTime } from './time';
+import { eventSecondsFrom, parseClockTimeToSeconds, secondsToClockTime } from './time';
 
 /**
  * Hand edits laid over the computed plan.
@@ -23,6 +23,14 @@ export interface CrossingOverride {
   kmFromStart?: number;
   /** Replaces the proposed cut-off for this one pass. */
   cutoffClock?: string;
+  /**
+   * The day that cut-off falls on, counted from the event's first.
+   *
+   * Stored beside the clock rather than folded into it, because the clock is what the
+   * operator types and what the card prints. Without it "01:30" at CP5 is either the
+   * small hours of the Saturday or of the Sunday, and a 100 miles has both.
+   */
+  cutoffDayOffset?: number;
 }
 
 export interface RaceOverrides {
@@ -110,10 +118,16 @@ export function applyRaceOverrides(result: PipelineResult, o: RaceOverrides): Pi
     const crossings = station.crossings.map((crossing) => {
       const c = crossingOverrides[passKey(station.mapName, crossing.courseName, crossing.passIndex)];
       if (!c) return crossing;
+      const clock = toClock(c.cutoffClock);
       return {
         ...crossing,
         kmFromStart: c.kmFromStart ?? crossing.kmFromStart,
-        officialCutoffClock: toClock(c.cutoffClock) ?? crossing.officialCutoffClock,
+        officialCutoffClock: clock ?? crossing.officialCutoffClock,
+        // An edited cut-off carries its own day; the seconds are what everything
+        // downstream compares against, and a clock alone cannot say which morning.
+        officialCutoffSeconds: clock
+          ? eventSecondsFrom(clock, c.cutoffDayOffset ?? 0) ?? crossing.officialCutoffSeconds
+          : crossing.officialCutoffSeconds,
       };
     });
 
@@ -147,11 +161,21 @@ export function applyRaceOverrides(result: PipelineResult, o: RaceOverrides): Pi
     const key = index >= 0 ? passKey(station.mapName, row.courseName, original.crossings[index].passIndex) : '';
     const c = crossingOverrides[key];
 
+    // A cut-off typed by hand is the organiser's, not a new proposal. It used to be
+    // written over the proposal's clock and not its seconds, so the table showed one time
+    // and did its arithmetic with another — an edited cut-off two days out reported a
+    // margin of minus eight hours against an arrival it comfortably cleared.
+    const clock = toClock(c?.cutoffClock);
+    const seconds = clock ? eventSecondsFrom(clock, c?.cutoffDayOffset ?? 0) : null;
+    const mapSeconds = seconds ?? row.mapSeconds;
+
     return {
       ...row,
       stationName: station.schedule.name,
       kmFromStart: edited?.kmFromStart ?? row.kmFromStart,
-      suggestedClockTime: toClock(c?.cutoffClock) ?? row.suggestedClockTime,
+      mapClockTime: clock ?? row.mapClockTime,
+      mapSeconds,
+      mapIsTighter: mapSeconds !== undefined && mapSeconds < row.suggestedSeconds,
     };
   });
 

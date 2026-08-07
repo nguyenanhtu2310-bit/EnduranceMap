@@ -1227,13 +1227,18 @@ export default function App() {
       ready: rows.length > 0,
       note: selectedFolders.length > 0 ? `${selectedFolders.length} ${t('layers')}` : undefined,
     },
+    {
+      id: 'req-naming',
+      label: t('Station naming'),
+      ready: rows.length > 0 && hasTimingConfig,
+      note: result ? undefined : t('after Calculate'),
+    },
     { id: 'req-operating', label: t('Operating details'), ready: rows.length > 0 },
   ];
 
   const navResult: NavItem[] = [
     { id: 'res-overview', label: t('Course overview'), ready: !!result },
     { id: 'res-timeline', label: t('Master timeline'), ready: !!result },
-    { id: 'res-naming', label: t('Station naming'), ready: !!result && hasTimingConfig },
     { id: 'res-schedule', label: t('Station operating schedule'), ready: !!result },
     { id: 'res-amenities', label: t('Course amenities'), ready: !!result },
     { id: 'res-splits', label: t('Split calculation'), ready: !!result },
@@ -1458,9 +1463,43 @@ export default function App() {
             <FolderPicker folders={folders} selected={selectedFolders} onChange={setSelectedFolders} />
           </section>
 
+          {/*
+            Naming a station and setting its cut-offs are things you tell the tool, not
+            things it works out — so they belong on this side of Calculate. What the tool
+            does supply is the list of stations, which only exists once it has read the
+            files and matched them, so the table appears after the first calculation and
+            every one after that.
+          */}
+          {hasTimingConfig && (
+            <section className="card" id="req-naming">
+              <h2>
+                <span className="step">5</span>{t('Station naming and cut-offs')}
+              </h2>
+              {result ? (
+                <StationNamingTable
+                  result={result}
+                  filterToTimed={planTimedOnly}
+                  onFilterChange={setPlanTimedOnly}
+                  onUseResultNames={useResultNames}
+                  onToggleTimed={toggleTimed}
+                  overrides={raceOverrides}
+                  onStationEdit={editStation}
+                  raceDate={raceDate}
+                  onCrossingEdit={editCrossing}
+                />
+              ) : (
+                <p className="hint" style={{ margin: 0 }}>
+                  {t(
+                    'Press Calculate and the stations found on the course appear here to be named, marked timed or not, and given their cut-offs.'
+                  )}
+                </p>
+              )}
+            </section>
+          )}
+
           <section className="card" id="req-operating">
             <h2>
-              <span className="step">5</span>{t('Operating details')}
+              <span className="step">6</span>{t('Operating details')}
             </h2>
             <SettingsPanel
               settings={settings}
@@ -1652,25 +1691,6 @@ export default function App() {
             <FieldSlider result={planned} profiles={courseProfiles} raceDate={raceDate} />
           </ResultSection>
 
-{hasTimingConfig && (
-          <ResultSection
-            title={t('Station naming')}
-            id="res-naming"
-            summary={`${result.stations.filter((s) => s.isTimed).length}/${result.stations.length} ${t('timed')}`}
-            open={openSections.naming}
-            onToggle={() => toggleSection('naming')}
-          >
-            <StationNamingTable
-              result={result}
-              filterToTimed={planTimedOnly}
-              onFilterChange={setPlanTimedOnly}
-              onUseResultNames={useResultNames}
-              onToggleTimed={toggleTimed}
-              overrides={raceOverrides}
-              onStationEdit={editStation}
-            />
-          </ResultSection>
-          )}
 
           <ResultSection
             title={t('Station operating schedule')}

@@ -215,6 +215,14 @@ export interface StationCrossingDetail {
   passCount: number;
   offsetKm: number;
   officialCutoffClock?: string;
+  /**
+   * That cut-off as seconds from the event's first midnight, where the day is known.
+   *
+   * A clock alone cannot place a cut-off on a race that runs past midnight: CP5 closing
+   * at "01:30" is the small hours of the Saturday for one distance and of the Sunday for
+   * another, and both appear on the same card.
+   */
+  officialCutoffSeconds?: number;
 }
 
 /**
@@ -234,7 +242,7 @@ const LEAD_MARKER_MIN_KM = 0.05;
 function firstLeadPerDistanceAndSex(arrivals: LeadArrival[]): LeadArrival[] {
   const first = new Map<string, LeadArrival>();
   for (const arrival of arrivals) {
-    const key = `${arrival.courseName} ${arrival.sex}`;
+    const key = `${arrival.courseName}\0${arrival.sex}`;
     const held = first.get(key);
     if (!held || arrival.seconds < held.seconds) first.set(key, arrival);
   }

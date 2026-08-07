@@ -124,22 +124,28 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
                     {/* The tag leads, so every time in the column keeps one right edge
                         instead of the final row's being shunted left by its own label. */}
                     {isFinal(row) && <span className="cot-final-tag">final</span>}
-                    {onCrossingEdit ? (
-                      <EditableCell
-                        computed={hm(row.suggestedClockTime)}
-                        override={overrides?.crossings?.[keyFor(row)]?.cutoffClock}
-                        type="time"
-                        align="right"
-                        title="Proposed cut-off"
-                        onChange={(v) => onCrossingEdit(keyFor(row), 'cutoffClock', v)}
-                      />
-                    ) : (
-                      <strong>{hm(row.suggestedClockTime)}</strong>
-                    )}
+                    {/* The proposal is the tool's, and is not typed over here. A cut-off
+                        the race has decided goes in the provided column beside it, where
+                        the two can be compared — which is the entire point of showing
+                        both. Bound to the same edit, the typed time appeared in both
+                        columns and there was nothing left to compare it against. */}
+                    <strong>{hm(row.suggestedClockTime)}</strong>
                   </td>
                   <td className="num muted">{margin === null ? '—' : `+${margin} min`}</td>
                   <td className="num">
-                    {row.mapClockTime ? (
+                    {onCrossingEdit ? (
+                      <>
+                        <EditableCell
+                          computed={row.mapClockTime ? hm(row.mapClockTime) : ''}
+                          override={overrides?.crossings?.[keyFor(row)]?.cutoffClock}
+                          type="time"
+                          align="right"
+                          title="Cut-off the race has set for this pass"
+                          onChange={(v) => onCrossingEdit(keyFor(row), 'cutoffClock', v)}
+                        />
+                        {row.mapIsTighter && <span className="tag over">tighter</span>}
+                      </>
+                    ) : row.mapClockTime ? (
                       <>
                         {hm(row.mapClockTime)}
                         {row.mapIsTighter && (

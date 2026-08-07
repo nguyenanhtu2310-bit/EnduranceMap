@@ -2024,3 +2024,44 @@ button.row-remove:disabled {
   padding-top: 0.95rem;
   border-top: 1px solid var(--color-divider);
 }
+
+/*
+ * Cut-offs inside the naming table: one row per distance that passes the station.
+ *
+ * Not one field per station, because a real card closes the same checkpoint at two
+ * different times for two groups — eleven in the morning for the 70 km, eight in the
+ * evening for the ultras — and both are true at once.
+ */
+.cot-stack {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 15rem;
+}
+
+.cot-row {
+  display: grid;
+  grid-template-columns: minmax(3.5rem, 1fr) 5.2rem 5.6rem;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.cot-course {
+  font-size: 0.76rem;
+  color: var(--color-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Which pass, on a course that crosses the same point twice. */
+.cot-course em {
+  font-style: normal;
+  color: var(--color-faint);
+}
+
+.cot-row input,
+.cot-row select {
+  min-height: 28px;
+  padding: 2px 6px;
+  font-size: 0.78rem;
+}
