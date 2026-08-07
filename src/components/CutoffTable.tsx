@@ -107,8 +107,12 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
               <th className="num" title={t('Runners this cut-off stops here')}>
                 {t('Stops')}
               </th>
-              <th title={t('Whether this cut-off is looser or tighter than the finish limit')}>
-                {t('How hard it is')}
+              <th
+                title={t(
+                  'What this cut-off asks of a runner, against the pace the finish limit already asks'
+                )}
+              >
+                {t('Effort needed')}
               </th>
             </tr>
           </thead>

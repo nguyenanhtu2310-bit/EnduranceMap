@@ -258,7 +258,10 @@ const VI: Record<string, string> = {
   // The field on the course.
   'Master timeline': 'Dòng thời gian tổng',
   'Stops': 'Chặn',
-  'How hard it is': 'Mức độ khắt khe',
+  'Runners this cut-off stops here': 'Số VĐV bị cut-off này chặn tại đây',
+  'What this cut-off asks of a runner, against the pace the finish limit already asks':
+    'Cut-off này đòi hỏi gì ở VĐV, so với nhịp mà giới hạn về đích đã đòi hỏi',
+  'Effort needed': 'Mức gắng sức cần có',
   'nobody': 'không ai',
   'modelled here': 'theo mô hình tại đây',
   'needs': 'cần nhanh hơn',
@@ -282,11 +285,6 @@ const VI: Record<string, string> = {
   'How long this distance has, from its own gun — type either this or the cut-off':
     'Cự ly này có bao lâu tính từ giờ xuất phát — nhập ô này hoặc ô COT',
   'When each distance starts': 'Giờ xuất phát của từng cự ly',
-  'It catches': 'Loại bao nhiêu',
-  'It demands': 'Đòi hỏi nhanh hơn',
-  'Runners the provided cut-off leaves behind': 'Số VĐV bị COT này loại',
-  'How much faster than an even effort to the finish a runner must be to clear it':
-    'Phải nhanh hơn bao nhiêu so với nhịp đều tới đích mới qua được',
   counted: 'số đếm',
   'Every arrival here is a chip read, not a model': 'Mọi mốc giờ ở đây là chip đọc thật, không phải số mô hình',
   'This file is this race — use its recorded crossings':
