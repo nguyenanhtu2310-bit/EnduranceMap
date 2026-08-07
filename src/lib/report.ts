@@ -516,8 +516,27 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
             const view = buildStationTraffic(station, result.courseOrder);
             if (!view) return '';
 
+            /*
+             * Each column names its day the first time that day appears.
+             *
+             * A station on a trail race stands for thirty hours, so its columns run past
+             * midnight and "06:00" turns up twice meaning two different mornings. On a
+             * printed sheet there is nothing else to tell them apart. Naming every column
+             * would double the width of a table that is already the widest thing in the
+             * report, so only the changes are marked.
+             */
+            let headDay = -1;
             const head = view.active
-              .map((bin) => `<th class="num">${secondsToClockTime(bin.binStartSeconds).slice(0, 5)}</th>`)
+              .map((bin) => {
+                const clock = secondsToClockTime(bin.binStartSeconds).slice(0, 5);
+                const offset = eventDayOffset(bin.binStartSeconds);
+                const label =
+                  offset === headDay
+                    ? clock
+                    : `<span class="col-day">${esc(eventDayLabel(bin.binStartSeconds, options.raceDate))}</span>${clock}`;
+                headDay = offset;
+                return `<th class="num">${label}</th>`;
+              })
               .join('');
             const body = view.present
               .map(({ name, index }) => {
@@ -535,8 +554,8 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
             const man = firstLeadOfSex(station, 'M');
             const woman = firstLeadOfSex(station, 'F');
             const lead = [
-              man ? `Male <span class="lead-time">${secondsToClockTime(man.seconds).slice(0, 5)}</span>` : '',
-              woman ? `Female <span class="lead-time">${secondsToClockTime(woman.seconds).slice(0, 5)}</span>` : '',
+              man ? `Male <span class="lead-time">${esc(day(man.seconds))}</span>` : '',
+              woman ? `Female <span class="lead-time">${esc(day(woman.seconds))}</span>` : '',
             ]
               .filter(Boolean)
               .join(' &middot; ');
@@ -639,6 +658,8 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   .traffic-facts dt { color: var(--muted); }
   .traffic-facts dd { margin: 0; }
   .lead-time { color: ${dark ? '#39ff88' : '#0a8f3c'}; font-weight: 600; }
+  /* The day above the hour, so a dated column is no wider than an undated one. */
+  .col-day { display: block; font-weight: 700; color: ${dark ? '#39ff88' : '#0a8f3c'}; }
   .station-block h3 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
   .final-tag {
     display: inline-block; margin-right: 6px; padding: 1px 5px; border-radius: 4px;

@@ -5,7 +5,8 @@ import { secondsToClockTime } from '../lib/time';
 import { eventDayLabel, eventDayOffset } from '../lib/time';
 import { useT } from '../lib/i18n';
 import { DEFAULT_HISTOGRAM_BIN_MINUTES } from '../lib/config';
-import type { RaceOverrides, StationOverride } from '../lib/overrides';
+import type { CrossingOverride, RaceOverrides, StationOverride } from '../lib/overrides';
+import { CutoffStack } from './CutoffStack';
 import { EditableCell } from './EditableCell';
 import { formatDuration } from '../lib/time';
 
@@ -53,6 +54,18 @@ interface Props {
     mapName: string,
     field: K,
     value: StationOverride[K] | undefined
+  ) => void;
+  /**
+   * Sets the cut-off for one distance's pass through one station.
+   *
+   * Offered here as well as in the naming step because this is the sheet an operator has
+   * open when the organiser rings to move a cut-off, and sending them to another section
+   * to type one number is the kind of small friction that ends in it not being typed.
+   */
+  onCrossingEdit?: <K extends keyof CrossingOverride>(
+    key: string,
+    field: K,
+    value: CrossingOverride[K] | undefined
   ) => void;
 }
 
@@ -104,6 +117,7 @@ export function StationScheduleTable({
   onNoteChange,
   overrides,
   onStationEdit,
+  onCrossingEdit,
 }: Props) {
   const t = useT();
   const [dragging, setDragging] = useState<string | null>(null);
@@ -178,6 +192,7 @@ export function StationScheduleTable({
             <th className="num">{t('Peak window')}</th>
             <th className="num">{t('Peak')} /{binMinutes} {t('min')}</th>
             <th>{t('Activity')}</th>
+            {onCrossingEdit && <th>{t('Cut-off')}</th>}
             {onRemove && <th aria-label="Remove" />}
           </tr>
         </thead>
@@ -346,6 +361,16 @@ export function StationScheduleTable({
                   <span className={`tag ${station.schedule.activityLevel}`}>{station.schedule.activityLevel}</span>
                 )}
               </td>
+              {onCrossingEdit && (
+                <td>
+                  <CutoffStack
+                    station={station}
+                    overrides={overrides}
+                    raceDate={raceDate}
+                    onCrossingEdit={onCrossingEdit}
+                  />
+                </td>
+              )}
               {onRemove && (
                 <td>
                   <button

@@ -457,3 +457,57 @@ describe('the crossing-time axis on a page', () => {
     }
   });
 });
+
+describe('dates in the report', () => {
+  /** A race long enough that its stations stand past midnight. */
+  const overnight = buildReportHtml(
+    runPipeline(kml, [
+      {
+        courseName: '10km',
+        startTimeClock: '05:00',
+        runnerCount: 200,
+        startSpreadMinutes: 5,
+        fastestMinPerKm: 6,
+        typicalMinPerKm: 60,
+        slowestMinPerKm: 180,
+      },
+    ]),
+    {
+      raceName: 'Overnight',
+      rules: DEFAULT_AMENITY_RULES,
+      overrides: {},
+      raceDate: '2026-09-18',
+      // Off by default — a hundred stations would be a hundred charts — so the crew
+      // sheets have to ask for it, and this test asks the same way.
+      sections: { ...ALL_REPORT_SECTIONS, stationTraffic: true },
+    }
+  );
+
+  it('names the day on the traffic columns', () => {
+    // A station standing thirty hours has columns either side of midnight, and "06:00"
+    // twice on a printed sheet has nothing else to tell the two apart.
+    const days = [...overnight.matchAll(/<span class="col-day">([^<]+)<\/span>/g)].map((m) => m[1]);
+    expect(days.length).toBeGreaterThan(0);
+    for (const day of days) expect(day).toMatch(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/);
+  });
+
+  it('does not name it on every column', () => {
+    // Naming all of them doubles the width of the widest table in the report.
+    const headers = (overnight.match(/<th class="num">/g) ?? []).length;
+    const days = (overnight.match(/class="col-day"/g) ?? []).length;
+    expect(days).toBeLessThan(headers);
+  });
+
+  it('carries the day on the cut-off times', () => {
+    const start = overnight.indexOf('<h2>Cut-off times</h2>');
+    expect(start).toBeGreaterThan(-1);
+    const section = overnight.slice(start, overnight.indexOf('</table>', start));
+    expect(section).toMatch(/(Fri|Sat|Sun)\s\d{2}:\d{2}/);
+  });
+
+  it('carries the day on the lead-athlete times', () => {
+    const leads = [...overnight.matchAll(/<span class="lead-time">([^<]+)<\/span>/g)].map((m) => m[1]);
+    if (leads.length === 0) return;
+    for (const lead of leads) expect(lead).toMatch(/^(Fri|Sat|Sun)\s\d{2}:\d{2}$/);
+  });
+});

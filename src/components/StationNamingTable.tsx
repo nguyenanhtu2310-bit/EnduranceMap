@@ -1,7 +1,7 @@
-import { passKey, type PipelineResult } from '../lib/pipeline';
+import type { PipelineResult } from '../lib/pipeline';
 import type { CrossingOverride, RaceOverrides, StationOverride } from '../lib/overrides';
 import { EditableCell } from './EditableCell';
-import { TimeInput } from './TimeInput';
+import { CutoffStack } from './CutoffStack';
 import { useT } from '../lib/i18n';
 
 interface Props {
@@ -28,20 +28,6 @@ interface Props {
     field: K,
     value: CrossingOverride[K] | undefined
   ) => void;
-}
-
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-/** Names the day an offset lands on, so a cut-off is set against a date not a count. */
-function dayOptions(raceDate?: string): { value: number; label: string }[] {
-  const base = raceDate ? new Date(`${raceDate}T00:00:00`) : null;
-  const usable = base && !Number.isNaN(base.getTime()) ? base : null;
-  return [0, 1, 2, 3].map((value) => {
-    if (!usable) return { value, label: value === 0 ? 'Day 1' : `D+${value}` };
-    const day = new Date(usable);
-    day.setDate(day.getDate() + value);
-    return { value, label: `${WEEKDAYS[day.getDay()]} ${day.getDate()}` };
-  });
 }
 
 /** Anything past this is a match worth a second look before the plan is built on it. */
@@ -165,45 +151,12 @@ export function StationNamingTable({
                   */}
                   {onCrossingEdit && (
                     <td>
-                      <div className="cot-stack">
-                        {station.crossings.map((crossing) => {
-                          const key = passKey(
-                            station.mapName,
-                            crossing.courseName,
-                            crossing.passIndex
-                          );
-                          const edit = overrides.crossings?.[key];
-                          return (
-                            <div className="cot-row" key={key}>
-                              <span className="cot-course" title={crossing.courseName}>
-                                {crossing.courseName}
-                                {crossing.passCount > 1 && (
-                                  <em> ·{crossing.passIndex + 1}</em>
-                                )}
-                              </span>
-                              <TimeInput
-                                value={edit?.cutoffClock ?? crossing.officialCutoffClock ?? ''}
-                                align="right"
-                                title={`${t('Cut-off for')} ${crossing.courseName}`}
-                                onChange={(v) => onCrossingEdit(key, 'cutoffClock', v)}
-                              />
-                              <select
-                                value={edit?.cutoffDayOffset ?? 0}
-                                title={t('Which day this cut-off falls on')}
-                                onChange={(e) =>
-                                  onCrossingEdit(key, 'cutoffDayOffset', Number(e.target.value))
-                                }
-                              >
-                                {dayOptions(raceDate).map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          );
-                        })}
-                      </div>
+                      <CutoffStack
+                        station={station}
+                        overrides={overrides}
+                        raceDate={raceDate}
+                        onCrossingEdit={onCrossingEdit}
+                      />
                     </td>
                   )}
                 </tr>

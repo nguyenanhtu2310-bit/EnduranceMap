@@ -1944,6 +1944,7 @@ export default function App() {
               onNoteChange={changeStationNote}
               overrides={raceOverrides}
               onStationEdit={editStation}
+              onCrossingEdit={editCrossing}
               onRemove={(mapName) => {
                 const next = [...removedStations, mapName];
                 setRemovedStations(next);
@@ -2070,6 +2071,7 @@ export default function App() {
             <CutoffTable
               result={planned}
               graceMinutes={settings.cutoffGraceMinutes}
+              raceDate={raceDate}
               overrides={raceOverrides}
               onCrossingEdit={editCrossing}
             />

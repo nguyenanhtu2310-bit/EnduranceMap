@@ -6,7 +6,7 @@ import {
   HEAVY_SHARE,
   INTENT_MEANING,
 } from '../lib/cutoffEffect';
-import { eventSecondsFrom } from '../lib/time';
+import { eventDayLabel, eventSecondsFrom } from '../lib/time';
 import { useT } from '../lib/i18n';
 import type { CrossingOverride, RaceOverrides } from '../lib/overrides';
 import { EditableCell } from './EditableCell';
@@ -15,6 +15,8 @@ import { parseClockTimeToSeconds, secondsToClockTime } from '../lib/time';
 interface Props {
   result: PipelineResult;
   graceMinutes: number;
+  /** The event's first date, so a cut-off past midnight can name the day it falls on. */
+  raceDate?: string;
   overrides?: RaceOverrides;
   onCrossingEdit?: <K extends keyof CrossingOverride>(
     key: string,
@@ -35,8 +37,19 @@ function marginMinutes(suggested: string, modeled: string): number | null {
   return a === null || b === null ? null : Math.round((a - b) / 60);
 }
 
-export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }: Props) {
+export function CutoffTable({ result, graceMinutes, raceDate, overrides, onCrossingEdit }: Props) {
   const t = useT();
+
+  /**
+   * The day a time falls on, under the time itself.
+   *
+   * A cut-off table for a trail race is mostly times past midnight — CP5 at 01:30, the
+   * finish at 09:00 two mornings after the gun — and on a bare clock every one of them
+   * could be either of two days. Every other table in the tool names the day; this one
+   * did not, which made it the only place a reader had to work it out.
+   */
+  const day = (seconds: number | undefined) =>
+    seconds === undefined ? null : <span className="colocated">{eventDayLabel(seconds, raceDate)}</span>;
   const rows = result.cutoffTable;
 
   if (rows.length === 0) {
@@ -126,7 +139,10 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
                   </td>
                   <td>{row.courseName}</td>
                   <td className="num">{row.kmFromStart.toFixed(1)}</td>
-                  <td className="num muted">{row.modeledLastArrivalClockTime.slice(0, 5)}</td>
+                  <td className="num muted">
+                    {row.modeledLastArrivalClockTime.slice(0, 5)}
+                    {day(row.modeledLastArrivalSeconds)}
+                  </td>
                   <td className={isFinal(row) ? 'num cot-final' : 'num muted'}>
                     {/* The tag leads, so every time in the column keeps one right edge
                         instead of the final row's being shunted left by its own label. */}
@@ -137,6 +153,7 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
                         both. Bound to the same edit, the typed time appeared in both
                         columns and there was nothing left to compare it against. */}
                     <strong>{hm(row.suggestedClockTime)}</strong>
+                    {day(row.suggestedSeconds)}
                   </td>
                   <td className="num muted">{margin === null ? '—' : `+${margin} min`}</td>
                   <td className="num">
@@ -151,6 +168,7 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
                           onChange={(v) => onCrossingEdit(keyFor(row), 'cutoffClock', v)}
                         />
                         {row.mapIsTighter && <span className="tag over">tighter</span>}
+                        {day(row.mapSeconds)}
                       </>
                     ) : row.mapClockTime ? (
                       <>
@@ -160,6 +178,7 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
                             tighter
                           </span>
                         )}
+                        {day(row.mapSeconds)}
                       </>
                     ) : (
                       <span className="muted">–</span>
