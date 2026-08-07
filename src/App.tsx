@@ -288,18 +288,43 @@ function blankSnapshot(): RaceSnapshot {
 
 /** Fields that go into a saved race file — the recomputable ones stay out. */
 const RACE_FILE_FIELDS = [
-  'kml', 'rows', 'selectedFolders', 'settings', 'renumber', 'renumberPrefix',
+  'kml', 'gpx', 'lvs', 'timedOverrides', 'raceDate',
+  'rows', 'selectedFolders', 'settings', 'renumber', 'renumberPrefix',
   'results', 'contestMapping', 'stationOrder', 'amenityOverrides', 'amenities', 'raceName',
   'removedStations', 'removedPasses', 'reportSections', 'stationNotes', 'raceOverrides',
   'multisport', 'skipNames',
 ] as const;
 
 /**
+ * The fields a saved race deliberately leaves out, because loading rebuilds them.
+ *
+ * Named rather than merely absent so the check below can tell "recomputed on load" from
+ * "forgotten". Forgetting is what happened: a whole season of trail work went in, and
+ * the route files, the timing configs, the mat decisions and the race date were all
+ * added to the snapshot and none of them to this list — so every trail race saved as a
+ * road race with no course at all, and reopened as an empty tab.
+ */
+const RACE_FILE_REBUILT = ['result', 'courses', 'folders'] as const;
+
+/**
+ * Every field of a snapshot is either written to the file or rebuilt on the way in.
+ *
+ * This line is the whole guard, and it is a compile error rather than a test because the
+ * mistake it catches is made while adding a field — the moment the build should object.
+ */
+type UnsavedField = Exclude<
+  keyof RaceSnapshot,
+  (typeof RACE_FILE_FIELDS)[number] | (typeof RACE_FILE_REBUILT)[number]
+>;
+const _everyFieldAccountedFor: UnsavedField extends never ? true : UnsavedField = true;
+void _everyFieldAccountedFor;
+
+/**
  * Bumped when the shape of a saved race changes. Older files still open — every field
  * is spread over a blank snapshot, so anything they lack comes out at its default — but
  * a file from a newer build is refused rather than silently half-read.
  */
-const RACE_FILE_VERSION = 2;
+const RACE_FILE_VERSION = 3;
 
 export default function App() {
   const { lang, setLang, t } = useLanguage();

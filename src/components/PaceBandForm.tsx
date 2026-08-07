@@ -1,5 +1,5 @@
+import { useState } from 'react';
 import type { DistanceInput } from '../lib/pipeline';
-import { EditableCell } from './EditableCell';
 import { TimeInput } from './TimeInput';
 import { useT } from '../lib/i18n';
 
@@ -21,6 +21,58 @@ interface Props {
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * A name that can be typed into, which sounds like nothing and was not.
+ *
+ * The name of a distance is also what identifies it, and a cell that reported every
+ * keystroke turned each one into a rename: the half-typed word was trimmed, checked
+ * against the other rows, accepted or silently refused, and written back under the
+ * cursor. Typing "21km Day 1" meant renaming the distance ten times, and the row was
+ * keyed on its own name, so React tore it down and rebuilt it between letters.
+ *
+ * So the draft stays here, local and untouched, until it is finished. Nothing outside
+ * this cell hears about a name until the operator leaves it or presses Enter, which is
+ * also the only moment a duplicate can honestly be judged — "21km Day" is not a name
+ * anybody meant to keep, and refusing it mid-word is refusing the wrong thing.
+ */
+function NameCell({
+  value,
+  title,
+  onCommit,
+}: {
+  value: string;
+  title: string;
+  onCommit: (name: string) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+
+  const commit = () => {
+    if (draft !== null) onCommit(draft);
+    setDraft(null);
+  };
+
+  return (
+    <span className="editable">
+      <input
+        type="text"
+        title={title}
+        value={draft ?? value}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+          // Escape abandons the draft rather than committing it, so a rename started
+          // by accident costs nothing.
+          if (e.key === 'Escape') {
+            setDraft(null);
+            e.currentTarget.blur();
+          }
+        }}
+      />
+    </span>
+  );
+}
 
 /**
  * Names the day an offset lands on, for the picker's own labels.
@@ -166,14 +218,15 @@ export function PaceBandForm({ rows, onChange, drivenByResults, raceDate, course
           </tr>
         </thead>
         <tbody>
+          {/* Keyed by position, not by name — the name is the thing being edited, and a
+              row that changes key while it is typed into is a row React replaces. */}
           {rows.map((row, i) => (
-            <tr key={row.courseName}>
+            <tr key={i}>
               <td>
-                <EditableCell
-                  computed={row.courseName}
-                  type="text"
+                <NameCell
+                  value={row.courseName}
                   title={t('What this distance is called')}
-                  onChange={(value) => rename(i, value ?? '')}
+                  onCommit={(value) => rename(i, value)}
                 />
                 {drivenByResults?.has(row.courseName) && (
                   <span className="colocated">{t('from results file')}</span>
