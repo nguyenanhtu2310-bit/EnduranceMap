@@ -1365,7 +1365,12 @@ export default function App() {
 
       {error && <div className="error">{error}</div>}
 
-      <NavPanel request={navRequest} result={navResult} hasResult={!!result} />
+      {/* Rail and page side by side: the rail is a place you look back at, and a strip
+          across the top pushed the work down the screen to say so. */}
+      <div className="app-shell">
+        <NavPanel request={navRequest} result={navResult} hasResult={!!result} />
+
+        <div className="app-main">
 
       {/* The three files that describe the course, in one place. They answer one
           question between them — what is the route and what is on it — and having them
@@ -1984,6 +1989,9 @@ export default function App() {
           )}
         </>
       )}
+
+        </div>
+      </div>
 
       <footer className="powered-by">
         <span>Powered by</span>
