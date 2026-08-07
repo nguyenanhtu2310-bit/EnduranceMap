@@ -79,6 +79,41 @@ export function cutoffEffect(context: CutoffContext): CutoffEffect {
 /** A cut-off asking for more than this much extra speed is worth a second look. */
 export const TIGHT_SPEED_UP = 0.1;
 
+/**
+ * What a cut-off is doing, in a word.
+ *
+ * The two figures beside it are honest and were not readable: "+11%" tells an organiser
+ * nothing about whether they have set a generous gate or an aggressive one, and that is
+ * the only question anybody asks of a cut-off. A word answers it, and the figures stay
+ * underneath for whoever wants to check the word.
+ *
+ * The bands are set around an even effort, not around a target attrition. A cut-off that
+ * asks exactly what the finish limit asks is "even" — it eliminates whoever is already
+ * off the pace and nobody else, which is what most checkpoints on most cards are for. The
+ * ones worth naming are the ones that do something else on purpose: bought time before a
+ * climb, or a gate placed to clear a mountain before dark.
+ */
+export type CutoffIntent = 'slack' | 'even' | 'pushing' | 'hard';
+
+export function cutoffIntent(effect: CutoffEffect): CutoffIntent | null {
+  const demanded = effect.demandedSpeedUp;
+  if (demanded === null) return null;
+  if (demanded < -0.05) return 'slack';
+  if (demanded <= 0.03) return 'even';
+  if (demanded <= TIGHT_SPEED_UP) return 'pushing';
+  return 'hard';
+}
+
+/** What each verdict means, for the tooltip that has to carry it. */
+export const INTENT_MEANING: Record<CutoffIntent, string> = {
+  slack:
+    'Looser than the finish limit — a runner on target for the finish clears this with time in hand. Usually a checkpoint that inherited a longer race’s cut-off.',
+  even: 'Asks the same pace as the finish limit. It stops whoever is already behind and nobody else.',
+  pushing:
+    'Tighter than the finish limit — a runner must bank a little time here to make the finish.',
+  hard: 'Much tighter than the finish limit. Deliberate: it clears the course before something — a climb, the dark, the heat.',
+};
+
 /** A cut-off leaving behind more than this share of the field is worth a second look. */
 export const HEAVY_SHARE = 0.1;
 

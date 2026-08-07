@@ -2107,3 +2107,45 @@ button.row-remove:disabled {
   padding: 2px 6px;
   font-size: 0.78rem;
 }
+
+/*
+ * What a cut-off is doing, in a word.
+ *
+ * Four bands around an even effort, coloured by how far from it they sit — not by how
+ * many they stop. A gate that clears a mountain before dark eliminates people on purpose
+ * and is not a fault; what an organiser needs is to see at a glance which of their
+ * cut-offs are decisions and which are just the finish limit restated.
+ */
+.cot-intent {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+.cot-intent em {
+  font-style: normal;
+  font-size: 0.74rem;
+  color: var(--color-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.tag.intent-slack {
+  background: color-mix(in srgb, var(--color-muted) 16%, transparent);
+  color: var(--color-muted);
+}
+
+.tag.intent-even {
+  background: var(--color-ok-bg);
+  color: var(--color-ok);
+}
+
+.tag.intent-pushing {
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+}
+
+.tag.intent-hard {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}

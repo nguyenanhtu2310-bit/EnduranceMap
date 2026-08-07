@@ -257,6 +257,16 @@ const VI: Record<string, string> = {
 
   // The field on the course.
   'Master timeline': 'Dòng thời gian tổng',
+  'Stops': 'Chặn',
+  'How hard it is': 'Mức độ khắt khe',
+  'nobody': 'không ai',
+  'modelled here': 'theo mô hình tại đây',
+  'needs': 'cần nhanh hơn',
+  'allows': 'dư ra',
+  'slack': 'rộng rãi',
+  'even': 'vừa đúng',
+  'pushing': 'hơi ép',
+  'hard': 'rất ép',
   'Home so far': 'Đã về',
   'of finishers': 'trên tổng số về đích',
   'How much of each distance’s field is home at this moment. This is progress through the race, not a finish rate — the model carries no retirements, so everyone arrives in the end.':

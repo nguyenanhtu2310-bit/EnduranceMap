@@ -1280,6 +1280,7 @@ export default function App() {
   ];
 
   const navResult: NavItem[] = [
+    { id: 'res-export', label: t('Export'), ready: !!result },
     { id: 'res-overview', label: t('Course overview'), ready: !!result },
     { id: 'res-timeline', label: t('Master timeline'), ready: !!result },
     { id: 'res-schedule', label: t('Station operating schedule'), ready: !!result },
@@ -1609,7 +1610,7 @@ export default function App() {
 
       {result && planned && (
         <>
-          <section className="card">
+          <section className="card" id="res-export">
             <h2>{t('Export')}</h2>
             <p className="hint">
             {t(

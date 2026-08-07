@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cutoffEffect } from '../cutoffEffect';
+import { cutoffEffect, cutoffIntent, INTENT_MEANING } from '../cutoffEffect';
 
 const H = (h: number) => h * 3600;
 
@@ -162,5 +162,68 @@ describe('cutoffEffects across a whole result', () => {
       eventSecondsFrom
     );
     expect(none.size).toBe(0);
+  });
+});
+
+describe('what a cut-off is doing, in a word', () => {
+  /** A cut-off at a given share of the effort and a given share of the time. */
+  const at = (effortFraction: number, hoursAllowed: number, finishHours = 10) =>
+    cutoffEffect({
+      arrivalsSeconds: [],
+      cutoffSeconds: hoursAllowed * 3600,
+      startSeconds: 0,
+      effortFraction,
+      finishLimitSeconds: finishHours * 3600,
+    });
+
+  it('calls a cut-off that asks the finish pace "even"', () => {
+    // Half the effort, half the time: nothing extra is being asked of anybody.
+    expect(cutoffIntent(at(0.5, 5))).toBe('even');
+  });
+
+  it('calls one with time in hand "slack"', () => {
+    // Half the effort but six of the ten hours — the shorter race inheriting a longer
+    // one's cut-off, which is exactly how a real card produces these.
+    expect(cutoffIntent(at(0.5, 6))).toBe('slack');
+  });
+
+  it('separates a nudge from a gate', () => {
+    // Half the effort in 4h45 asks about 5% extra; in 4h asks 25%. One is a runner
+    // banking a few minutes, the other is a decision to clear the course.
+    expect(cutoffIntent(at(0.5, 4.75))).toBe('pushing');
+    expect(cutoffIntent(at(0.5, 4))).toBe('hard');
+  });
+
+  it('says nothing where there is no finish limit to compare against', () => {
+    expect(
+      cutoffIntent(
+        cutoffEffect({
+          arrivalsSeconds: [],
+          cutoffSeconds: 3600,
+          startSeconds: 0,
+          effortFraction: 0.5,
+          finishLimitSeconds: null,
+        })
+      )
+    ).toBeNull();
+  });
+
+  it('has a plain-language meaning for every verdict it can give', () => {
+    // The word is only an improvement on "+11%" if it can be looked up.
+    for (const intent of ['slack', 'even', 'pushing', 'hard'] as const) {
+      expect(INTENT_MEANING[intent].length).toBeGreaterThan(20);
+    }
+  });
+
+  it('is monotonic — tightening a cut-off never makes it read looser', () => {
+    const order = { slack: 0, even: 1, pushing: 2, hard: 3 };
+    let previous = -1;
+    // Walking the allowance down from generous to severe.
+    for (const hours of [7, 6, 5.2, 5, 4.8, 4.5, 4, 3]) {
+      const rank = order[cutoffIntent(at(0.5, hours))!];
+      expect(rank).toBeGreaterThanOrEqual(previous);
+      previous = rank;
+    }
+    expect(previous).toBe(order.hard);
   });
 });

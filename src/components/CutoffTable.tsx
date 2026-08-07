@@ -1,5 +1,11 @@
 import { passKey, type PipelineResult } from '../lib/pipeline';
-import { cutoffEffects, cutoffKey, HEAVY_SHARE, TIGHT_SPEED_UP } from '../lib/cutoffEffect';
+import {
+  cutoffEffects,
+  cutoffIntent,
+  cutoffKey,
+  HEAVY_SHARE,
+  INTENT_MEANING,
+} from '../lib/cutoffEffect';
 import { eventSecondsFrom } from '../lib/time';
 import { useT } from '../lib/i18n';
 import type { CrossingOverride, RaceOverrides } from '../lib/overrides';
@@ -98,14 +104,11 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
               <th className="num">{t('Proposed cut-off')}</th>
               <th className="num">{t('Margin')}</th>
               <th className="num">{t('Provided COT')}</th>
-              <th className="num" title={t('Runners the provided cut-off leaves behind')}>
-                {t('It catches')}
+              <th className="num" title={t('Runners this cut-off stops here')}>
+                {t('Stops')}
               </th>
-              <th
-                className="num"
-                title={t('How much faster than an even effort to the finish a runner must be to clear it')}
-              >
-                {t('It demands')}
+              <th title={t('Whether this cut-off is looser or tighter than the finish limit')}>
+                {t('How hard it is')}
               </th>
             </tr>
           </thead>
@@ -171,24 +174,41 @@ export function CutoffTable({ result, graceMinutes, overrides, onCrossingEdit }:
                       );
                     }
                     const speedUp = effect.demandedSpeedUp;
+                    const intent = cutoffIntent(effect);
                     return (
                       <>
                         <td className="num">
                           {effect.fieldSize === 0 ? (
                             <span className="muted">–</span>
+                          ) : effect.caught === 0 ? (
+                            <span className="muted">{t('nobody')}</span>
                           ) : (
-                            <span className={effect.share > HEAVY_SHARE ? 'tag over' : 'muted'}>
-                              {effect.caught} {t('of')} {effect.fieldSize}
+                            <span
+                              className={effect.share > HEAVY_SHARE ? 'tag over' : 'muted'}
+                              title={`${effect.caught} ${t('of')} ${effect.fieldSize} ${t('modelled here')}`}
+                            >
+                              {effect.caught} ({(effect.share * 100).toFixed(0)}%)
                             </span>
                           )}
                         </td>
-                        <td className="num">
-                          {speedUp === null ? (
+                        {/*
+                          A word, not a percentage. "+11%" is honest and answers nothing an
+                          organiser asked: what they want to know is whether they have set
+                          a generous gate or an aggressive one. The figure stays underneath
+                          for anyone who wants to check the word.
+                        */}
+                        <td>
+                          {intent === null ? (
                             <span className="muted">–</span>
                           ) : (
-                            <span className={speedUp > TIGHT_SPEED_UP ? 'tag Medium' : 'muted'}>
-                              {speedUp >= 0 ? '+' : ''}
-                              {(speedUp * 100).toFixed(0)}%
+                            <span className="cot-intent" title={t(INTENT_MEANING[intent])}>
+                              <span className={`tag intent-${intent}`}>{t(intent)}</span>
+                              {speedUp !== null && Math.abs(speedUp) >= 0.01 && (
+                                <em>
+                                  {speedUp > 0 ? t('needs') : t('allows')}{' '}
+                                  {Math.abs(speedUp * 100).toFixed(0)}%
+                                </em>
+                              )}
                             </span>
                           )}
                         </td>
