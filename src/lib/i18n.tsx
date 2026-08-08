@@ -257,6 +257,7 @@ const VI: Record<string, string> = {
 
   // The field on the course.
   'Master timeline': 'Dòng thời gian tổng',
+  'Columns in the cut-off table': 'Các cột trong bảng cut-off',
   'Remove this route file': 'Xoá tệp lộ trình này',
   'Remove all route files': 'Xoá tất cả tệp lộ trình',
   'Routes then come from the map alone.': 'Khi đó lộ trình chỉ lấy từ bản đồ.',

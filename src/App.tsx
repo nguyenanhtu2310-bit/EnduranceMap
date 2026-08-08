@@ -22,11 +22,14 @@ import {
 } from './lib/amenities';
 import { AmenityEditor } from './components/AmenityEditor';
 import {
+  ALL_CUTOFF_COLUMNS,
   ALL_REPORT_SECTIONS,
+  CUTOFF_COLUMNS,
   NO_REPORT_SECTIONS,
   REPORT_SECTIONS,
   buildReportHtml,
   downloadReport,
+  type CutoffColumns,
   type ReportSections,
 } from './lib/report';
 import { buildCrewSheetsHtml } from './lib/crewSheets';
@@ -665,6 +668,13 @@ export default function App() {
   const [removedStations, setRemovedStations] = useState<string[]>([]);
   const [removedPasses, setRemovedPasses] = useState<string[]>([]);
   const [reportSections, setReportSections] = useState<ReportSections>(ALL_REPORT_SECTIONS);
+  /**
+   * Which columns of the cut-off table the report prints.
+   *
+   * All of them to begin with — a report that quietly omits a column is worse than a
+   * long one — and unticked by whoever is sending it to somebody who does not need it.
+   */
+  const [cutoffColumns, setCutoffColumns] = useState<CutoffColumns>(ALL_CUTOFF_COLUMNS);
   const [stationNotes, setStationNotes] = useState<Record<string, string>>({});
   const [raceOverrides, setRaceOverrides] = useState<RaceOverrides>(EMPTY_OVERRIDES);
   const [multisport, setMultisport] = useState<MultisportPlan | null>(null);
@@ -1140,6 +1150,7 @@ export default function App() {
       theme,
       notes: stationNotes,
       sections: reportSections,
+      cutoffColumns,
       rules: DEFAULT_AMENITY_RULES,
       overrides: amenityOverrides,
       amenities,
@@ -1189,6 +1200,7 @@ export default function App() {
       theme: 'light',
       notes: stationNotes,
       sections: only,
+      cutoffColumns,
       rules: DEFAULT_AMENITY_RULES,
       overrides: amenityOverrides,
       amenities,
@@ -1860,6 +1872,33 @@ export default function App() {
                 </label>
               ))}
             </div>
+
+            {/* Columns, not sections: the cut-off table carries six and a reader usually
+                wants four of them. Shown only while that section is being printed. */}
+            {reportSections.cutoffs && (
+              <>
+                <p className="hint" style={{ margin: '0 0 0.4rem' }}>
+                  {t('Columns in the cut-off table')}
+                </p>
+                <div className="folder-list" style={{ marginBottom: '1rem' }}>
+                  {CUTOFF_COLUMNS.map((column) => (
+                    <label
+                      key={column.key}
+                      className={cutoffColumns[column.key] ? 'folder-item on' : 'folder-item'}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={cutoffColumns[column.key]}
+                        onChange={(e) =>
+                          setCutoffColumns({ ...cutoffColumns, [column.key]: e.target.checked })
+                        }
+                      />
+                      <span className="folder-name">{t(column.label)}</span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
 
             <div className="actions">
               <label className="field" style={{ margin: 0, flex: '1 1 260px' }}>

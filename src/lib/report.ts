@@ -1,8 +1,16 @@
 import { isEndZoneStop, type PipelineResult, type PipelineStation } from './pipeline';
 import { axisTicks } from './axisTicks';
 import {
+  cutoffEffects,
+  cutoffIntent,
+  cutoffKey,
+  HEAVY_SHARE,
+  INTENT_MEANING,
+} from './cutoffEffect';
+import {
   eventDayLabel,
   eventDayOffset,
+  eventSecondsFrom,
   formatDuration,
   formatEventClock,
   parseClockTimeToSeconds,
@@ -31,6 +39,36 @@ import { splitStartFinish, trafficStationName, type TrafficStation } from './sta
 import { SPORTSTATS_LOGO_DATA_URI } from '../assets/sportstatsLogo';
 
 /** Which parts of the plan to print. An organiser rarely needs all of it at once. */
+/**
+ * The columns of the cut-off table, and whether each is printed.
+ *
+ * Declared rather than written into the markup because a report is sent to people who
+ * each need a different half of it: a crew chief wants the times, a race director wants
+ * what the cut-off does to the field, and neither wants to read past the other's columns
+ * to find their own.
+ */
+export interface CutoffColumns {
+  slowestArrival: boolean;
+  proposed: boolean;
+  margin: boolean;
+  providedCot: boolean;
+  stops: boolean;
+  effort: boolean;
+}
+
+export const CUTOFF_COLUMNS: { key: keyof CutoffColumns; label: string }[] = [
+  { key: 'slowestArrival', label: 'Slowest arrival' },
+  { key: 'proposed', label: 'Proposed cut-off' },
+  { key: 'margin', label: 'Margin' },
+  { key: 'providedCot', label: 'Provided COT' },
+  { key: 'stops', label: 'Stops' },
+  { key: 'effort', label: 'Effort needed' },
+];
+
+export const ALL_CUTOFF_COLUMNS: CutoffColumns = Object.fromEntries(
+  CUTOFF_COLUMNS.map((c) => [c.key, true])
+) as unknown as CutoffColumns;
+
 export interface ReportSections {
   schedule: boolean;
   perDistance: boolean;
@@ -87,6 +125,8 @@ export interface ReportOptions {
   notes?: Record<string, string>;
   /** Defaults to every section when omitted. */
   sections?: ReportSections;
+  /** Defaults to every column when omitted. */
+  cutoffColumns?: CutoffColumns;
   rules: AmenityRules;
   /** The amenity columns as the operator named them; defaults to the shipped list. */
   amenities?: Amenity[];
@@ -402,23 +442,70 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
     return a === null || b === null ? null : Math.round((a - b) / 60);
   };
 
+  /*
+   * What each cut-off does to the field — the two columns the screen has always had and
+   * the report never did, so a report sent on instead of a screenshot quietly dropped
+   * the only figures that say whether a cut-off is generous or a gate.
+   */
+  const effects = cutoffEffects(result, eventSecondsFrom);
+  const columns = options.cutoffColumns ?? ALL_CUTOFF_COLUMNS;
+  const shown = CUTOFF_COLUMNS.filter((c) => columns[c.key]);
+
+  const cutoffHead = shown
+    .map((c) => `<th class="num">${esc(c.label)}</th>`)
+    .join('');
+
   const cutoffRows = !sections.cutoffs ? '' : result.cutoffTable
     .map((row) => {
       const isFinal =
         parseClockTimeToSeconds(row.suggestedClockTime) === finalCutoffByStation.get(row.stationName);
       const margin = marginMinutes(row.suggestedClockTime, row.modeledLastArrivalClockTime);
+      const effect = effects.get(cutoffKey(row.stationName, row.courseName, row.kmFromStart));
+      const intent = effect ? cutoffIntent(effect) : null;
+
+      const cell = (key: keyof CutoffColumns): string => {
+        switch (key) {
+          case 'slowestArrival':
+            return `<td class="num">${day(row.modeledLastArrivalSeconds)}</td>`;
+          case 'proposed':
+            return `<td class="num ${isFinal ? 'cot-final' : 'cot-other'}">${
+              isFinal ? '<span class="final-tag">final</span>' : ''
+            }<strong>${day(row.suggestedSeconds)}</strong></td>`;
+          case 'margin':
+            return `<td class="num muted">${margin === null ? '–' : `+${margin} min`}</td>`;
+          case 'providedCot':
+            return `<td class="num${row.mapIsTighter ? ' risk' : ''}">${
+              row.mapSeconds !== undefined
+                ? day(row.mapSeconds)
+                : row.mapClockTime
+                  ? hm(row.mapClockTime)
+                  : '–'
+            }</td>`;
+          case 'stops':
+            if (!effect || effect.fieldSize === 0) return '<td class="num muted">–</td>';
+            if (effect.caught === 0) return '<td class="num muted">nobody</td>';
+            return `<td class="num${effect.share > HEAVY_SHARE ? ' risk' : ''}">${
+              effect.caught
+            } (${(effect.share * 100).toFixed(0)}%)</td>`;
+          case 'effort':
+            if (!intent) return '<td class="num muted">–</td>';
+            return `<td title="${esc(INTENT_MEANING[intent])}"><span class="intent intent-${intent}">${
+              intent
+            }</span>${
+              effect && effect.demandedSpeedUp !== null && Math.abs(effect.demandedSpeedUp) >= 0.01
+                ? ` <span class="muted">${effect.demandedSpeedUp > 0 ? 'needs' : 'allows'} ${Math.abs(
+                    effect.demandedSpeedUp * 100
+                  ).toFixed(0)}%</span>`
+                : ''
+            }</td>`;
+        }
+      };
+
       return `<tr${isFinal ? ' class="final-row"' : ''}>
         <td>${esc(row.stationName)}</td>
         <td>${esc(row.courseName)}</td>
         <td class="num">${row.kmFromStart.toFixed(1)}</td>
-        <td class="num">${day(row.modeledLastArrivalSeconds)}</td>
-        <td class="num ${isFinal ? 'cot-final' : 'cot-other'}">${
-          isFinal ? '<span class="final-tag">final</span>' : ''
-        }<strong>${day(row.suggestedSeconds)}</strong></td>
-        <td class="num muted">${margin === null ? '–' : `+${margin} min`}</td>
-        <td class="num${row.mapIsTighter ? ' risk' : ''}">${
-          row.mapSeconds !== undefined ? day(row.mapSeconds) : row.mapClockTime ? hm(row.mapClockTime) : '–'
-        }</td>
+        ${shown.map((c) => cell(c.key)).join('')}
       </tr>`;
     })
     .join('');
@@ -668,6 +755,12 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   .traffic-facts dt { color: var(--muted); }
   .traffic-facts dd { margin: 0; }
   .lead-time { color: ${dark ? '#39ff88' : '#0a8f3c'}; font-weight: 600; }
+  /* What a cut-off is doing, in the same four words and colours the screen uses. */
+  .intent { padding: 1px 6px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .intent-slack { background: ${dark ? 'rgba(243,248,255,0.12)' : '#eef1f0'}; color: ${dark ? '#b9c6c3' : '#5c6b68'}; }
+  .intent-even { background: ${dark ? 'rgba(94,211,80,0.16)' : '#e6f6e8'}; color: ${dark ? '#5ed350' : '#1c7a2c'}; }
+  .intent-pushing { background: ${dark ? 'rgba(240,180,106,0.18)' : '#fdf0dd'}; color: ${dark ? '#f0b46a' : '#8a5a12'}; }
+  .intent-hard { background: ${dark ? 'rgba(255,138,128,0.18)' : '#fdeceb'}; color: ${dark ? '#ff8a80' : '#a3251c'}; }
   /* The day above the hour, so a dated column is no wider than an undated one. */
   .col-day { display: block; font-weight: 700; color: ${dark ? '#39ff88' : '#0a8f3c'}; }
   .station-block h3 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
@@ -753,9 +846,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   <p class="note">The highlighted row is the final cut-off for that station — the latest across every distance through it.</p>
   <table>
     <thead><tr>
-      <th>Station</th><th>Distance</th><th class="num">Km</th>
-      <th class="num">Slowest arrival</th><th class="num">Proposed cut-off</th>
-      <th class="num">Margin</th><th class="num">Provided COT</th>
+      <th>Station</th><th>Distance</th><th class="num">Km</th>${cutoffHead}
     </tr></thead>
     <tbody>${cutoffRows}</tbody>
   </table>`

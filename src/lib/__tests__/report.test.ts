@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_AMENITY_RULES } from '../amenities';
 import { runPipeline, type DistanceInput } from '../pipeline';
 import { parseClockTimeToSeconds, secondsToClockTime } from '../time';
-import { ALL_REPORT_SECTIONS, buildReportHtml } from '../report';
+import { ALL_CUTOFF_COLUMNS, ALL_REPORT_SECTIONS, buildReportHtml } from '../report';
 import { buildStationTraffic } from '../stationTraffic';
 import { buildReportSheets } from '../workbook';
 
@@ -46,6 +46,8 @@ function cutoffSection(): string {
 describe('the printed cut-off section', () => {
   it('carries the same columns as the screen, in the same order', () => {
     const headers = [...cutoffSection().matchAll(/<th[^>]*>([^<]+)<\/th>/g)].map((m) => m[1]);
+    // Two of these were missing for as long as this test existed, which is what a test
+    // named for parity and written as a literal list will do.
     expect(headers).toEqual([
       'Station',
       'Distance',
@@ -54,6 +56,8 @@ describe('the printed cut-off section', () => {
       'Proposed cut-off',
       'Margin',
       'Provided COT',
+      'Stops',
+      'Effort needed',
     ]);
   });
 
@@ -68,7 +72,7 @@ describe('the printed cut-off section', () => {
   it('gives every row a cell for each column', () => {
     for (const row of cutoffSection().matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
       const cells = [...row[1].matchAll(/<t[dh][^>]*>/g)].length;
-      expect(cells).toBe(7);
+      expect(cells).toBe(9);
     }
   });
 
@@ -257,6 +261,8 @@ describe('the report presents the same columns as the screen', () => {
       'Proposed cut-off',
       'Margin',
       'Provided COT',
+      'Stops',
+      'Effort needed',
     ]);
   });
 
@@ -562,5 +568,72 @@ describe('the two report themes', () => {
     expect(dark).not.toBe(light);
     expect(dark).toContain('color-scheme: dark');
     expect(light).not.toContain('color-scheme: dark');
+  });
+});
+
+describe('the cut-off table in the report', () => {
+  const opts = {
+    raceName: 'Columns',
+    rules: DEFAULT_AMENITY_RULES,
+    overrides: {},
+    raceDate: '2026-09-18',
+  };
+  const section = (reportHtml: string) => {
+    const start = reportHtml.indexOf('<h2>Cut-off times</h2>');
+    return reportHtml.slice(start, reportHtml.indexOf('</table>', start));
+  };
+
+  it('carries the columns the screen has, including the two it was missing', () => {
+    // A report sent on instead of a screenshot used to drop the only two figures that
+    // say whether a cut-off is generous or a gate.
+    const html = section(buildReportHtml(result, opts));
+    for (const label of ['Slowest arrival', 'Proposed cut-off', 'Margin', 'Provided COT', 'Stops', 'Effort needed']) {
+      expect(html).toContain(label);
+    }
+  });
+
+  it('leaves out a column that was unticked', () => {
+    const html = section(
+      buildReportHtml(result, {
+        ...opts,
+        cutoffColumns: { ...ALL_CUTOFF_COLUMNS, margin: false, stops: false },
+      })
+    );
+    expect(html).not.toContain('Margin');
+    expect(html).not.toContain('Stops');
+    expect(html).toContain('Effort needed');
+    expect(html).toContain('Provided COT');
+  });
+
+  it('keeps every row the same width as its header', () => {
+    // A dropped cell shifts every column after it, which is the way a table like this
+    // goes wrong without looking wrong.
+    const html = section(
+      buildReportHtml(result, {
+        ...opts,
+        cutoffColumns: { ...ALL_CUTOFF_COLUMNS, proposed: false, effort: false },
+      })
+    );
+    const headers = (html.match(/<th[ >]/g) ?? []).length;
+    expect(headers).toBe(7);
+    for (const row of html.split('<tr').slice(2)) {
+      expect((row.match(/<td[ >]/g) ?? []).length).toBe(headers);
+    }
+  });
+
+  it('still prints the three columns that name the row', () => {
+    // Station, distance and km are what a row is; there is no report without them.
+    const html = section(
+      buildReportHtml(result, {
+        ...opts,
+        cutoffColumns: {
+          slowestArrival: false, proposed: false, margin: false,
+          providedCot: false, stops: false, effort: false,
+        },
+      })
+    );
+    expect(html).toContain('Station');
+    expect(html).toContain('Distance');
+    expect((html.match(/<th[ >]/g) ?? []).length).toBe(3);
   });
 });
