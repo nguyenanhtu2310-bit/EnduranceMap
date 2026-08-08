@@ -15,7 +15,6 @@ import {
   formatEventClock,
   parseClockTimeToSeconds,
   secondsToClockTime,
-  windowSeconds,
 } from './time';
 import {
   DEFAULT_AMENITIES,
@@ -40,34 +39,61 @@ import { SPORTSTATS_LOGO_DATA_URI } from '../assets/sportstatsLogo';
 
 /** Which parts of the plan to print. An organiser rarely needs all of it at once. */
 /**
- * The columns of the cut-off table, and whether each is printed.
+ * Which columns each table prints.
  *
  * Declared rather than written into the markup because a report is sent to people who
  * each need a different half of it: a crew chief wants the times, a race director wants
- * what the cut-off does to the field, and neither wants to read past the other's columns
+ * what a cut-off does to the field, and neither wants to read past the other's columns
  * to find their own.
+ *
+ * Only the fixed columns are listed. The split table has one column per distance, the
+ * traffic and distribution charts one per counting window — those are decided by the
+ * race rather than by taste, and a checkbox per fifteen-minute bin would be a worse
+ * problem than the one it solved.
  */
-export interface CutoffColumns {
-  slowestArrival: boolean;
-  proposed: boolean;
-  margin: boolean;
-  providedCot: boolean;
-  stops: boolean;
-  effort: boolean;
+export interface ReportColumnDef {
+  /** Namespaced by its table, so two tables may both have an "Open". */
+  key: string;
+  label: string;
+  section: keyof ReportSections;
 }
 
-export const CUTOFF_COLUMNS: { key: keyof CutoffColumns; label: string }[] = [
-  { key: 'slowestArrival', label: 'Slowest arrival' },
-  { key: 'proposed', label: 'Proposed cut-off' },
-  { key: 'margin', label: 'Margin' },
-  { key: 'providedCot', label: 'Provided COT' },
-  { key: 'stops', label: 'Stops' },
-  { key: 'effort', label: 'Effort needed' },
+export const REPORT_COLUMNS: ReportColumnDef[] = [
+  { key: 'schedule.crossings', label: 'Crossings', section: 'schedule' },
+  { key: 'schedule.open', label: 'Open', section: 'schedule' },
+  { key: 'schedule.close', label: 'Close', section: 'schedule' },
+  { key: 'schedule.duration', label: 'Duration', section: 'schedule' },
+  { key: 'schedule.peakWindow', label: 'Peak window', section: 'schedule' },
+  { key: 'schedule.peak', label: 'Peak', section: 'schedule' },
+  { key: 'schedule.activity', label: 'Activity', section: 'schedule' },
+
+  { key: 'perDistance.atKm', label: 'At km', section: 'perDistance' },
+  { key: 'perDistance.gap', label: 'Gap', section: 'perDistance' },
+  { key: 'perDistance.open', label: 'Open', section: 'perDistance' },
+  { key: 'perDistance.close', label: 'Close', section: 'perDistance' },
+  { key: 'perDistance.cutoff', label: 'Cut-off', section: 'perDistance' },
+  { key: 'perDistance.activity', label: 'Activity', section: 'perDistance' },
+
+  { key: 'distribution.peakWindow', label: 'Peak window', section: 'distribution' },
+  { key: 'distribution.through', label: 'Through in the window', section: 'distribution' },
+  { key: 'distribution.busiest', label: 'Busiest distance', section: 'distribution' },
+  { key: 'distribution.activity', label: 'Activity', section: 'distribution' },
+  { key: 'distribution.leads', label: 'First male / female', section: 'distribution' },
+
+  { key: 'cutoffs.slowestArrival', label: 'Slowest arrival', section: 'cutoffs' },
+  { key: 'cutoffs.proposed', label: 'Proposed cut-off', section: 'cutoffs' },
+  { key: 'cutoffs.margin', label: 'Margin', section: 'cutoffs' },
+  { key: 'cutoffs.providedCot', label: 'Provided COT', section: 'cutoffs' },
+  { key: 'cutoffs.stops', label: 'Stops', section: 'cutoffs' },
+  { key: 'cutoffs.effort', label: 'Effort needed', section: 'cutoffs' },
 ];
 
-export const ALL_CUTOFF_COLUMNS: CutoffColumns = Object.fromEntries(
-  CUTOFF_COLUMNS.map((c) => [c.key, true])
-) as unknown as CutoffColumns;
+/** Whether each declared column is printed, keyed as above. */
+export type ReportColumns = Record<string, boolean>;
+
+export const ALL_REPORT_COLUMNS: ReportColumns = Object.fromEntries(
+  REPORT_COLUMNS.map((c) => [c.key, true])
+);
 
 export interface ReportSections {
   schedule: boolean;
@@ -126,7 +152,7 @@ export interface ReportOptions {
   /** Defaults to every section when omitted. */
   sections?: ReportSections;
   /** Defaults to every column when omitted. */
-  cutoffColumns?: CutoffColumns;
+  columns?: ReportColumns;
   rules: AmenityRules;
   /** The amenity columns as the operator named them; defaults to the shipped list. */
   amenities?: Amenity[];
@@ -314,6 +340,27 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   const dark = options.theme === 'dark';
   const notes = options.notes ?? {};
   const sections = options.sections ?? ALL_REPORT_SECTIONS;
+  const columns = options.columns ?? ALL_REPORT_COLUMNS;
+  /** Whether a declared column is printed. Unknown keys print, so a new one is visible. */
+  const on = (key: string) => columns[key] !== false;
+  /**
+   * The header cells for one table's fixed columns, in declared order.
+   *
+   * A column may print a longer heading than it carries in the checkbox list: "Peak" is
+   * what an operator ticks, "Peak /15 min" is what the column means once the counting
+   * window is known, and only the report knows that number.
+   */
+  const headFor = (
+    section: keyof ReportSections,
+    numeric: string[] = [],
+    labels: Record<string, string> = {}
+  ) =>
+    REPORT_COLUMNS.filter((c) => c.section === section && on(c.key))
+      .map(
+        (c) =>
+          `<th${numeric.includes(c.key) ? ' class="num"' : ''}>${esc(labels[c.key] ?? c.label)}</th>`
+      )
+      .join('');
   const generated = new Date().toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' });
   /** A moment with the day it falls on, for a race that does not fit inside one. */
   const day = (seconds: number) => formatEventClock(seconds, options.raceDate);
@@ -332,27 +379,31 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
       const crossings = station.crossings
         .map((c) => `${esc(c.courseName)} ${c.kmFromStart.toFixed(1)}km`)
         .join('<br>');
+      const cell = (key: string, html: string) => (on(key) ? html : '');
       return `<tr>
         <td><strong>${esc(station.schedule.name)}</strong>${
           station.sourceNames.join(', ') !== station.schedule.name
             ? `<div class="sub">${esc(station.sourceNames.join(', '))}</div>`
             : ''
         }${notes[station.mapName] ? `<div class="sub note">${esc(notes[station.mapName])}</div>` : ''}</td>
-        <td class="sub">${crossings}</td>
-        <td class="num">${day(station.schedule.openSeconds)}</td>
-        <td class="num">${day(station.schedule.closeSeconds)}</td>
-        <td class="num">${(() => {
-          const seconds = windowSeconds(station.schedule.openClockTime, station.schedule.closeClockTime);
-          return seconds && seconds > 0 ? formatDuration(seconds) : '–';
-        })()}</td>
-        <td class="num">${(() => {
+        ${cell('schedule.crossings', `<td class="sub">${crossings}</td>`)}
+        ${cell('schedule.open', `<td class="num">${day(station.schedule.openSeconds)}</td>`)}
+        ${cell('schedule.close', `<td class="num">${day(station.schedule.closeSeconds)}</td>`)}
+        ${cell('schedule.duration', `<td class="num">${(() => {
+          // From the schedule's own seconds, which keep the day. Derived from the two
+          // clock strings — which is what this did — a station open Saturday 05:37 and
+          // closed Sunday 11:48 printed six hours twelve instead of thirty hours eleven.
+          const seconds = station.schedule.closeSeconds - station.schedule.openSeconds;
+          return seconds > 0 ? formatDuration(seconds) : '–';
+        })()}</td>`)}
+        ${cell('schedule.peakWindow', `<td class="num">${(() => {
           const bin = station.peakBinIndex >= 0 ? station.distribution[station.peakBinIndex] : undefined;
           return bin
             ? `${day(bin.binStartSeconds)}–${secondsToClockTime(bin.binEndSeconds).slice(0, 5)}`
             : '–';
-        })()}</td>
-        <td class="num">${peakRunnersPerWindow(station.schedule.peakRunnersPerHour, result.binMinutes).toLocaleString()}</td>
-        <td><span class="tag ${station.schedule.activityLevel}">${station.schedule.activityLevel}</span></td>
+        })()}</td>`)}
+        ${cell('schedule.peak', `<td class="num">${peakRunnersPerWindow(station.schedule.peakRunnersPerHour, result.binMinutes).toLocaleString()}</td>`)}
+        ${cell('schedule.activity', `<td><span class="tag ${station.schedule.activityLevel}">${station.schedule.activityLevel}</span></td>`)}
         ${station.schedule.cutoffExceeded ? '<td class="risk">Over cut-off</td>' : '<td></td>'}
       </tr>`;
     })
@@ -391,14 +442,14 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
             <td>${esc(stop.station.schedule.name)}${
               stop.passCount > 1 ? `<div class="sub">pass ${stop.passIndex + 1} of ${stop.passCount}</div>` : ''
             }${notes[stop.station.mapName] ? `<div class="sub note">${esc(notes[stop.station.mapName])}</div>` : ''}</td>
-            <td class="num">${stop.kmFromStart.toFixed(1)}</td>
-            <td class="num${stop.gapKm === longest && longest > 0 ? ' risk' : ''}">${stop.gapKm.toFixed(1)}</td>
-            <td class="num">${day(stop.station.schedule.openSeconds)}</td>
-            <td class="num">${day(stop.station.schedule.closeSeconds)}</td>
-            <td class="num">${stop.officialCutoffClock ? hm(stop.officialCutoffClock) : '–'}</td>
-            <td><span class="tag ${stop.station.schedule.activityLevel}">${
+            ${on('perDistance.atKm') ? `<td class="num">${stop.kmFromStart.toFixed(1)}</td>` : ''}
+            ${on('perDistance.gap') ? `<td class="num${stop.gapKm === longest && longest > 0 ? ' risk' : ''}">${stop.gapKm.toFixed(1)}</td>` : ''}
+            ${on('perDistance.open') ? `<td class="num">${day(stop.station.schedule.openSeconds)}</td>` : ''}
+            ${on('perDistance.close') ? `<td class="num">${day(stop.station.schedule.closeSeconds)}</td>` : ''}
+            ${on('perDistance.cutoff') ? `<td class="num">${stop.officialCutoffClock ? hm(stop.officialCutoffClock) : '–'}</td>` : ''}
+            ${on('perDistance.activity') ? `<td><span class="tag ${stop.station.schedule.activityLevel}">${
               stop.station.schedule.activityLevel
-            }</span></td>
+            }</span></td>` : ''}
             ${cells}
           </tr>`;
         })
@@ -410,9 +461,10 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         <p class="note">${courseStops.length} stops on course, longest gap ${longest.toFixed(1)} km. Start and finish furniture is greyed and not counted.</p>
         <table>
           <thead><tr>
-            <th></th><th>Point</th><th class="num">At km</th><th class="num">Gap</th>
-            <th class="num">Open</th><th class="num">Close</th><th class="num">Cut-off</th>
-            <th>Activity</th>
+            <th></th><th>Point</th>${headFor('perDistance', [
+              'perDistance.atKm', 'perDistance.gap', 'perDistance.open',
+              'perDistance.close', 'perDistance.cutoff',
+            ])}
             ${amenities.map((a) => `<th class="mid">${esc(a.label)}</th>`).join('')}
           </tr></thead>
           <tbody>${rows}
@@ -448,12 +500,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
    * the only figures that say whether a cut-off is generous or a gate.
    */
   const effects = cutoffEffects(result, eventSecondsFrom);
-  const columns = options.cutoffColumns ?? ALL_CUTOFF_COLUMNS;
-  const shown = CUTOFF_COLUMNS.filter((c) => columns[c.key]);
-
-  const cutoffHead = shown
-    .map((c) => `<th class="num">${esc(c.label)}</th>`)
-    .join('');
+  const shownCutoff = REPORT_COLUMNS.filter((c) => c.section === 'cutoffs' && on(c.key));
 
   const cutoffRows = !sections.cutoffs ? '' : result.cutoffTable
     .map((row) => {
@@ -463,17 +510,17 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
       const effect = effects.get(cutoffKey(row.stationName, row.courseName, row.kmFromStart));
       const intent = effect ? cutoffIntent(effect) : null;
 
-      const cell = (key: keyof CutoffColumns): string => {
+      const cutoffCell = (key: string): string => {
         switch (key) {
-          case 'slowestArrival':
+          case 'cutoffs.slowestArrival':
             return `<td class="num">${day(row.modeledLastArrivalSeconds)}</td>`;
-          case 'proposed':
+          case 'cutoffs.proposed':
             return `<td class="num ${isFinal ? 'cot-final' : 'cot-other'}">${
               isFinal ? '<span class="final-tag">final</span>' : ''
             }<strong>${day(row.suggestedSeconds)}</strong></td>`;
-          case 'margin':
+          case 'cutoffs.margin':
             return `<td class="num muted">${margin === null ? '–' : `+${margin} min`}</td>`;
-          case 'providedCot':
+          case 'cutoffs.providedCot':
             return `<td class="num${row.mapIsTighter ? ' risk' : ''}">${
               row.mapSeconds !== undefined
                 ? day(row.mapSeconds)
@@ -481,13 +528,13 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
                   ? hm(row.mapClockTime)
                   : '–'
             }</td>`;
-          case 'stops':
+          case 'cutoffs.stops':
             if (!effect || effect.fieldSize === 0) return '<td class="num muted">–</td>';
             if (effect.caught === 0) return '<td class="num muted">nobody</td>';
             return `<td class="num${effect.share > HEAVY_SHARE ? ' risk' : ''}">${
               effect.caught
             } (${(effect.share * 100).toFixed(0)}%)</td>`;
-          case 'effort':
+          case 'cutoffs.effort':
             if (!intent) return '<td class="num muted">–</td>';
             return `<td title="${esc(INTENT_MEANING[intent])}"><span class="intent intent-${intent}">${
               intent
@@ -498,6 +545,8 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
                   ).toFixed(0)}%</span>`
                 : ''
             }</td>`;
+          default:
+            return '';
         }
       };
 
@@ -505,7 +554,7 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         <td>${esc(row.stationName)}</td>
         <td>${esc(row.courseName)}</td>
         <td class="num">${row.kmFromStart.toFixed(1)}</td>
-        ${shown.map((c) => cell(c.key)).join('')}
+        ${shownCutoff.map((c) => cutoffCell(c.key)).join('')}
       </tr>`;
     })
     .join('');
@@ -571,11 +620,11 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
             };
             return `<tr>
               <td>${esc(trafficStationName(station))}</td>
-              <td class="num">${window}</td>
-              <td class="num">${peak ? peak.total.toLocaleString() : '–'}</td>
-              <td>${esc(busiest)}</td>
-              <td><span class="tag ${station.station.schedule.activityLevel}">${station.station.schedule.activityLevel}</span></td>
-              ${anyLeads ? `<td class="num">${lead('M')}</td><td class="num">${lead('F')}</td>` : ''}
+              ${on('distribution.peakWindow') ? `<td class="num">${window}</td>` : ''}
+              ${on('distribution.through') ? `<td class="num">${peak ? peak.total.toLocaleString() : '–'}</td>` : ''}
+              ${on('distribution.busiest') ? `<td>${esc(busiest)}</td>` : ''}
+              ${on('distribution.activity') ? `<td><span class="tag ${station.station.schedule.activityLevel}">${station.station.schedule.activityLevel}</span></td>` : ''}
+              ${anyLeads && on('distribution.leads') ? `<td class="num">${lead('M')}</td><td class="num">${lead('F')}</td>` : ''}
             </tr>`;
           })
           .join('');
@@ -594,9 +643,12 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
         }</div>
         ${svg}
         <table><thead><tr>
-          <th>Station</th><th class="num">Peak window</th>
-          <th class="num">Through in ${result.binMinutes} min</th><th>Busiest distance</th><th>Activity</th>
-          ${anyLeads ? '<th class="num">First Male</th><th class="num">First Female</th>' : ''}
+          <th>Station</th>
+          ${on('distribution.peakWindow') ? '<th class="num">Peak window</th>' : ''}
+          ${on('distribution.through') ? `<th class="num">Through in ${result.binMinutes} min</th>` : ''}
+          ${on('distribution.busiest') ? '<th>Busiest distance</th>' : ''}
+          ${on('distribution.activity') ? '<th>Activity</th>' : ''}
+          ${anyLeads && on('distribution.leads') ? '<th class="num">First Male</th><th class="num">First Female</th>' : ''}
         </tr></thead><tbody>${body}</tbody></table>`;
       })();
 
@@ -823,9 +875,11 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
       ? `<h2>Station operating schedule</h2>
   <table>
     <thead><tr>
-      <th>Station</th><th>Crossings</th><th class="num">Open</th><th class="num">Close</th>
-      <th class="num">Duration</th><th class="num">Peak window</th>
-      <th class="num">Peak /${result.binMinutes} min</th><th>Activity</th><th></th>
+      <th>Station</th>${headFor(
+        'schedule',
+        ['schedule.open', 'schedule.close', 'schedule.duration', 'schedule.peakWindow', 'schedule.peak'],
+        { 'schedule.peak': `Peak /${result.binMinutes} min` }
+      )}<th></th>
     </tr></thead>
     <tbody>${scheduleRows}</tbody>
   </table>`
@@ -846,7 +900,9 @@ export function buildReportHtml(result: PipelineResult, options: ReportOptions):
   <p class="note">The highlighted row is the final cut-off for that station — the latest across every distance through it.</p>
   <table>
     <thead><tr>
-      <th>Station</th><th>Distance</th><th class="num">Km</th>${cutoffHead}
+      <th>Station</th><th>Distance</th><th class="num">Km</th>${shownCutoff
+        .map((c) => `<th class="num">${esc(c.label)}</th>`)
+        .join('')}
     </tr></thead>
     <tbody>${cutoffRows}</tbody>
   </table>`

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_AMENITY_RULES } from '../amenities';
 import { runPipeline, type DistanceInput } from '../pipeline';
 import { parseClockTimeToSeconds, secondsToClockTime } from '../time';
-import { ALL_CUTOFF_COLUMNS, ALL_REPORT_SECTIONS, buildReportHtml } from '../report';
+import { ALL_REPORT_COLUMNS, ALL_REPORT_SECTIONS, buildReportHtml } from '../report';
 import { buildStationTraffic } from '../stationTraffic';
 import { buildReportSheets } from '../workbook';
 
@@ -596,7 +596,7 @@ describe('the cut-off table in the report', () => {
     const html = section(
       buildReportHtml(result, {
         ...opts,
-        cutoffColumns: { ...ALL_CUTOFF_COLUMNS, margin: false, stops: false },
+        columns: { ...ALL_REPORT_COLUMNS, 'cutoffs.margin': false, 'cutoffs.stops': false },
       })
     );
     expect(html).not.toContain('Margin');
@@ -611,7 +611,7 @@ describe('the cut-off table in the report', () => {
     const html = section(
       buildReportHtml(result, {
         ...opts,
-        cutoffColumns: { ...ALL_CUTOFF_COLUMNS, proposed: false, effort: false },
+        columns: { ...ALL_REPORT_COLUMNS, 'cutoffs.proposed': false, 'cutoffs.effort': false },
       })
     );
     const headers = (html.match(/<th[ >]/g) ?? []).length;
@@ -626,14 +626,94 @@ describe('the cut-off table in the report', () => {
     const html = section(
       buildReportHtml(result, {
         ...opts,
-        cutoffColumns: {
-          slowestArrival: false, proposed: false, margin: false,
-          providedCot: false, stops: false, effort: false,
-        },
+        columns: Object.fromEntries(Object.keys(ALL_REPORT_COLUMNS).map((k) => [k, false])),
       })
     );
     expect(html).toContain('Station');
     expect(html).toContain('Distance');
     expect((html.match(/<th[ >]/g) ?? []).length).toBe(3);
+  });
+});
+
+describe('columns across every table', () => {
+  const opts = {
+    raceName: 'All columns',
+    rules: DEFAULT_AMENITY_RULES,
+    overrides: {},
+    raceDate: '2026-09-18',
+    sections: { ...ALL_REPORT_SECTIONS, stationTraffic: true },
+  };
+  const headersUnderHeading = (html: string, heading: RegExp) => {
+    const i = html.search(heading);
+    if (i < 0) return [];
+    const table = html.slice(i, html.indexOf('</table>', i));
+    return [...table.matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map((m) => m[1]).filter(Boolean);
+  };
+
+  it('drops a column from the schedule when it is unticked', () => {
+    const before = buildReportHtml(result, opts);
+    const after = buildReportHtml(result, {
+      ...opts,
+      columns: { ...ALL_REPORT_COLUMNS, 'schedule.crossings': false, 'schedule.duration': false },
+    });
+    expect(headersUnderHeading(before, /<h2>Station operating schedule<\/h2>/)).toContain('Crossings');
+    const heads = headersUnderHeading(after, /<h2>Station operating schedule<\/h2>/);
+    expect(heads).not.toContain('Crossings');
+    expect(heads).not.toContain('Duration');
+    expect(heads).toContain('Close');
+  });
+
+  it('drops one from the amenities table', () => {
+    const after = buildReportHtml(result, {
+      ...opts,
+      columns: { ...ALL_REPORT_COLUMNS, 'perDistance.gap': false },
+    });
+    // The per-distance tables are headed by the course, not by a fixed string.
+    expect(after).not.toMatch(/<th class="num">Gap<\/th>/);
+    expect(after).toMatch(/<th class="num">At km<\/th>/);
+  });
+
+  it('drops one from the distribution table', () => {
+    const after = buildReportHtml(result, {
+      ...opts,
+      columns: { ...ALL_REPORT_COLUMNS, 'distribution.busiest': false },
+    });
+    const heads = headersUnderHeading(after, /<h2>Crossing time distribution<\/h2>/);
+    expect(heads).not.toContain('Busiest distance');
+    expect(heads).toContain('Peak window');
+  });
+
+  it('keeps every row as wide as its header, in every table', () => {
+    // A dropped cell shifts each column after it — the way a table like this goes wrong
+    // without looking wrong.
+    const html = buildReportHtml(result, {
+      ...opts,
+      columns: {
+        ...ALL_REPORT_COLUMNS,
+        'schedule.crossings': false,
+        'perDistance.gap': false,
+        'distribution.busiest': false,
+        'cutoffs.margin': false,
+      },
+    });
+    for (const heading of [
+      /<h2>Station operating schedule<\/h2>/,
+      /<h2>Crossing time distribution<\/h2>/,
+      /<h2>Cut-off times<\/h2>/,
+    ]) {
+      const i = html.search(heading);
+      const table = html.slice(i, html.indexOf('</table>', i));
+      const headers = (table.match(/<th[ >]/g) ?? []).length;
+      for (const row of table.split('<tr').slice(2)) {
+        expect((row.match(/<td[ >]/g) ?? []).length).toBe(headers);
+      }
+    }
+  });
+
+  it('prints every column when nothing says otherwise', () => {
+    // An unknown key must print rather than vanish, so a column added later is visible
+    // before anybody thinks to tick it.
+    const html = buildReportHtml(result, { ...opts, columns: {} });
+    expect(headersUnderHeading(html, /<h2>Cut-off times<\/h2>/)).toContain('Effort needed');
   });
 });
