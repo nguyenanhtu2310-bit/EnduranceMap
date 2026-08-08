@@ -116,18 +116,37 @@ describe('stations typed in from a published table', () => {
     expect(new Set(placemarks.map((p) => p.stationId)).size).toBe(1);
   });
 
-  it('keeps two stations of one name apart when they are far apart', () => {
-    // "WS" is what half the water stations on a card are called. Two of them sixty-five
-    // kilometres apart are two places whatever they share, and merging them would have
-    // one tent serving both.
-    const { placemarks } = manualPlacemarks(
+  it('treats one name as one station however far apart the figures are', () => {
+    // No distance test sits beside the name. Trail measurement between two distances of
+    // one race disagrees by hundreds of metres routinely and kilometres often enough that
+    // any tolerance loose enough to survive it is meaningless — and a tight one splits
+    // the station the operator plainly meant as one, which was the reported bug.
+    const { placemarks, warnings } = manualPlacemarks(
       [
         { name: 'WS', km: 17.6, courseName: '100km' },
         { name: 'WS', km: 82.9, courseName: '100km' },
       ],
       courses
     );
-    expect(placemarks.map((p) => p.name)).toEqual(['WS', 'WS (2)']);
+    expect(placemarks.map((p) => p.name)).toEqual(['WS', 'WS']);
+    expect(new Set(placemarks.map((p) => p.stationId)).size).toBe(1);
+    // And says so loudly, because at this distance one name over two places is the far
+    // likelier reading than one tent.
+    expect(warnings[0]).toContain('different checkpoint');
+  });
+
+  it('separates two stations when they are given two names', () => {
+    // Which costs nothing and is what a race does anyway — a real card has "WS Hòa Sử
+    // Pán" and "WS Lếch Mông", not "WS" twice.
+    const { placemarks, warnings } = manualPlacemarks(
+      [
+        { name: 'WS Hòa Sử Pán', km: 17.6, courseName: '100km' },
+        { name: 'WS Lếch Mông', km: 82.9, courseName: '100km' },
+      ],
+      courses
+    );
+    expect(new Set(placemarks.map((p) => p.stationId)).size).toBe(2);
+    expect(warnings).toEqual([]);
   });
 
   it('ignores a blank row rather than placing it at the start', () => {
@@ -238,6 +257,8 @@ describe('one station whose published distances disagree', () => {
     expect(warnings[0]).toContain('WS Lếch Mông');
     expect(warnings[0]).toMatch(/\d+ m apart/);
     expect(warnings[0]).toContain('21km');
+    // Ordinary rounding between two tables, so it is stated without alarm.
+    expect(warnings[0]).toContain('ordinary');
   });
 
   it('says nothing when they agree', () => {
@@ -275,5 +296,58 @@ describe('one station whose published distances disagree', () => {
     );
     const clocks = placemarks.flatMap((p) => p.label.cutoffs.map((c) => c.cutoffClock)).sort();
     expect(clocks).toEqual(['12:30', '15:00']);
+  });
+});
+
+describe('two checkpoints close together', () => {
+  // Trail races put a timing mat and a water station a few hundred metres apart, or two
+  // mats either side of a summit. Those are two positions with two crews and must never
+  // collapse into one — which is why the name decides identity and distance never does.
+  it('keeps them apart at 300 m when they have different names', () => {
+    const { placemarks, warnings } = manualPlacemarks(
+      [
+        { name: 'CP7 mat', km: 92.9, courseName: '100km' },
+        { name: 'WS Sử Pán', km: 93.2, courseName: '100km' },
+      ],
+      courses
+    );
+    expect(new Set(placemarks.map((p) => p.stationId)).size).toBe(2);
+    expect(warnings).toEqual([]);
+  });
+
+  it('keeps them apart at 100 m', () => {
+    const { placemarks } = manualPlacemarks(
+      [
+        { name: 'Announcer', km: 100.5, courseName: '100km' },
+        { name: 'Finish', km: 100.6, courseName: '100km' },
+      ],
+      courses
+    );
+    expect(new Set(placemarks.map((p) => p.stationId)).size).toBe(2);
+  });
+
+  it('is silent about a disagreement under a kilometre', () => {
+    // The normal size of the gap between two separately measured distances of one trail.
+    const { warnings } = manualPlacemarks(
+      [
+        { name: 'WS', km: 40.0, courseName: '100km' },
+        { name: 'WS', km: 40.7, courseName: '100km' },
+      ],
+      courses
+    );
+    expect(warnings[0]).toContain('ordinary');
+    expect(warnings[0]).not.toContain('different checkpoint');
+  });
+
+  it('speaks up past a kilometre', () => {
+    const { warnings } = manualPlacemarks(
+      [
+        { name: 'WS', km: 40.0, courseName: '100km' },
+        { name: 'WS', km: 42.0, courseName: '100km' },
+      ],
+      courses
+    );
+    expect(warnings[0]).toContain('different checkpoint');
+    expect(warnings[0]).toMatch(/2\.0 km apart/);
   });
 });

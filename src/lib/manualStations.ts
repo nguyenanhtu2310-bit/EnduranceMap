@@ -74,19 +74,16 @@ export interface ManualStationResult {
 const AGREEMENT_TOLERANCE_KM = 0.1;
 
 /**
- * How far apart two rows of one name may be and still be one station.
+ * How far the distances given for one named station may disagree before it is worth
+ * saying so out loud.
  *
- * Wide, because the figures a race publishes for one water station routinely differ by
- * half a kilometre between its distances — a real card put the same tent at km 16.0 on
- * the 21 km and at a point 564 m away via the 10 km. Narrower than that and the feature
- * fails at exactly the job it exists for.
- *
- * Not unlimited, though, and that is why the name alone will not do: "WS" is what half
- * the water stations on a card are called, and two of them forty kilometres apart are
- * two places whatever they share. A kilometre is far enough to absorb the disagreement
- * between two published tables and nowhere near far enough to swallow a second station.
+ * Not a limit on merging — the name decides that, see below. Under a kilometre is
+ * ordinary between two published tables for one trail: the distances are measured
+ * separately, often on different days, and a few hundred metres is the normal size of
+ * that disagreement. Past a kilometre one of the two figures is more likely to belong to
+ * a different checkpoint than to be the same tent measured badly.
  */
-const MERGE_TOLERANCE_KM = 1;
+const LOUD_DISAGREEMENT_KM = 1;
 
 /**
  * Places each hand-entered station, one placemark per name.
@@ -150,18 +147,24 @@ export function manualPlacemarks(
 
     const row = { coord, courseName: station.courseName, totalKm, km: station.km, cutoffClock: station.cutoffClock };
 
-    // Joins a group of the same name that is near enough to be the same tent, and starts
-    // a new one — suffixed — where it is not.
-    const sameName = [...groups.values()].filter((g) => g.baseName === name);
-    const near = sameName.find((g) => gapKm(g.rows[0].coord, coord) <= MERGE_TOLERANCE_KM);
-    if (near) {
-      near.rows.push(row);
-      continue;
-    }
-
-    let unique = name;
-    for (let n = 2; groups.has(unique); n++) unique = `${name} (${n})`;
-    groups.set(unique, { name: unique, baseName: name, rows: [row] });
+    /*
+     * The name is the identity, with no distance test alongside it.
+     *
+     * A proximity rule was tried and is wrong for trail. Course measurement between two
+     * distances of one race disagrees by hundreds of metres routinely and by kilometres
+     * often enough — a tolerance loose enough to survive that is loose enough to be
+     * meaningless, and a tight one splits the station the operator plainly meant as one.
+     * That was the reported bug.
+     *
+     * The operator typed the name. Typing it twice is them saying "same tent", and it is
+     * the one piece of evidence here that no measurement can contradict. Two genuinely
+     * different stations are given two names, which costs nothing and is what a race
+     * does anyway — the card that produced this has "WS Hòa Sử Pán" and "WS Lếch Mông",
+     * not "WS" twice.
+     */
+    const group = groups.get(name);
+    if (group) group.rows.push(row);
+    else groups.set(name, { name, baseName: name, rows: [row] });
   }
 
   const placemarks: RawPlacemark[] = [];
@@ -181,10 +184,15 @@ export function manualPlacemarks(
     for (const row of group.rows) worst = Math.max(worst, gapKm(anchor.coord, row.coord));
     if (worst > AGREEMENT_TOLERANCE_KM) {
       const given = group.rows.map((r) => `${r.courseName} km ${r.km.toFixed(1)}`).join(', ');
+      const far = worst > LOUD_DISAGREEMENT_KM;
       warnings.push(
-        `"${group.name}" is placed ${(worst * 1000).toFixed(0)} m apart by the distances given ` +
-          `for it (${given}). It is planned as one station, and each distance keeps its own ` +
-          `kilometre — check them against the published table if that gap looks wrong.`
+        `"${group.name}" is placed ${
+          worst >= 1 ? `${worst.toFixed(1)} km` : `${(worst * 1000).toFixed(0)} m`
+        } apart by the distances given for it (${given}). It is planned as one station and ` +
+          `each distance keeps its own kilometre` +
+          (far
+            ? ' — but that is far enough that one of those figures may belong to a different checkpoint, or two different stations may have been given one name.'
+            : ', which is ordinary between two published tables.')
       );
     }
 
