@@ -1,4 +1,4 @@
-import type { CourseVertex } from './geo';
+import type { CourseVertex, LatLon } from './geo';
 import type { RawPlacemark } from './kml';
 import type { ParsedLabel } from './labels';
 import { parseClockTimeToSeconds } from './time';
@@ -20,6 +20,17 @@ import { positionAtKm } from './timingStations';
 
 /** The folder hand-entered stations are filed under, so they read as one group. */
 export const MANUAL_FOLDER = 'BY HAND';
+
+/**
+ * How far apart two rows of one name must be before they are two different places.
+ *
+ * A checkpoint shared by several distances is typed once per distance, at each one's own
+ * cumulative kilometre — CP3 is km 60 on the 100 km and km 30 on the 70 km. Those are one
+ * tent, and they land on one coordinate because the courses share the ground. Rows this
+ * close keep their name so they merge into a single station; rows further apart are two
+ * places that happen to share a label, and are kept apart.
+ */
+const SAME_PLACE_KM = 0.15;
 
 /**
  * How far past the end of a course a station may sit before it is refused.
@@ -50,6 +61,12 @@ export interface ManualStation {
   cutoffClock?: string;
 }
 
+/** Rough kilometres between two points, for deciding whether two rows are one place. */
+function gapKm(a: LatLon, b: LatLon): number {
+  const kx = 111.32 * Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot((a.lon - b.lon) * kx, (a.lat - b.lat) * 111.32);
+}
+
 export interface ManualStationResult {
   placemarks: RawPlacemark[];
   warnings: string[];
@@ -69,6 +86,8 @@ export function manualPlacemarks(
   const warnings: string[] = [];
   const placemarks: RawPlacemark[] = [];
   const used = new Set<string>();
+  /** What has been placed so far, so a repeat of one name can be told from a new place. */
+  const placed: { name: string; coord: LatLon; unique: string }[] = [];
 
   for (const station of stations) {
     const name = station.name.trim();
@@ -98,11 +117,30 @@ export function manualPlacemarks(
     const coord = positionAtKm(course, Math.min(station.km, totalKm));
     if (!coord) continue;
 
-    // Two stations under one name make one station downstream, and the second one's
-    // crossings quietly join the first's. Named apart, they stay two places.
+    /*
+     * A name is kept where the row is the same place as one already typed, and suffixed
+     * where it is not.
+     *
+     * Both matter. A checkpoint serving four distances is typed four times, once per
+     * distance at its own cumulative kilometre, and those four rows are one tent — they
+     * must arrive under one name so they merge into one station with four crossings. Two
+     * water stations both called "WS", forty kilometres apart, must not.
+     *
+     * Suffixing everything made the first case read "CP3 / CP3 (2) / CP3 (3)" on a
+     * station that was correct underneath, which is the kind of output that gets a right
+     * answer disbelieved.
+     */
+    const here = placed.find(
+      (p) => p.name === name && gapKm(p.coord, coord) <= SAME_PLACE_KM
+    );
     let unique = name;
-    for (let n = 2; used.has(unique); n++) unique = `${name} (${n})`;
-    used.add(unique);
+    if (!here) {
+      for (let n = 2; used.has(unique); n++) unique = `${name} (${n})`;
+      used.add(unique);
+    } else {
+      unique = here.name;
+    }
+    placed.push({ name, coord, unique });
 
     /*
      * The label is built rather than written into the name and parsed back out.

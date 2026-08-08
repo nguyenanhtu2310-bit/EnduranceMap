@@ -95,6 +95,22 @@ describe('stations typed in from a published table', () => {
     expect(warnings[0]).toContain('50km');
   });
 
+  it('keeps one name where the same checkpoint is typed for two distances', () => {
+    // The case that makes this usable at all: a checkpoint serving several distances is
+    // typed once per distance, at each one's own cumulative kilometre. Both fixtures run
+    // due north from one start, so km 30 is one place on either. Suffixed, they read
+    // "CP3 / CP3 (2)" on a station that was correct underneath — which is how a right
+    // answer gets disbelieved.
+    const { placemarks } = manualPlacemarks(
+      [
+        { name: 'CP3', km: 30, courseName: '100km' },
+        { name: 'CP3', km: 30, courseName: '70km' },
+      ],
+      courses
+    );
+    expect(placemarks.map((p) => p.name)).toEqual(['CP3', 'CP3']);
+  });
+
   it('keeps two stations of one name apart', () => {
     // Merged, the second one's crossings quietly join the first's and one tent serves
     // two places.
