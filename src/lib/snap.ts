@@ -230,19 +230,35 @@ export function groupCoincidentPlacemarks(
   const groups: GroupedStation[] = [];
 
   for (const placemark of placemarks) {
-    // An asserted identity wins over the guess from proximity. Nothing else can join two
-    // points half a kilometre apart without also joining two stations that merely sit
-    // near each other.
-    const existing = placemark.stationId
+    /*
+     * An asserted identity wins over the guess from proximity, and then proximity still
+     * applies.
+     *
+     * The first half is what lets a station typed once per distance arrive as one station
+     * even where the two published kilometres land half a kilometre apart — nothing else
+     * can join those without also joining two stations that merely sit near each other.
+     *
+     * The second half matters just as much: without the fallback, a typed station could
+     * never join a pin on the map, even standing on it. Someone who has both a KML and a
+     * distance table would get two stations at one tent and no way to say they were the
+     * same, which is the bug this whole mechanism exists to prevent, arriving from the
+     * other direction.
+     */
+    const byIdentity = placemark.stationId
       ? groups.find((g) => g.members.some((m) => m.stationId === placemark.stationId))
-      : groups.find((g) =>
-          g.members.some(
-            (m) =>
-              !m.stationId &&
-              haversineKm(m.coord, placemark.coord) <= toleranceKm &&
-              sameJob(m.name, placemark.name)
-          )
-        );
+      : undefined;
+    const existing =
+      byIdentity ??
+      groups.find((g) =>
+        g.members.some(
+          (m) =>
+            // Two members that each assert an identity and disagree are two stations,
+            // whatever the distance between them says.
+            !(m.stationId && placemark.stationId && m.stationId !== placemark.stationId) &&
+            haversineKm(m.coord, placemark.coord) <= toleranceKm &&
+            sameJob(m.name, placemark.name)
+        )
+      );
     if (existing) {
       existing.members.push(placemark);
     } else {

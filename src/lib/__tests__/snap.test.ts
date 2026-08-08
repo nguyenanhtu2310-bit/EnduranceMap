@@ -141,6 +141,46 @@ describe('snapPlacemarks', () => {
   });
 });
 
+describe('a station that says what it is', () => {
+  /** Same helper, with an identity asserted by whatever produced the placemark. */
+  const identified = (name: string, lat: number, lon: number, stationId: string): RawPlacemark => ({
+    ...placemark(name, lat, lon),
+    stationId,
+  });
+
+  it('joins two points far apart when both claim one identity', () => {
+    // Typed once per distance from a published table: the two kilometres land hundreds of
+    // metres apart once each course has been measured, and no proximity rule can join
+    // them without also joining stations that merely sit near each other.
+    const members = snapPlacemarks(
+      [identified('WS', 10.03, 106.0, 'ws'), identified('WS', 10.035, 106.0, 'ws')],
+      courses
+    );
+    const groups = groupCoincidentPlacemarks(members);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].members).toHaveLength(2);
+  });
+
+  it('keeps two points apart when they claim different identities, however close', () => {
+    // A mat and a water station a few metres apart are two crews and two positions.
+    const members = snapPlacemarks(
+      [identified('CP7 mat', 10.03, 106.0, 'mat'), identified('WS Sử Pán', 10.0301, 106.0, 'ws')],
+      courses
+    );
+    expect(groupCoincidentPlacemarks(members)).toHaveLength(2);
+  });
+
+  it('still lets an identified station merge with a plain pin beside it', () => {
+    // Somebody with both a map and a distance table must not get two stations at one
+    // tent — which is this whole mechanism's own failure, arriving from the other side.
+    const members = snapPlacemarks(
+      [placemark('Marathon CP', 10.03, 106.0), identified('Marathon CP', 10.0301, 106.0, 'typed')],
+      courses
+    );
+    expect(groupCoincidentPlacemarks(members)).toHaveLength(1);
+  });
+});
+
 describe('groupCoincidentPlacemarks', () => {
   it('merges placemarks within tolerance into one station', () => {
     const members = snapPlacemarks(
