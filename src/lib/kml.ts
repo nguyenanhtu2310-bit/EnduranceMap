@@ -17,6 +17,25 @@ export interface RawSegment {
 
 export interface RawPlacemark {
   name: string;
+  /**
+   * An identity the source asserts, overriding the guess made from proximity.
+   *
+   * A map has to be read for what it means — two pins 20 m apart are one checkpoint —
+   * but a distance table states outright that one tent is km 16.0 of the 21 km and km 4.8
+   * of the 10 km. Those two points can be half a kilometre apart once each course has
+   * been measured separately, and no proximity rule wide enough to join them is narrow
+   * enough to keep two real stations apart. Where the source knows, it says.
+   */
+  stationId?: string;
+  /**
+   * The only courses this placemark may sit on, where the source knows.
+   *
+   * A row typed against the 10 km's distance table is a statement about the 10 km. Left
+   * to geometry it also lands on the 21 km, half a kilometre from where that race's own
+   * table puts the same tent — so the station gains a second 21 km crossing that no
+   * runner makes and that no published figure supports.
+   */
+  onlyCourses?: string[];
   /** Name of the immediate containing folder, e.g. "CUT-OFF TIME". */
   folder: string;
   coord: LatLon;

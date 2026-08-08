@@ -502,7 +502,9 @@ export function runPipeline(
       !excludedFragments.some((fragment) => p.name.toLowerCase().includes(fragment))
   );
   const snapped = snapPlacemarks(considered, courses, options).map((placemark) => {
-    const allowed = options.restrictCoursesFor?.(placemark.name);
+    // What the placemark itself declares wins: it is per placemark, where the callback
+    // can only key on a name, and several rows of one station share a name on purpose.
+    const allowed = placemark.onlyCourses ?? options.restrictCoursesFor?.(placemark.name);
     if (!allowed) return placemark;
     const permitted = new Set(allowed);
     const snaps = placemark.snaps.filter((s) => permitted.has(s.courseName));

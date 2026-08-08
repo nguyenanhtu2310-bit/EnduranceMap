@@ -230,12 +230,19 @@ export function groupCoincidentPlacemarks(
   const groups: GroupedStation[] = [];
 
   for (const placemark of placemarks) {
-    const existing = groups.find((g) =>
-      g.members.some(
-        (m) =>
-          haversineKm(m.coord, placemark.coord) <= toleranceKm && sameJob(m.name, placemark.name)
-      )
-    );
+    // An asserted identity wins over the guess from proximity. Nothing else can join two
+    // points half a kilometre apart without also joining two stations that merely sit
+    // near each other.
+    const existing = placemark.stationId
+      ? groups.find((g) => g.members.some((m) => m.stationId === placemark.stationId))
+      : groups.find((g) =>
+          g.members.some(
+            (m) =>
+              !m.stationId &&
+              haversineKm(m.coord, placemark.coord) <= toleranceKm &&
+              sameJob(m.name, placemark.name)
+          )
+        );
     if (existing) {
       existing.members.push(placemark);
     } else {
